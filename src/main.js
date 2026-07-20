@@ -24,7 +24,7 @@ export function hashPassword(plainText) {
   return 'sha256_enc_' + btoa(plainText + '_LUGAMED_SALT_' + strHash);
 }
 
-// Datos Iniciales de Producción
+// Datos Iniciales de Producción (Limpios de datos de prueba)
 const initialMockData = {
   clinicInfo: {
     name: "Centro Médico Altamira",
@@ -40,194 +40,9 @@ const initialMockData = {
       role: "Administrador",
       password: hashPassword("Glol5414"),
       modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
-    },
-    {
-      id: "u-1",
-      name: "Dr. Carlos Mendoza",
-      role: "Médico 1",
-      license: "12543",
-      phone: "+502 5555-1100",
-      password: hashPassword("Glol5414"),
-      modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
-    },
-    {
-      id: "u-2",
-      name: "Dra. Sofía Castillo",
-      role: "Médico 2",
-      license: "15980",
-      phone: "+502 4432-8877",
-      password: "Glol5414",
-      modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia']
-    },
-    {
-      id: "u-med3",
-      name: "Dr. Roberto Morales",
-      role: "Médico 3",
-      license: "18290",
-      phone: "+502 5812-9900",
-      password: "Glol5414",
-      modules: ['preconsulta', 'consulta', 'recetario']
-    },
-    {
-      id: "u-3",
-      name: "María Estrada",
-      role: "Recepcionista",
-      phone: "+502 3321-4455",
-      password: "Glol5414",
-      modules: ['preconsulta', 'farmacia']
-    },
-    {
-      id: "u-enf",
-      name: "Enf. Ana Martínez",
-      role: "Enfermera",
-      phone: "+502 3321-5566",
-      password: "Glol5414",
-      modules: ['preconsulta']
-    },
-    {
-      id: "u-reg-farm",
-      name: "Lic. Mario Gómez",
-      role: "Regente Farmacia",
-      license: "F-9021",
-      phone: "+502 5412-3311",
-      password: "Glol5414",
-      modules: ['farmacia']
-    },
-    {
-      id: "u-reg-lab",
-      name: "Licda. Elena Gómez",
-      role: "Regente Laboratorio",
-      license: "L-4412",
-      phone: "+502 5900-2211",
-      password: "Glol5414",
-      modules: ['laboratorio']
     }
   ],
-  patients: [
-    {
-      id: "p-1",
-      name: "Juan Francisco Pérez",
-      birthdate: "1980-04-12",
-      gender: "Masculino",
-      telephone: "5432-1100",
-      address: "10a Avenida 14-22 Zona 10, Guatemala",
-      email: "juan.perez@email.com",
-      vitalSigns: [
-        {
-          date: "2026-07-09T10:15:00Z",
-          temp: 36.5,
-          bp_systolic: 135,
-          bp_diastolic: 85,
-          heart_rate: 78,
-          resp_rate: 18,
-          weight: 82.5,
-          height: 1.76,
-          bmi: 26.6,
-          oxygen: 97
-        },
-        {
-          date: "2026-06-15T09:00:00Z",
-          temp: 36.8,
-          bp_systolic: 140,
-          bp_diastolic: 90,
-          heart_rate: 82,
-          resp_rate: 19,
-          weight: 83,
-          height: 1.76,
-          bmi: 26.8,
-          oxygen: 96
-        }
-      ],
-      consultations: [
-        {
-          id: "c-1",
-          date: "2026-06-15T09:30:00Z",
-          specialty: "Cardiología",
-          doctor: "Dr. Carlos Mendoza",
-          reason: "Control de presión arterial elevada.",
-          symptoms: "Paciente refiere cefalea leve en región occipital por las mañanas. No dolor torácico. Se constata presión en 140/90 mmHg.",
-          diagnosisCodes: ["I10"],
-          diagnosisNames: ["Hipertensión esencial (primaria)"],
-          acceptedStudies: {
-            labs: ["Perfil Lipídico completo (Colesterol, Triglicéridos, HDL, LDL)", "Creatinina"],
-            imaging: ["Electrocardiograma (EKG) de 12 derivaciones"]
-          },
-          fee: 350.00
-        }
-      ],
-      labHistory: [
-        {
-          date: "2026-06-16T15:00:00Z",
-          name: "Perfil Lipídico",
-          fileName: "perfil_lipidico_perez.png",
-          fileData: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23f4f6f8'/><text x='10' y='50' fill='%23111' font-size='8'>Colesterol: 210 mg/dL (Alto)</text><text x='10' y='70' fill='%23111' font-size='8'>Triglicéridos: 180 mg/dL</text></svg>",
-          fileType: "image",
-          notes: "Colesterol total ligeramente elevado. Triglicéridos en rango moderado."
-        }
-      ],
-      imagingHistory: [
-        {
-          date: "2026-06-16T11:00:00Z",
-          study: "EKG de Control",
-          fileName: "ekg_perez.png",
-          fileData: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='100' viewBox='0 0 300 100'><rect width='300' height='100' fill='%23f5f5f5'/><path d='M0 50 L50 50 L55 30 L60 70 L65 50 L100 50 L105 10 L112 90 L120 50 L300 50' stroke='%23ff1744' stroke-width='2' fill='none'/></svg>",
-          notes: "Eje normal. Ritmo sinusal. Sin signos de isquemia aguda."
-        }
-      ],
-      prescriptions: [
-        {
-          id: "r-1",
-          date: "2026-06-15T09:45:00Z",
-          doctorName: "Dr. Carlos Mendoza",
-          doctorLicense: "12543",
-          medicines: [
-            {
-              name: "Losartán 50mg",
-              presentation: "Tabletas",
-              quantity: "30",
-              dosage: "1 tableta cada 24 horas",
-              duration: "30 días"
-            }
-          ]
-        }
-      ],
-      appointments: [
-        {
-          date: "2026-07-15",
-          time: "10:30",
-          notes: "Cita de control de Hipertensión"
-        }
-      ]
-    },
-    {
-      id: "p-2",
-      name: "María Alejandra Rodríguez",
-      birthdate: "1992-08-24",
-      gender: "Femenino",
-      telephone: "4411-9988",
-      address: "Boulevard Vista Hermosa 5-11 Zona 15, Guatemala",
-      email: "maria.rod@email.com",
-      vitalSigns: [
-        {
-          date: "2026-07-10T08:00:00Z",
-          temp: 36.2,
-          bp_systolic: 110,
-          bp_diastolic: 70,
-          heart_rate: 64,
-          resp_rate: 16,
-          weight: 60.1,
-          height: 1.62,
-          bmi: 22.9,
-          oxygen: 99
-        }
-      ],
-      consultations: [],
-      labHistory: [],
-      imagingHistory: [],
-      prescriptions: [],
-      appointments: []
-    }
-  ]
+  patients: []
 };
 
 // Cargar estado inicial o guardar si no existe (incluye migración para Administrador y claves)
@@ -243,27 +58,18 @@ export function getAppState() {
     state = JSON.parse(data);
   }
 
-  // Asegurar que el Administrador maestro existe
-  if (!state.users.some(u => u.id === 'u-admin')) {
-    state.users.unshift({
-      id: 'u-admin',
-      name: 'Administrador',
-      role: 'administrador',
-      password: 'Glol5414'
-    });
-    modified = true;
-  }
+  // Asegurar que ÚNICAMENTE exista el usuario Administrador y limpiar pacientes de prueba
+  const adminUser = {
+    id: 'u-admin',
+    name: 'Administrador',
+    role: 'Administrador',
+    password: hashPassword('Glol5414'),
+    modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
+  };
 
-  // Asegurar que todos los usuarios tienen la contraseña maestra Glol5414 y lista de permisos
-  const allModules = ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion'];
-  state.users.forEach(u => {
-    u.password = 'Glol5414';
-    if (u.role === 'administrador' || u.role === 'Administrador' || u.role === 'medico_1' || u.role === 'Médico 1' || u.name === 'Administrador') {
-      u.modules = [...allModules];
-    } else if (!u.modules || u.modules.length === 0) {
-      u.modules = [...allModules];
-    }
-  });
+  state.users = [adminUser];
+  state.patients = [];
+  modified = true;
 
   // Inicializar catálogos si no existen en localStorage
   // Inicializar catálogos si no existen en localStorage
