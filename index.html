@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="LUGAMED 2.0 - Plataforma integral de gestión de consultorio médico inteligente.">
+  <title>LUGAMED 2.0 | Gestión de Consultorio Médica</title>
+  <link rel="stylesheet" href="./src/style.css">
+</head>
+<body>
+  <div id="login-container" style="display: none;"></div>
+  
+  <div id="app">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon" style="background: linear-gradient(135deg, #0284c7, #2563eb); color: #fff; font-weight: 800;">L</div>
+        <span class="brand-name">LUGAMED <small style="font-size: 0.65em; color: var(--accent-secondary); vertical-align: super;">2.0</small></span>
+      </div>
+      <nav>
+        <ul class="nav-links">
+          <li class="nav-item active" data-target="preconsulta">
+            <button>
+              <span class="icon">📋</span> Preconsulta
+            </button>
+          </li>
+          <li class="nav-item" data-target="consulta">
+            <button>
+              <span class="icon">🩺</span> Consulta
+            </button>
+          </li>
+          <li class="nav-item" data-target="recetario">
+            <button>
+              <span class="icon">💊</span> Recetario
+            </button>
+          </li>
+          <li class="nav-item" data-target="laboratorio">
+            <button>
+              <span class="icon">🔬</span> Laboratorio
+            </button>
+          </li>
+          <li class="nav-item" data-target="imagenologia">
+            <button>
+              <span class="icon">🖼️</span> Imagenología
+            </button>
+          </li>
+          <li class="nav-item" data-target="farmacia">
+            <button>
+              <span class="icon">🏪</span> Farmacia
+            </button>
+          </li>
+          <li class="nav-item" data-target="configuracion">
+            <button>
+              <span class="icon">⚙️</span> Configuración
+            </button>
+          </li>
+        </ul>
+      </nav>
+      
+      <!-- Panel de Usuario Activo -->
+      <div id="sidebar-user-container"></div>
+      
+      <!-- Mini clinic details & Theme Switcher footer -->
+      <div class="sidebar-footer">
+        <div class="clinic-mini-card">
+          <div class="clinic-mini-logo">🏥</div>
+          <div class="clinic-mini-info">
+            <h4 id="sidebar-clinic-name">Clínica San Lucas</h4>
+            <p id="sidebar-clinic-phone">+502 5555-1234</p>
+          </div>
+        </div>
+
+        <div style="margin-top: 1rem;">
+          <button id="global-theme-toggle-btn" class="theme-toggle-btn" style="width: 100%; justify-content: center;" title="Cambiar Tema Visual">
+            <span id="global-theme-toggle-icon">☀️</span> <span id="global-theme-toggle-text">Tema Claro</span>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Module Container -->
+    <main class="main-content" id="module-container">
+      <!-- Content will be loaded dynamically by main.js -->
+    </main>
+  </div>
+
+  <!-- CLINICAL HISTORY REPORT MODAL -->
+  <div id="clinical-history-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="history-modal-patient-name">Historial Clínico: Paciente</h2>
+        <button class="modal-close" onclick="document.getElementById('clinical-history-modal').style.display='none'">&times;</button>
+      </div>
+      <div class="modal-body" id="history-modal-body">
+        <!-- Patient clinical history will be rendered here -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('clinical-history-modal').style.display='none'">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRESCRIPTION VIEW/PRINT MODAL -->
+  <div id="prescription-print-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 800px;">
+      <div class="modal-header">
+        <h2>Vista Preliminar de Receta</h2>
+        <button class="modal-close" onclick="document.getElementById('prescription-print-modal').style.display='none'">&times;</button>
+      </div>
+      <div class="modal-body" style="background-color: #525659; padding: 1.5rem; overflow-y: auto;">
+        <div id="prescription-preview-content">
+          <!-- Printable prescription preview rendered here -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('prescription-print-modal').style.display='none'">Cerrar</button>
+        <button class="btn btn-success" id="btn-print-action">
+          <span>🖨️</span> Imprimir Receta
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHECKLIST SELECTION MODAL -->
+  <div id="checklist-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2 id="checklist-modal-title">Seleccionar Estudios</h2>
+        <button class="modal-close" id="btn-close-checklist">&times;</button>
+      </div>
+      <div class="modal-body" id="checklist-modal-body" style="max-height: 400px; overflow-y: auto;">
+        <!-- Se llena con checkboxes -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-cancel-checklist">Cancelar</button>
+        <button class="btn btn-primary" id="btn-submit-checklist">Enviar Estudio</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULTS ENTRY MODAL -->
+  <div id="results-entry-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 550px;">
+      <div class="modal-header">
+        <h2 id="results-modal-title">Ingresar Resultados de Laboratorio</h2>
+        <button class="modal-close" id="btn-close-results">&times;</button>
+      </div>
+      <form id="results-entry-form">
+        <div class="modal-body" id="results-modal-body" style="max-height: 450px; overflow-y: auto; padding: 1.5rem;">
+          <!-- Parámetros del examen con inputs -->
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-results">Cancelar</button>
+          <button type="submit" class="btn btn-success">Guardar Resultados</button>
+        </div>
+      </form>
+    </div>
+
+
+  <!-- CDNs para Importación Masiva (Excel / Word) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,1471 @@
+/* src/style.css */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+/* Light & Dark Theme Definitions (LUGAMED 2.0) */
+body[data-theme="light"], :root {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f1f5f9;
+  
+  --accent-primary: #2563eb;       /* Royal Blue */
+  --accent-secondary: #0284c7;     /* Sky Blue */
+  --accent-dark: #1e3a8a;          /* Navy Blue */
+  --accent-success: #10b981;
+  --accent-warning: #f59e0b;
+  --accent-danger: #ef4444;
+  
+  --text-primary: #0f172a;        /* High Contrast Slate Black */
+  --text-muted: #475569;          /* Medium Slate */
+  --text-dark: #0f172a;
+  
+  --border-color: #cbd5e1;
+  --border-focus: rgba(37, 99, 235, 0.3);
+  
+  --shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 8px 20px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 20px 40px rgba(15, 23, 42, 0.12);
+  
+  --transition-fast: 0.2s ease;
+  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+}
+
+body[data-theme="dark"] {
+  --bg-primary: #0b0c10;
+  --bg-secondary: #13151f;
+  --bg-card: rgba(25, 28, 41, 0.9);
+  --bg-card-hover: rgba(35, 39, 56, 0.95);
+  
+  --accent-primary: #00f2fe;
+  --accent-secondary: #4facfe;
+  --accent-dark: #0284c7;
+  --accent-success: #00e676;
+  --accent-warning: #ffb300;
+  --accent-danger: #ff1744;
+  
+  --text-primary: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-dark: #ffffff;
+  
+  --border-color: rgba(255, 255, 255, 0.12);
+  --border-focus: rgba(0, 242, 254, 0.4);
+  
+  --shadow-sm: 0 4px 10px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 10px 25px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.7);
+}
+
+/* Reset */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  display: flex;
+  overflow-x: hidden;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(79, 172, 254, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(0, 242, 254, 0.05) 0px, transparent 50%);
+  background-attachment: fixed;
+}
+
+/* Layout */
+#app {
+  display: flex;
+  width: 100vw;
+  min-height: 100vh;
+}
+
+/* Sidebar Navigation */
+.sidebar {
+  width: 280px;
+  background-color: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  padding: 2rem 1.5rem;
+  flex-shrink: 0;
+  z-index: 10;
+  position: relative;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 3rem;
+  padding-left: 0.5rem;
+}
+
+.brand-icon {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, var(--accent-secondary) 0%, var(--accent-primary) 100%);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.5rem;
+  color: var(--bg-primary);
+  box-shadow: 0 0 15px rgba(0, 242, 254, 0.4);
+}
+
+.brand-name {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-primary) !important;
+  background: none !important;
+  -webkit-background-clip: initial !important;
+  -webkit-text-fill-color: initial !important;
+}
+
+.nav-links {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nav-item button {
+  width: 100%;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.nav-item button:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+}
+
+.nav-item.active button {
+  background: linear-gradient(90deg, rgba(79, 172, 254, 0.15) 0%, rgba(0, 242, 254, 0.05) 100%);
+  border-left: 3px solid var(--accent-primary);
+  color: var(--accent-primary);
+  font-weight: 600;
+  padding-left: 13px; /* Adjust for border width to keep spacing */
+}
+
+/* Sidebar Footer (Clinic Info Preview) */
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.85rem;
+}
+
+.clinic-mini-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.clinic-mini-logo {
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+}
+
+.clinic-mini-info h4 {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.clinic-mini-info p {
+  color: var(--text-muted);
+}
+
+/* Main Content Area */
+.main-content {
+  flex-grow: 1;
+  padding: 2.5rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  max-width: calc(100vw - 280px);
+}
+
+.module-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.module-title h1 {
+  font-family: var(--font-heading);
+  font-size: 2.2rem;
+  font-weight: 800;
+  margin-bottom: 0.25rem;
+  color: var(--text-primary) !important;
+  background: none !important;
+  -webkit-background-clip: initial !important;
+  -webkit-text-fill-color: initial !important;
+}
+
+.module-title p {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+/* Theme Toggle Button Styling */
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.theme-toggle-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--accent-primary);
+  transform: translateY(-1px);
+}
+
+/* Glass Card */
+.glass-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 2rem;
+  box-shadow: var(--shadow-md);
+  transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
+}
+
+.glass-card:hover {
+  border-color: rgba(0, 242, 254, 0.15);
+}
+
+/* Grid System */
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+.grid-sidebar {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 2rem;
+}
+
+.grid-prescription {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 2rem;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent-secondary) 0%, var(--accent-primary) 100%);
+  color: var(--bg-primary);
+  box-shadow: 0 4px 15px rgba(0, 242, 254, 0.25);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 242, 254, 0.4);
+}
+
+.btn-secondary {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.btn-success {
+  background: linear-gradient(135deg, #00e676 0%, #00b0ff 100%);
+  color: var(--bg-primary);
+  box-shadow: 0 4px 15px rgba(0, 230, 118, 0.25);
+}
+
+.btn-success:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 230, 118, 0.4);
+}
+
+.btn-danger {
+  background-color: rgba(255, 23, 68, 0.1);
+  color: var(--accent-danger);
+  border: 1px solid rgba(255, 23, 68, 0.2);
+}
+
+.btn-danger:hover {
+  background-color: rgba(255, 23, 68, 0.2);
+}
+
+.btn-small {
+  padding: 8px 14px;
+  font-size: 0.85rem;
+}
+
+/* Forms */
+.form-group {
+  margin-bottom: 1.25rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
+}
+
+label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+input, select, textarea {
+  width: 100%;
+  padding: 12px 16px;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-sm);
+  color: #0f172a;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  transition: all var(--transition-fast);
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+/* Estilos de alta visibilidad para elementos desplegables (select / option) - LUGAMED 2.0 */
+select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  padding: 10px 14px !important;
+  font-size: 0.95rem !important;
+}
+
+select option:checked, select option:hover {
+  background-color: #e0f2fe !important;
+  color: #1e40af !important;
+}
+
+/* Tipografía de Receta Médica - Arial 14px */
+.printable-prescription-container, .prescription-preview-paper {
+  font-family: Arial, Helvetica, sans-serif !important;
+  font-size: 14px !important;
+  color: #111827 !important;
+  line-height: 1.6 !important;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+/* Patient List Sidebar */
+.search-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.patient-list {
+  list-style: none;
+  max-height: 500px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 5px;
+}
+
+.patient-item {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.patient-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(0, 242, 254, 0.2);
+}
+
+.patient-item.selected {
+  background: linear-gradient(90deg, rgba(79, 172, 254, 0.12) 0%, rgba(0, 242, 254, 0.03) 100%);
+  border-color: var(--accent-primary);
+}
+
+.patient-item-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.patient-item-meta {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* Vital Signs Grid */
+.vitals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.vital-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  text-align: center;
+}
+
+.vital-title {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.vital-value {
+  font-family: var(--font-heading);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+}
+
+.vital-value.warning {
+  color: var(--accent-warning);
+}
+
+.vital-value.danger {
+  color: var(--accent-danger);
+}
+
+.vital-unit {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Smart Assistant */
+.smart-assistant {
+  border: 1px solid rgba(0, 242, 254, 0.25);
+  background: linear-gradient(135deg, rgba(11, 12, 16, 0.9) 0%, rgba(20, 25, 40, 0.8) 100%);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 242, 254, 0.1);
+  margin-top: 1.5rem;
+  transition: all var(--transition-normal);
+}
+
+.smart-assistant-header {
+  background: linear-gradient(90deg, rgba(79, 172, 254, 0.15) 0%, rgba(0, 242, 254, 0.05) 100%);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid rgba(0, 242, 254, 0.15);
+}
+
+.assistant-logo {
+  font-size: 1.2rem;
+  animation: pulse-glow 2s infinite;
+}
+
+.smart-assistant-title {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--accent-primary);
+}
+
+.smart-assistant-body {
+  padding: 1.25rem 1.5rem;
+}
+
+@keyframes pulse-glow {
+  0% { transform: scale(1); opacity: 0.8; text-shadow: 0 0 5px rgba(0, 242, 254, 0.5); }
+  50% { transform: scale(1.1); opacity: 1; text-shadow: 0 0 15px rgba(0, 242, 254, 0.8); }
+  100% { transform: scale(1); opacity: 0.8; text-shadow: 0 0 5px rgba(0, 242, 254, 0.5); }
+}
+
+.suggestion-box {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.suggestion-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all var(--transition-fast);
+}
+
+.suggestion-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.suggestion-item.accepted {
+  border-color: var(--accent-success);
+  background: rgba(0, 230, 118, 0.04);
+}
+
+.suggestion-info {
+  flex-grow: 1;
+  margin-right: 12px;
+}
+
+.suggestion-code {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  color: var(--accent-primary);
+  background: rgba(0, 242, 254, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.suggestion-desc {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  margin-left: 6px;
+}
+
+.study-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.study-chip {
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.study-chip:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.study-chip.accepted {
+  background: rgba(0, 230, 118, 0.1);
+  border-color: var(--accent-success);
+  color: var(--accent-success);
+}
+
+/* History lists (consultations, prescriptions) */
+.history-sidebar-list {
+  list-style: none;
+  max-height: 480px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 5px;
+}
+
+.history-card {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.history-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(79, 172, 254, 0.3);
+}
+
+.history-card-header {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.history-card-title {
+  font-weight: 700;
+  color: var(--accent-primary);
+  margin-bottom: 4px;
+}
+
+.history-card-body {
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Tabs */
+.tabs-container {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 10px 4px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  position: relative;
+  transition: color var(--transition-fast);
+}
+
+.tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.tab-btn.active {
+  color: var(--accent-primary);
+}
+
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--accent-primary);
+}
+
+.tab-pane {
+  display: none;
+}
+
+.tab-pane.active {
+  display: block;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Table styling for prescriptions/list */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+th, td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+th {
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+td {
+  font-size: 0.95rem;
+}
+
+tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.01);
+}
+
+/* Upload input styles */
+.file-upload-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100px;
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-bottom: 1rem;
+}
+
+.file-upload-wrapper:hover {
+  border-color: var(--accent-primary);
+  background-color: rgba(0, 242, 254, 0.02);
+}
+
+.file-upload-wrapper input[type="file"] {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.file-upload-text {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.file-upload-icon {
+  font-size: 1.5rem;
+  color: var(--accent-primary);
+  margin-bottom: 6px;
+}
+
+/* File list */
+.uploaded-files {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
+  margin-top: 1rem;
+}
+
+.uploaded-file-item {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  text-align: center;
+  position: relative;
+}
+
+.uploaded-file-preview {
+  width: 100%;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  color: var(--text-muted);
+}
+
+.uploaded-file-name {
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-remove-file {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: rgba(0,0,0,0.7);
+  color: var(--accent-danger);
+  border: none;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: bold;
+}
+
+/* Clinical History Report Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.modal-content {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  width: 100%;
+  max-width: 900px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+  animation: modalSlideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes modalSlideUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.modal-header {
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h2 {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.modal-close:hover {
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 2rem;
+  overflow-y: auto;
+  flex-grow: 1;
+}
+
+.modal-footer {
+  padding: 1.25rem 2rem;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+
+/* Patient Clinic History Layout */
+.report-section {
+  margin-bottom: 1.5rem;
+}
+
+.report-section-title {
+  font-family: var(--font-heading);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+  border-left: 3px solid var(--accent-primary);
+  padding-left: 10px;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+.report-grid-patient {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 15px;
+  margin-bottom: 1.5rem;
+}
+
+.report-item {
+  font-size: 0.9rem;
+}
+
+.report-item span {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.report-item strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.timeline-item {
+  border-left: 2px solid rgba(79, 172, 254, 0.2);
+  padding-left: 20px;
+  position: relative;
+}
+
+.timeline-item::after {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent-secondary);
+  border: 2px solid var(--bg-secondary);
+}
+
+.timeline-date {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.timeline-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-top: 2px;
+}
+
+.timeline-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* Prescription Preview Styles for App Modal */
+.prescription-preview-box {
+  background: white;
+  color: #333;
+  padding: 2.5rem;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  font-family: 'Outfit', 'Plus Jakarta Sans', Arial, sans-serif;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.prescription-preview-header {
+  border-bottom: 2px solid #333;
+  padding-bottom: 1.25rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+}
+
+.prescription-preview-logo {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #111;
+  text-transform: uppercase;
+}
+
+.prescription-preview-clinic-details {
+  text-align: right;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.prescription-preview-doctor-info {
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+}
+
+.prescription-preview-patient-info {
+  background: #f4f6f8;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 10px;
+  font-size: 0.85rem;
+}
+
+.prescription-preview-rx-icon {
+  font-family: var(--font-heading);
+  font-size: 1.8rem;
+  font-weight: bold;
+  margin-bottom: 10px;
+  color: #111;
+}
+
+.prescription-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 2rem;
+}
+
+.prescription-preview-table th {
+  border-bottom: 2px solid #333;
+  color: #333;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.prescription-preview-table td {
+  border-bottom: 1px solid #eee;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  color: #444;
+}
+
+.prescription-preview-indications {
+  font-size: 0.75rem;
+  color: #777;
+  margin-top: 4px;
+}
+
+.prescription-preview-footer {
+  margin-top: 4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.prescription-preview-signature-line {
+  width: 200px;
+  border-top: 1px solid #666;
+  margin-bottom: 6px;
+}
+
+.prescription-preview-doctor-sign {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.prescription-preview-license {
+  font-size: 0.75rem;
+  color: #666;
+}
+
+/* Print styles */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  #app {
+    display: none !important; /* Ocultar la app principal por completo */
+  }
+  .modal-overlay {
+    display: none !important;
+    position: static !important;
+    padding: 0 !important;
+  }
+  /* Mostrar únicamente el modal de impresión activo */
+  #prescription-print-modal.modal-overlay,
+  #clinical-history-modal.modal-overlay {
+    display: block !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  #prescription-print-modal .modal-content,
+  #clinical-history-modal .modal-content {
+    display: block !important;
+    border: none !important;
+    box-shadow: none !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+  #prescription-print-modal .modal-header,
+  #prescription-print-modal .modal-footer,
+  #clinical-history-modal .modal-header,
+  #clinical-history-modal .modal-footer {
+    display: none !important;
+  }
+  #prescription-print-modal .modal-body,
+  #clinical-history-modal .modal-body {
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  .prescription-preview-box {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+}
+
+/* Login styles */
+.login-screen-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  width: 100vw;
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 40%, #0284c7 100%);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 440px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-lg);
+  padding: 2.5rem 2rem;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.3);
+  animation: fadeIn 0.4s ease-out;
+}
+
+.login-logo-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.login-logo-img {
+  width: 100px;
+  height: 100px;
+  border-radius: var(--radius-md);
+  border: 3px solid #0284c7;
+  object-fit: cover;
+  box-shadow: 0 8px 25px rgba(2, 132, 199, 0.35);
+  margin-bottom: 1rem;
+}
+
+.login-brand-name {
+  font-family: var(--font-heading);
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: #1e3a8a;
+  letter-spacing: 1px;
+  margin-bottom: 0.25rem;
+}
+
+.login-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* User Selection list */
+.login-user-list {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 10px 5px;
+  margin-bottom: 1.5rem;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+}
+
+.login-user-card {
+  flex: 0 0 90px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 12px 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-sizing: border-box;
+}
+
+.login-user-card:hover {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(0, 242, 254, 0.4);
+  transform: translateY(-2px);
+}
+
+.login-user-card.selected {
+  background: rgba(0, 242, 254, 0.08);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+}
+
+.login-user-avatar {
+  font-size: 1.5rem;
+  margin-bottom: 6px;
+}
+
+.login-user-name {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text-muted);
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.login-user-card.selected .login-user-name {
+  color: var(--text-primary);
+}
+
+.login-user-role {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  color: var(--accent-secondary);
+  margin-top: 2px;
+}
+
+/* Checklist Modal Styles */
+.checklist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  padding: 10px 5px;
+}
+
+.checklist-group-title {
+  color: var(--accent-primary);
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  margin-top: 15px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 5px;
+  grid-column: 1 / -1;
+}
+
+.checklist-item-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.checklist-item-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(0, 242, 254, 0.4);
+  transform: translateY(-1px);
+}
+
+.checklist-item-card.selected {
+  background: rgba(0, 242, 254, 0.08);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 10px rgba(0, 242, 254, 0.15);
+}
+
+.checklist-item-card input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent-primary);
+}
+
+.checklist-item-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.checklist-item-card.selected .checklist-item-label {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* -------------------------------------------------------------
+   Compatibilidad Multidispositivo Responsiva (Desktop, Tablet, Mobile)
+   ------------------------------------------------------------- */
+@media (max-width: 992px) {
+  #app {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    padding: 1rem;
+  }
+
+  .sidebar-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 1rem;
+  }
+
+  .nav-btn {
+    flex: 1 1 auto;
+    min-width: 125px;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+  }
+
+  .sidebar-footer {
+    margin-top: 1rem;
+    padding-top: 1rem;
+  }
+
+  .main-content {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .login-card {
+    width: 92%;
+    padding: 1.5rem;
+    margin: 1rem auto;
+  }
+
+  .module-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .patient-summary-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .modal-container {
+    width: 95% !important;
+    padding: 1rem !important;
+    max-height: 92vh;
+  }
+
+  .checklist-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .btn {
+    min-height: 42px;
+  }
+}
