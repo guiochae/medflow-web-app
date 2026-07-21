@@ -351,9 +351,47 @@ function applyTheme(theme) {
   });
 }
 
+// Gestor de Menú Desplegable Móvil (Off-canvas Drawer)
+function initMobileDrawer() {
+  const hamburgerBtn = document.getElementById('mobile-hamburger-btn');
+  const sidebar = document.getElementById('main-sidebar') || document.querySelector('.sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+
+  if (!hamburgerBtn || !sidebar) return;
+
+  function openDrawer() {
+    sidebar.classList.add('open');
+    if (overlay) overlay.classList.add('active');
+  }
+
+  function closeDrawer() {
+    sidebar.classList.remove('open');
+    if (overlay) overlay.classList.remove('active');
+  }
+
+  hamburgerBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (sidebar.classList.contains('open')) {
+      closeDrawer();
+    } else {
+      openDrawer();
+    }
+  });
+
+  if (overlay) {
+    overlay.addEventListener('click', closeDrawer);
+  }
+
+  // Cerrar el menú automáticamente al hacer clic en cualquier opción de navegación
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', closeDrawer);
+  });
+}
+
 // Configurar los listeners y el estado al cargar la app
 document.addEventListener('DOMContentLoaded', () => {
   initThemeToggle();
+  initMobileDrawer();
 
   const loggedUser = sessionStorage.getItem('medflow_logged_user');
   const appContainer = document.getElementById('app');
