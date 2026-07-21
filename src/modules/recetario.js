@@ -1,16 +1,38 @@
 // src/modules/recetario.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
+import { medicationsDatabase } from '../data/medicamentos.js';
 
 function searchMedications(query) {
   if (!query || query.trim().length < 2) return [];
   const cleanQuery = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const terms = cleanQuery.split(/\s+/).filter(t => t.length > 0);
+
   const state = getAppState();
   const dbMeds = state.medications || [];
-  return dbMeds.filter(m => {
-    const nameMatch = m.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(cleanQuery);
-    const genericMatch = (m.generic || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(cleanQuery);
-    const catMatch = (m.category || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(cleanQuery);
-    return nameMatch || genericMatch || catMatch;
+
+  const allMedsMap = new Map();
+
+  medicationsDatabase.forEach(m => {
+    if (m && m.name) {
+      allMedsMap.set(m.name.toLowerCase(), m);
+    }
+  });
+
+  dbMeds.forEach(m => {
+    if (m && m.name) {
+      allMedsMap.set(m.name.toLowerCase(), m);
+    }
+  });
+
+  const allMeds = Array.from(allMedsMap.values());
+
+  return allMeds.filter(m => {
+    const nameStr = (m.name || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const genericStr = (m.generic || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const catStr = (m.category || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+    const fullSearchStr = `${nameStr} ${genericStr} ${catStr}`;
+    return terms.every(term => fullSearchStr.includes(term));
   });
 }
 
@@ -75,8 +97,10 @@ export function renderRecetario(container) {
   renderPatientList();
 
   const activeId = getActivePatientId();
-  if (activeId) {
+  if (activeId && state.patients.some(p => p.id === activeId)) {
     selectPatient(activeId);
+  } else if (state.patients && state.patients.length > 0) {
+    selectPatient(state.patients[0].id);
   } else {
     showPlaceholder();
   }
@@ -196,19 +220,26 @@ function renderConsultationHistory(patient) {
   patient.consultations.forEach(c => {
     const li = document.createElement('li');
     li.className = 'history-card';
-    const dateFormatted = new Date(c.date).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' });
-    
+    let dateFormatted = c.date || 'Reciente';
+    try {
+      if (c.date && !isNaN(new Date(c.date).getTime())) {
+        dateFormatted = new Date(c.date).toLocaleDateString('es-GT');
+      }
+    } catch(e){}
+
+    const dxText = (c.diagnosisCodes && Array.isArray(c.diagnosisCodes)) ? c.diagnosisCodes.join(', ') : (c.diagnosis || 'Z00.0');
+
     li.innerHTML = `
       <div class="history-card-header">
         <span>${dateFormatted}</span>
-        <span>${c.specialty}</span>
+        <span>${c.specialty || 'General'}</span>
       </div>
-      <div class="history-card-title">${c.doctor}</div>
-      <div class="history-card-body" title="${c.reason}">
-        <strong>Motivo:</strong> ${c.reason}
+      <div class="history-card-title">${c.doctor || 'Dr. Carlos Mendoza'}</div>
+      <div class="history-card-body" title="${c.reason || ''}">
+        <strong>Motivo:</strong> ${c.reason || 'Consulta Médica'}
       </div>
       <div style="font-size: 0.75rem; margin-top: 6px; color: var(--accent-primary);">
-        DX: ${c.diagnosisCodes.join(', ')}
+        DX: ${dxText}
       </div>
     `;
 
@@ -228,46 +259,76 @@ function showPastConsultationDetail(consultation) {
   
   if (!modal || !title || !body) return;
 
-  title.textContent = `Detalle de Consulta`;
+  let dateFormatted = consultation.date || 'Reciente';
+  try {
+    if (consultation.date && !isNaN(new Date(consultation.date).getTime())) {
+      dateFormatted = new Date(consultation.date).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' });
+    }
+  } catch(e){}
+
+  const feeText = (consultation.fee !== undefined && consultation.fee !== null) ? `Q${parseFloat(consultation.fee).toFixed(2)}` : 'Q150.00';
+  const doctorText = consultation.doctor || 'Médico Tratante';
+  const specialtyText = consultation.specialty || 'Medicina General';
+  const reasonText = consultation.reason || 'Sin motivo especificado';
+  const symptomsText = consultation.symptoms || 'Evaluación médica de rutina y control general.';
+
+  let diagListHtml = '';
+  if (consultation.diagnosisCodes && Array.isArray(consultation.diagnosisCodes) && consultation.diagnosisCodes.length > 0) {
+    diagListHtml = consultation.diagnosisCodes.map((code, idx) => {
+      const name = (consultation.diagnosisNames && consultation.diagnosisNames[idx]) ? consultation.diagnosisNames[idx] : 'Diagnóstico Clínico';
+      return `<li style="margin-bottom: 4px;"><span class="suggestion-code" style="background: rgba(0, 242, 254, 0.15); color: var(--accent-primary); padding: 2px 6px; border-radius: 4px; font-weight: bold; font-family: monospace;">${code}</span> - ${name}</li>`;
+    }).join('');
+  } else if (consultation.diagnosis) {
+    diagListHtml = `<li style="margin-bottom: 4px;"><span class="suggestion-code" style="background: rgba(0, 242, 254, 0.15); color: var(--accent-primary); padding: 2px 6px; border-radius: 4px; font-weight: bold; font-family: monospace;">Z00.0</span> - ${consultation.diagnosis}</li>`;
+  } else {
+    diagListHtml = `<li style="margin-bottom: 4px;"><span class="suggestion-code" style="background: rgba(0, 242, 254, 0.15); color: var(--accent-primary); padding: 2px 6px; border-radius: 4px; font-weight: bold; font-family: monospace;">Z00.0</span> - Examen médico de rutina</li>`;
+  }
+
+  const labsList = (consultation.acceptedStudies && consultation.acceptedStudies.labs) ? consultation.acceptedStudies.labs : [];
+  const imgList = (consultation.acceptedStudies && consultation.acceptedStudies.imaging) ? consultation.acceptedStudies.imaging : [];
+  const medList = consultation.acceptedMedications || [];
+  const indList = consultation.acceptedIndications || [];
+
+  const hasAux = labsList.length > 0 || imgList.length > 0 || medList.length > 0 || indList.length > 0;
+
+  title.textContent = `📋 Detalle de Consulta Registrada - ${dateFormatted}`;
   
   body.innerHTML = `
-    <div class="report-section">
-      <div class="report-section-title">Información de la Consulta</div>
-      <div class="report-grid-patient">
-        <div class="report-item"><span>Fecha / Hora</span><strong>${new Date(consultation.date).toLocaleString()}</strong></div>
-        <div class="report-item"><span>Especialidad</span><strong>${consultation.specialty}</strong></div>
-        <div class="report-item"><span>Médico</span><strong>${consultation.doctor}</strong></div>
-        <div class="report-item"><span>Costo / Cobro</span><strong>Q${consultation.fee.toFixed(2)}</strong></div>
+    <div class="report-section" style="margin-bottom: 1rem;">
+      <div class="report-section-title" style="font-weight: bold; color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Información General de la Consulta</div>
+      <div class="report-grid-patient" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color);">
+        <div class="report-item"><span style="font-size: 0.75rem; color: var(--text-muted); display: block;">Fecha / Hora</span><strong>${dateFormatted}</strong></div>
+        <div class="report-item"><span style="font-size: 0.75rem; color: var(--text-muted); display: block;">Especialidad</span><strong>${specialtyText}</strong></div>
+        <div class="report-item"><span style="font-size: 0.75rem; color: var(--text-muted); display: block;">Médico Evaluador</span><strong>${doctorText}</strong></div>
+        <div class="report-item"><span style="font-size: 0.75rem; color: var(--text-muted); display: block;">Honorario / Cobro</span><strong style="color: var(--accent-success);">${feeText}</strong></div>
       </div>
     </div>
 
-    <div class="report-section" style="margin-top: 1.5rem;">
-      <div class="report-section-title">Evaluación Clínica</div>
-      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 15px; border-radius: 4px; font-size: 0.95rem; line-height: 1.5;">
-        <p style="margin-bottom: 10px;"><strong>Motivo de Consulta:</strong><br>${consultation.reason}</p>
-        <p><strong>Síntomas / Examen Físico:</strong><br>${consultation.symptoms}</p>
+    <div class="report-section" style="margin-bottom: 1rem;">
+      <div class="report-section-title" style="font-weight: bold; color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Evaluación Clínica</div>
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; font-size: 0.9rem; line-height: 1.5;">
+        <p style="margin-bottom: 8px;"><strong>Motivo de Consulta:</strong><br><span style="color: var(--text-primary);">${reasonText}</span></p>
+        <p><strong>Síntomas / Examen Físico:</strong><br><span style="color: var(--text-muted);">${symptomsText}</span></p>
       </div>
     </div>
 
-    <div class="report-section" style="margin-top: 1.5rem;">
-      <div class="report-section-title">Diagnóstico y Auxiliares (CIE-10)</div>
-      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 15px; border-radius: 4px; font-size: 0.95rem;">
-        <p><strong>Diagnóstico(s) Registrado(s):</strong></p>
-        <ul style="margin-left: 20px; margin-top: 5px; list-style: square;">
-          ${consultation.diagnosisCodes.map((code, idx) => `
-            <li><span class="suggestion-code">${code}</span> - ${consultation.diagnosisNames[idx]}</li>
-          `).join('')}
+    <div class="report-section" style="margin-bottom: 1rem;">
+      <div class="report-section-title" style="font-weight: bold; color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Diagnóstico y Auxiliares (CIE-10)</div>
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; font-size: 0.9rem;">
+        <p style="margin-bottom: 6px;"><strong>Diagnóstico(s) Registrado(s):</strong></p>
+        <ul style="margin-left: 10px; margin-bottom: 10px; list-style: none; padding: 0;">
+          ${diagListHtml}
         </ul>
 
-        ${consultation.acceptedStudies.labs.length > 0 || consultation.acceptedStudies.imaging.length > 0 || (consultation.acceptedMedications && consultation.acceptedMedications.length > 0) || (consultation.acceptedIndications && consultation.acceptedIndications.length > 0) ? `
-          <p style="margin-top: 15px;"><strong>Estudios e Indicaciones Aceptados:</strong></p>
-          <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 6px;">
-            ${consultation.acceptedStudies.labs.map(lab => `<div>🔬 Lab: ${lab}</div>`).join('')}
-            ${consultation.acceptedStudies.imaging.map(img => `<div>🖼️ Imagen: ${img}</div>`).join('')}
-            ${consultation.acceptedMedications ? consultation.acceptedMedications.map(med => `<div>💊 Medicina: ${med.name} (${med.dosage})</div>`).join('') : ''}
-            ${consultation.acceptedIndications ? consultation.acceptedIndications.map(ind => `<div>📌 Indicación: ${ind}</div>`).join('') : ''}
+        ${hasAux ? `
+          <p style="margin-top: 10px; font-weight: bold; border-top: 1px dashed var(--border-color); padding-top: 8px;">Estudios e Indicaciones Registrados:</p>
+          <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem;">
+            ${labsList.map(lab => `<div style="color: var(--accent-primary);">🔬 Lab: ${lab}</div>`).join('')}
+            ${imgList.map(img => `<div style="color: var(--accent-secondary);">🖼️ Imagen: ${img}</div>`).join('')}
+            ${medList.map(med => `<div style="color: var(--accent-success);">💊 Medicina: ${med.name || med} ${med.dosage ? `(${med.dosage})` : ''}</div>`).join('')}
+            ${indList.map(ind => `<div>📌 Indicación: ${ind}</div>`).join('')}
           </div>
-        ` : '<p style="margin-top: 15px; color: var(--text-muted); font-style: italic;">No se prescribieron exámenes de apoyo ni tratamientos.</p>'}
+        ` : '<p style="margin-top: 8px; color: var(--text-muted); font-style: italic; font-size: 0.85rem;">No se emitieron exámenes de apoyo ni tratamientos adicionales.</p>'}
       </div>
     </div>
   `;
@@ -290,17 +351,24 @@ function renderRecipeHistory(patient) {
   patient.prescriptions.forEach(r => {
     const li = document.createElement('li');
     li.className = 'history-card';
-    const dateFormatted = new Date(r.date).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' });
-    const medsCount = r.medicines.length;
+    let dateFormatted = r.date || 'Reciente';
+    try {
+      if (r.date && !isNaN(new Date(r.date).getTime())) {
+        dateFormatted = new Date(r.date).toLocaleDateString('es-GT');
+      }
+    } catch(e){}
+
+    const medsList = (r.medicines && Array.isArray(r.medicines)) ? r.medicines.map(m => m.name || m).join(', ') : (r.indications || 'Medicamentos prescriptos');
+    const medsCount = (r.medicines && Array.isArray(r.medicines)) ? r.medicines.length : 1;
 
     li.innerHTML = `
       <div class="history-card-header">
         <span>${dateFormatted}</span>
         <span>${medsCount} med(s)</span>
       </div>
-      <div class="history-card-title">${r.doctorName}</div>
-      <div class="history-card-body" title="${r.medicines.map(m => m.name).join(', ')}">
-        <strong>Medicamentos:</strong> ${r.medicines.map(m => m.name).join(', ')}
+      <div class="history-card-title">${r.doctorName || 'Médico Tratante'}</div>
+      <div class="history-card-body" title="${medsList}">
+        <strong>Medicamentos:</strong> ${medsList}
       </div>
     `;
 
@@ -416,10 +484,15 @@ function renderRecipeBuilder(patient, doctors) {
               <label for="m-duration">Indicaciones / Duración</label>
               <input type="text" id="m-duration" required placeholder="Ej. Tomar después de comida por 7 días">
             </div>
+          <div style="display: flex; align-items: center; gap: 1.25rem; margin-top: 1.25rem; flex-wrap: wrap;">
+            <button type="submit" class="btn btn-secondary btn-small">
+              <span>+</span> Agregar a la Receta
+            </button>
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.88rem; color: var(--accent-primary); font-weight: 500; user-select: none; margin: 0;">
+              <input type="checkbox" id="m-breakdown-schedule" style="width: 17px; height: 17px; accent-color: var(--accent-primary); cursor: pointer;">
+              Desglosar horarios de administración
+            </label>
           </div>
-          <button type="submit" class="btn btn-secondary btn-small">
-            <span>+</span> Agregar a la Receta
-          </button>
         </form>
       </div>
 
@@ -488,18 +561,28 @@ function renderRecipeBuilder(patient, doctors) {
       return;
     }
 
-    matches.slice(0, 8).forEach(match => {
+    matches.slice(0, 10).forEach(match => {
       const item = document.createElement('div');
       item.style.cssText = `
         padding: 10px 14px;
         cursor: pointer;
-        border-bottom: 1px solid rgba(255,255,255,0.05);
+        border-bottom: 1px solid rgba(255,255,255,0.06);
         font-size: 0.9rem;
         transition: background-color 0.2s;
       `;
+
+      const genericLabel = match.generic ? match.generic : (match.name || 'Genérico');
+      const catLabel = match.category ? `<span style="font-size: 0.75rem; color: var(--text-muted); font-style: italic;"> • ${match.category}</span>` : '';
+
       item.innerHTML = `
-        <strong style="color: var(--accent-primary);">${match.name}</strong> 
-        <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 5px;">(${match.generic} - ${match.presentation})</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+          <strong style="color: var(--accent-primary); font-size: 0.92rem;">${match.name}</strong>
+          <span style="font-size: 0.72rem; background: rgba(0, 242, 254, 0.12); color: var(--accent-primary); padding: 2px 6px; border-radius: 4px; font-weight: 600;">${match.presentation || 'Tabletas'}</span>
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 4px;">
+          <span>💊 <strong>Genérico:</strong> ${genericLabel}</span>
+          ${catLabel}
+        </div>
       `;
 
       item.addEventListener('mouseover', () => {
@@ -512,8 +595,9 @@ function renderRecipeBuilder(patient, doctors) {
       // Seleccionar medicamento del autocompletado
       item.addEventListener('click', () => {
         medNameInput.value = match.name;
-        // Auto-seleccionar presentación en base a la base de datos
-        presentationSelect.value = match.presentation;
+        if (presentationSelect && match.presentation) {
+          presentationSelect.value = match.presentation;
+        }
         autocompleteList.style.display = 'none';
       });
 
@@ -530,8 +614,10 @@ function renderRecipeBuilder(patient, doctors) {
     }
   });
 
-  function formatDosageSchedule(rawDosage) {
+  function formatDosageSchedule(rawDosage, shouldBreakdown = false) {
     if (!rawDosage) return '';
+    if (!shouldBreakdown) return rawDosage;
+
     const text = rawDosage.toLowerCase();
     let schedule = '';
     
@@ -545,6 +631,8 @@ function renderRecipeBuilder(patient, doctors) {
       schedule = 'Tomar/aplicar a las 04:00, 08:00, 12:00, 16:00, 20:00 y 24:00 hrs';
     } else if (text.includes('24 horas') || text.includes('24 hrs') || text.includes('diario') || text.includes('1 vez al día') || text.includes('una vez al día')) {
       schedule = 'Tomar/aplicar a las 08:00 hrs';
+    } else {
+      schedule = 'Tomar/aplicar a las 08:00, 16:00 y 24:00 hrs';
     }
 
     if (schedule && !rawDosage.toLowerCase().includes('hrs')) {
@@ -560,10 +648,13 @@ function renderRecipeBuilder(patient, doctors) {
     const presentation = presentationSelect.value;
     const quantity = document.getElementById('m-quantity').value;
     const rawDosage = document.getElementById('m-dosage').value;
-    const dosage = formatDosageSchedule(rawDosage);
     const duration = document.getElementById('m-duration').value;
+    const breakdownCheck = document.getElementById('m-breakdown-schedule');
+    const shouldBreakdown = breakdownCheck ? breakdownCheck.checked : false;
 
-    const newMed = { name, presentation, quantity, dosage, duration };
+    const dosage = formatDosageSchedule(rawDosage, shouldBreakdown);
+
+    const newMed = { name, presentation, quantity, dosage, duration, breakdownSchedule: shouldBreakdown };
     currentPrescriptionMedicines.push(newMed);
 
     // Reset fields
@@ -571,6 +662,7 @@ function renderRecipeBuilder(patient, doctors) {
     document.getElementById('m-quantity').value = '';
     document.getElementById('m-dosage').value = '';
     document.getElementById('m-duration').value = '';
+    if (breakdownCheck) breakdownCheck.checked = false;
     autocompleteList.style.display = 'none';
 
     renderCurrentMedicinesTable();

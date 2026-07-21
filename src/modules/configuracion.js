@@ -554,7 +554,13 @@ export function renderConfiguracion(container) {
           document.getElementById('c-spec-stock').value = itemObj.stock !== undefined ? itemObj.stock : 120;
           document.getElementById('c-spec-lote').value = itemObj.lote || '';
           document.getElementById('c-spec-vencimiento').value = itemObj.vencimiento || '';
-        } else if (activeCatalogType === 'laboratoryTests' || activeCatalogType === 'imagingStudies') {
+        } else if (activeCatalogType === 'laboratoryTests') {
+          document.getElementById('c-spec-category').value = itemObj.category || '';
+          const unitEl = document.getElementById('c-spec-unit');
+          const refEl = document.getElementById('c-spec-reference');
+          if (unitEl) unitEl.value = itemObj.unit || itemObj.units || '';
+          if (refEl) refEl.value = itemObj.reference || itemObj.referenceInterval || itemObj.normal || '';
+        } else if (activeCatalogType === 'imagingStudies') {
           document.getElementById('c-spec-category').value = itemObj.category || '';
         } else if (activeCatalogType === 'consultationTypes') {
           document.getElementById('c-spec-specialty').value = itemObj.specialty || '';
@@ -707,13 +713,19 @@ export function renderConfiguracion(container) {
         itemObj.stock = parseInt(document.getElementById('c-spec-stock').value) || 0;
         itemObj.lote = document.getElementById('c-spec-lote').value;
         itemObj.vencimiento = document.getElementById('c-spec-vencimiento').value;
-      } else if (activeCatalogType === 'laboratoryTests' || activeCatalogType === 'imagingStudies') {
+      } else if (activeCatalogType === 'laboratoryTests') {
         itemObj.category = document.getElementById('c-spec-category').value;
-        if (activeCatalogType === 'laboratoryTests' && !itemObj.parameters) {
+        const unitEl = document.getElementById('c-spec-unit');
+        const refEl = document.getElementById('c-spec-reference');
+        if (unitEl) itemObj.unit = unitEl.value.trim() || 'N/A';
+        if (refEl) itemObj.reference = refEl.value.trim() || 'N/A';
+        if (!itemObj.parameters) {
           itemObj.parameters = [
-            { name: "Resultado General", unit: "", normal: "Estable" }
+            { name: "Resultado General", unit: itemObj.unit || '', normal: itemObj.reference || 'Estable' }
           ];
         }
+      } else if (activeCatalogType === 'imagingStudies') {
+        itemObj.category = document.getElementById('c-spec-category').value;
       } else if (activeCatalogType === 'consultationTypes') {
         itemObj.specialty = document.getElementById('c-spec-specialty').value;
       }
@@ -730,6 +742,19 @@ export function renderConfiguracion(container) {
 
   // 3. Change events
   container.addEventListener('change', (e) => {
+    // catalog inline price change
+    if (e.target && e.target.classList.contains('catalog-price-input') && activeCatalogType) {
+      const id = e.target.getAttribute('data-id');
+      const newPrice = parseFloat(e.target.value) || 0;
+      const appState = getAppState();
+      const list = appState[activeCatalogType] || [];
+      const item = list.find(x => x.id === id);
+      if (item) {
+        item.price = newPrice;
+        saveAppState(appState);
+      }
+      return;
+    }
     // mass catalog file upload change
     if (e.target && e.target.id === 'config-catalog-import-file') {
       const file = e.target.files[0];
@@ -913,11 +938,19 @@ function openCatalogConfig(type) {
     `;
   } else if (type === 'laboratoryTests') {
     configTitle.textContent = "🔬 Catálogo de Laboratorio y Precios";
-    thExtraCol.textContent = "Categoría del Examen";
+    if (thExtraCol) thExtraCol.textContent = "Categoría del Examen";
     configSpecificFields.innerHTML = `
-      <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom:0;">
-        <label for="c-spec-category">Categoría</label>
-        <input type="text" id="c-spec-category" required placeholder="Ej. Hematología, Química Clínica, Microbiología...">
+      <div class="form-group" style="flex: 1; min-width: 160px; margin-bottom:0;">
+        <label for="c-spec-category">Categoría del Examen</label>
+        <input type="text" id="c-spec-category" required placeholder="Ej. Perfil Lipídico, Hematología...">
+      </div>
+      <div class="form-group" style="flex: 1; min-width: 140px; margin-bottom:0;">
+        <label for="c-spec-unit">Unidades</label>
+        <input type="text" id="c-spec-unit" placeholder="Ej. mg/dL, UI/mL, %, g/dL...">
+      </div>
+      <div class="form-group" style="flex: 1.5; min-width: 200px; margin-bottom:0;">
+        <label for="c-spec-reference">Intervalo de Referencia</label>
+        <input type="text" id="c-spec-reference" placeholder="Ej. 70 - 100 mg/dL, < 150, Negativo...">
       </div>
     `;
   } else if (type === 'imagingStudies') {
@@ -944,9 +977,36 @@ function openCatalogConfig(type) {
 }
 
 function renderCatalogTable() {
+  const configTableHead = document.querySelector('#config-catalog-modal table thead');
   const configTableBody = document.getElementById('config-catalog-table-body');
   if (!configTableBody) return;
   configTableBody.innerHTML = '';
+
+  const isLab = activeCatalogType === 'laboratoryTests';
+
+  if (configTableHead) {
+    if (isLab) {
+      configTableHead.innerHTML = `
+        <tr style="border-bottom: 2px solid var(--border-color); color: var(--text-muted); font-size: 0.85rem;">
+          <th style="padding: 10px;">Nombre del Examen</th>
+          <th style="padding: 10px;">Categoría</th>
+          <th style="padding: 10px;">Unidades</th>
+          <th style="padding: 10px;">Intervalo de Referencia</th>
+          <th style="padding: 10px; text-align: right; width: 120px;">Precio (Q)</th>
+          <th style="padding: 10px; text-align: center; width: 90px;">Acciones</th>
+        </tr>
+      `;
+    } else {
+      configTableHead.innerHTML = `
+        <tr style="border-bottom: 2px solid var(--border-color); color: var(--text-muted); font-size: 0.85rem;">
+          <th style="padding: 10px;">Nombre</th>
+          <th id="th-extra-col" style="padding: 10px;">${activeCatalogType === 'medications' ? 'Presentación / Categoría' : (activeCatalogType === 'imagingStudies' ? 'Categoría del Estudio' : 'Especialidad / Detalle')}</th>
+          <th style="padding: 10px; text-align: right;">Precio</th>
+          <th style="padding: 10px; text-align: center; width: 120px;">Acciones</th>
+        </tr>
+      `;
+    }
+  }
 
   const appState = getAppState();
   const list = appState[activeCatalogType] || [];
@@ -954,7 +1014,7 @@ function renderCatalogTable() {
   if (list.length === 0) {
     configTableBody.innerHTML = `
       <tr>
-        <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">
+        <td colspan="${isLab ? 6 : 4}" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">
           No hay elementos registrados en este catálogo.
         </td>
       </tr>
@@ -965,38 +1025,58 @@ function renderCatalogTable() {
   list.forEach(item => {
     const tr = document.createElement('tr');
     tr.style.borderBottom = '1px solid var(--border-color)';
-    
-    let nameCellHtml = '';
-    let extraCellHtml = '';
 
-    if (activeCatalogType === 'medications') {
-      const expirationDateStr = item.vencimiento ? new Date(item.vencimiento).toLocaleDateString('es-GT') : 'N/D';
-      nameCellHtml = `<strong>${item.name}</strong><br><span style="font-size: 0.8rem; color: var(--text-muted); font-style: italic;">Genérico: ${item.generic || 'N/D'}</span>`;
-      extraCellHtml = `
-        ${item.presentation || 'N/A'} | <span style="font-size: 0.75rem; color: var(--accent-primary); text-transform: uppercase;">${item.category || ''}</span><br>
-        <span style="font-size: 0.75rem; color: var(--text-muted);">Lote: ${item.lote || 'N/D'} | Vence: ${expirationDateStr}</span><br>
-        <span style="font-size: 0.8rem; font-weight: bold; color: ${item.stock <= 0 ? 'var(--accent-danger)' : 'var(--accent-success)'};">Stock: ${item.stock !== undefined ? item.stock : 120}</span>
+    if (isLab) {
+      const unitText = item.unit || item.units || 'N/A';
+      const refText = item.reference || item.referenceInterval || item.normal || 'N/A';
+      const priceVal = parseFloat(item.price || 0).toFixed(2);
+
+      tr.innerHTML = `
+        <td style="padding: 10px 8px;"><strong>${item.name}</strong></td>
+        <td style="padding: 10px 8px;"><span style="font-size: 0.8rem; color: var(--accent-primary); font-weight: 500;">${item.category || 'General'}</span></td>
+        <td style="padding: 10px 8px; font-size: 0.85rem; color: var(--text-muted);">${unitText}</td>
+        <td style="padding: 10px 8px; font-size: 0.85rem; color: var(--text-muted);">${refText}</td>
+        <td style="padding: 10px 8px; text-align: right;">
+          <div style="display: inline-flex; align-items: center; gap: 4px;">
+            <span style="color: var(--accent-success); font-weight: bold; font-size: 0.85rem;">Q</span>
+            <input type="number" step="0.5" min="0" class="catalog-price-input" data-id="${item.id}" value="${priceVal}" style="width: 80px; text-align: right; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(255,255,255,0.05); color: var(--accent-success); font-weight: bold; font-size: 0.9rem;">
+          </div>
+        </td>
+        <td style="padding: 10px 8px; text-align: center;">
+          <button class="btn btn-secondary btn-small btn-edit-config" data-id="${item.id}" style="padding: 4px 8px; font-size: 0.8rem; margin-right: 4px;">✏️</button>
+          <button class="btn btn-danger btn-small btn-delete-config" data-id="${item.id}" style="padding: 4px 8px; font-size: 0.8rem;">&times;</button>
+        </td>
       `;
-    } else if (activeCatalogType === 'laboratoryTests') {
-      nameCellHtml = `<strong>${item.name}</strong>`;
-      extraCellHtml = `${item.category || 'General'}`;
-    } else if (activeCatalogType === 'imagingStudies') {
-      nameCellHtml = `<strong>${item.name}</strong>`;
-      extraCellHtml = `${item.category || 'General'}`;
-    } else if (activeCatalogType === 'consultationTypes') {
-      nameCellHtml = `<strong>${item.name}</strong>`;
-      extraCellHtml = `${item.specialty || 'General'}`;
-    }
+    } else {
+      let nameCellHtml = '';
+      let extraCellHtml = '';
 
-    tr.innerHTML = `
-      <td style="padding: 10px 8px;">${nameCellHtml}</td>
-      <td style="padding: 10px 8px;">${extraCellHtml}</td>
-      <td style="padding: 10px 8px; text-align: right; font-weight: bold; color: var(--accent-success);">Q${parseFloat(item.price).toFixed(2)}</td>
-      <td style="padding: 10px 8px; text-align: center;">
-        <button class="btn btn-secondary btn-small btn-edit-config" data-id="${item.id}" style="padding: 4px 8px; font-size: 0.8rem; margin-right: 4px;">✏️</button>
-        <button class="btn btn-danger btn-small btn-delete-config" data-id="${item.id}" style="padding: 4px 8px; font-size: 0.8rem;">&times;</button>
-      </td>
-    `;
+      if (activeCatalogType === 'medications') {
+        const expirationDateStr = item.vencimiento ? new Date(item.vencimiento).toLocaleDateString('es-GT') : 'N/D';
+        nameCellHtml = `<strong>${item.name}</strong><br><span style="font-size: 0.8rem; color: var(--text-muted); font-style: italic;">Genérico: ${item.generic || 'N/D'}</span>`;
+        extraCellHtml = `
+          ${item.presentation || 'N/A'} | <span style="font-size: 0.75rem; color: var(--accent-primary); text-transform: uppercase;">${item.category || ''}</span><br>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Lote: ${item.lote || 'N/D'} | Vence: ${expirationDateStr}</span><br>
+          <span style="font-size: 0.8rem; font-weight: bold; color: ${item.stock <= 0 ? 'var(--accent-danger)' : 'var(--accent-success)'};">Stock: ${item.stock !== undefined ? item.stock : 120}</span>
+        `;
+      } else if (activeCatalogType === 'imagingStudies') {
+        nameCellHtml = `<strong>${item.name}</strong>`;
+        extraCellHtml = `${item.category || 'General'}`;
+      } else if (activeCatalogType === 'consultationTypes') {
+        nameCellHtml = `<strong>${item.name}</strong>`;
+        extraCellHtml = `${item.specialty || 'General'}`;
+      }
+
+      tr.innerHTML = `
+        <td style="padding: 10px 8px;">${nameCellHtml}</td>
+        <td style="padding: 10px 8px;">${extraCellHtml}</td>
+        <td style="padding: 10px 8px; text-align: right; font-weight: bold; color: var(--accent-success);">Q${parseFloat(item.price).toFixed(2)}</td>
+        <td style="padding: 10px 8px; text-align: center;">
+          <button class="btn btn-secondary btn-small btn-edit-config" data-id="${item.id}" style="padding: 4px 8px; font-size: 0.8rem; margin-right: 4px;">✏️</button>
+          <button class="btn btn-danger btn-small btn-delete-config" data-id="${item.id}" style="padding: 4px 8px; font-size: 0.8rem;">&times;</button>
+        </td>
+      `;
+    }
 
     configTableBody.appendChild(tr);
   });
@@ -1077,13 +1157,8 @@ function processImportedRows(rows) {
   let catalog = appState[activeCatalogType] || [];
   let count = 0;
 
-  const headerRow = rows[0] || [];
-  let nameIdx = 0;
-  let priceIdx = -1;
-  let genericIdx = -1;
-  let presentationIdx = -1;
-  let categoryIdx = -1;
-  let specialtyIdx = -1;
+  let unitIdx = -1;
+  let referenceIdx = -1;
 
   headerRow.forEach((col, idx) => {
     if (typeof col === 'string') {
@@ -1100,11 +1175,15 @@ function processImportedRows(rows) {
         categoryIdx = idx;
       } else if (text.includes("especialidad")) {
         specialtyIdx = idx;
+      } else if (text.includes("unidad") || text.includes("unidades") || text.includes("unit") || text.includes("medida")) {
+        unitIdx = idx;
+      } else if (text.includes("referencia") || text.includes("intervalo") || text.includes("rango") || text.includes("normal") || text.includes("limite")) {
+        referenceIdx = idx;
       }
     }
   });
 
-  const startRow = (priceIdx === -1 && genericIdx === -1 && categoryIdx === -1) ? 0 : 1;
+  const startRow = (priceIdx === -1 && genericIdx === -1 && categoryIdx === -1 && unitIdx === -1 && referenceIdx === -1) ? 0 : 1;
 
   for (let i = startRow; i < rows.length; i++) {
     const row = rows[i];
@@ -1153,8 +1232,10 @@ function processImportedRows(rows) {
       newItem.vencimiento = '2027-06-30';
     } else if (activeCatalogType === 'laboratoryTests') {
       newItem.category = categoryIdx !== -1 && row[categoryIdx] ? String(row[categoryIdx]).trim() : "General";
+      newItem.unit = unitIdx !== -1 && row[unitIdx] ? String(row[unitIdx]).trim() : "N/A";
+      newItem.reference = referenceIdx !== -1 && row[referenceIdx] ? String(row[referenceIdx]).trim() : "N/A";
       newItem.parameters = [
-        { name: "Resultado General", unit: "", normal: "Estable" }
+        { name: "Resultado General", unit: newItem.unit, normal: newItem.reference }
       ];
     } else if (activeCatalogType === 'imagingStudies') {
       newItem.category = categoryIdx !== -1 && row[categoryIdx] ? String(row[categoryIdx]).trim() : "General";
@@ -1503,84 +1584,80 @@ function importDatabaseExcel(file, callback) {
       const workbook = XLSX.read(data, { type: 'array' });
       const currentState = getAppState();
 
-      // 1. Información Clínica
-      if (workbook.Sheets["Información Clínica"]) {
-        const clinicRows = XLSX.utils.sheet_to_json(workbook.Sheets["Información Clínica"]);
-        if (clinicRows.length > 0) {
-          const row = clinicRows[0];
-          currentState.clinicInfo = currentState.clinicInfo || {};
-          currentState.clinicInfo.name = row['Nombre Clínica'] || currentState.clinicInfo.name;
-          currentState.clinicInfo.address = row['Dirección'] || currentState.clinicInfo.address;
-          currentState.clinicInfo.phone = row['Teléfono'] || currentState.clinicInfo.phone;
-          currentState.clinicInfo.email = row['Correo Electrónico'] || currentState.clinicInfo.email;
+      // Helper for header detection
+      const getSheetRows = (sheetName, keyWords) => {
+        const sheet = workbook.Sheets[sheetName];
+        if (!sheet) return [];
+        const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        let hIdx = 0;
+        for (let i = 0; i < rawRows.length; i++) {
+          const rowStr = (rawRows[i] || []).join(' ');
+          if (keyWords.some(k => rowStr.includes(k))) {
+            hIdx = i;
+            break;
+          }
         }
+        return XLSX.utils.sheet_to_json(sheet, { range: hIdx });
+      };
+
+      // Find sheets dynamically
+      const findSheet = (namePattern) => {
+        return workbook.SheetNames.find(s => s.toLowerCase().includes(namePattern.toLowerCase()));
+      };
+
+      const pacientesSheet = findSheet("Pacientes");
+      if (pacientesSheet) {
+        const pRows = getSheetRows(pacientesSheet, ["ID Paciente", "ID Expediente", "Nombre Completo"]);
+        pRows.forEach(pr => {
+          const pid = String(pr['ID Paciente'] || pr['ID Expediente'] || ('p-' + Math.random().toString(36).substr(2, 5)));
+          const pname = pr['Nombre Completo'] || pr['Nombre'];
+          if (!pname || String(pid).includes('TOTAL')) return;
+
+          let pObj = currentState.patients.find(p => p.id === pid || p.name === pname);
+          if (!pObj) {
+            pObj = {
+              id: pid,
+              name: pname,
+              dpi: String(pr['DPI / CUI'] || pr['DPI'] || 'No Presenta Documento'),
+              birthdate: String(pr['Fecha Nacimiento'] || ''),
+              gender: (String(pr['Sexo'] || pr['Género'] || '').toUpperCase().includes('H') || String(pr['Sexo'] || '').toUpperCase().includes('MASC')) ? 'Masculino' : 'Femenino',
+              telephone: String(pr['Teléfono'] || '00000000'),
+              address: String(pr['Dirección / Domicilio'] || pr['Dirección'] || 'Ciudad de Guatemala'),
+              assignedDoctorName: pr['Médico Tratante'] || 'Dr. Carlos Montenegro',
+              vitalSigns: [],
+              consultations: [],
+              appointments: [],
+              prescriptions: [],
+              billingHistory: []
+            };
+            currentState.patients.push(pObj);
+          }
+        });
       }
 
-      // 2. Usuarios y Roles
-      if (workbook.Sheets["Usuarios"]) {
-        const userRows = XLSX.utils.sheet_to_json(workbook.Sheets["Usuarios"]);
-        if (userRows.length > 0 && userRows[0]['ID Usuario']) {
-          currentState.users = userRows.map(r => ({
-            id: String(r['ID Usuario']),
-            name: r['Nombre'],
-            role: r['Rol'],
-            password: '1234',
-            license: r['Colegiado'] !== 'N/A' ? r['Colegiado'] : '',
-            specialty: r['Especialidad'] !== 'N/A' ? r['Especialidad'] : '',
-            phone: r['Teléfono'] !== 'N/A' ? r['Teléfono'] : ''
-          }));
-        }
-      }
+      // Farmacia
+      const farmaciaSheet = findSheet("Inventario") || findSheet("Farmacia");
+      if (farmaciaSheet) {
+        const fRows = getSheetRows(farmaciaSheet, ["Código SKU", "Nombre Producto", "ID"]);
+        if (fRows.length > 0) {
+          fRows.forEach(fr => {
+            const mname = fr['Nombre Producto / Medicamento'] || fr['Nombre Medicamento'] || fr['Nombre'];
+            if (!mname || String(mname).includes('TOTAL')) return;
 
-      // 3. Pacientes
-      if (workbook.Sheets["Pacientes"]) {
-        const patientRows = XLSX.utils.sheet_to_json(workbook.Sheets["Pacientes"]);
-        if (patientRows.length > 0 && patientRows[0]['ID Expediente']) {
-          patientRows.forEach(pr => {
-            let pObj = currentState.patients.find(p => p.id === String(pr['ID Expediente']));
-            if (!pObj) {
-              pObj = {
-                id: String(pr['ID Expediente']),
-                name: pr['Nombre Completo'],
-                dpi: pr['DPI'] || 'No Presenta Documento',
-                birthdate: pr['Fecha Nacimiento'],
-                gender: pr['Género'],
-                telephone: String(pr['Teléfono']),
-                address: pr['Dirección'],
-                assignedDoctorName: pr['Médico Tratante'] || 'Dr. Carlos Mendoza',
-                vitalSigns: [],
-                consultations: [],
-                prescriptions: [],
-                billingHistory: []
-              };
-              currentState.patients.push(pObj);
-            } else {
-              pObj.name = pr['Nombre Completo'] || pObj.name;
-              pObj.dpi = pr['DPI'] || pObj.dpi;
-              pObj.birthdate = pr['Fecha Nacimiento'] || pObj.birthdate;
-              pObj.gender = pr['Género'] || pObj.gender;
-              pObj.telephone = String(pr['Teléfono'] || pObj.telephone);
-              pObj.address = pr['Dirección'] || pObj.address;
-              pObj.assignedDoctorName = pr['Médico Tratante'] || pObj.assignedDoctorName;
+            const existing = currentState.medications.find(m => m.name === mname);
+            if (!existing) {
+              currentState.medications.push({
+                id: 'm-' + (currentState.medications.length + 1),
+                sku: String(fr['Código SKU'] || fr['ID'] || 'MED-' + Date.now()),
+                name: mname,
+                category: fr['Categoría / Clasificación'] || fr['Categoría'] || 'Farmacia',
+                stock: parseInt(fr['Stock Actual'] || fr['Stock']) || 100,
+                price: parseFloat(fr['Precio Venta Unitario'] || fr['Precio Venta (Q)']) || 25.0,
+                lote: fr['Lote'] || 'L-MED-100',
+                vencimiento: fr['Fecha Vencimiento'] || '2027-12-31'
+              });
             }
           });
-        }
-      }
-
-      // 4. Inventario Farmacia
-      if (workbook.Sheets["Inventario Farmacia"]) {
-        const medRows = XLSX.utils.sheet_to_json(workbook.Sheets["Inventario Farmacia"]);
-        if (medRows.length > 0 && medRows[0]['ID']) {
-          currentState.medications = medRows.map(m => ({
-            id: String(m['ID']),
-            name: m['Nombre Medicamento'],
-            presentation: m['Presentación'] || 'Caja / Frasco',
-            category: m['Categoría'] || 'General',
-            price: parseFloat(m['Precio Venta (Q)']) || 50.0,
-            stock: parseInt(m['Stock']) || 100,
-            lote: m['Lote'] || 'L-MED-100',
-            vencimiento: m['Fecha Vencimiento'] || '2027-12-31'
-          }));
         }
       }
 

@@ -23,6 +23,9 @@ export function renderConsulta(container) {
       </div>
     </div>
 
+    <!-- Contenedor de Notificaciones de Interconsultas / Referencias Recibidas -->
+    <div id="consult-referral-notifications-container"></div>
+
     <div class="grid-sidebar">
       <!-- Barra lateral: Selector de todos los pacientes e historial de consultas registradas -->
       <div class="glass-card search-sidebar">
@@ -50,11 +53,16 @@ export function renderConsulta(container) {
     </div>
   `;
 
+  // Renderizar Notificaciones de Interconsultas
+  renderReferralNotifications();
+
   // Bind búsqueda de pacientes
   const searchInput = document.getElementById('consult-patient-search');
-  searchInput.addEventListener('input', (e) => {
-    renderPatientList(e.target.value);
-  });
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      renderPatientList(e.target.value);
+    });
+  }
 
   // Inicializar lista de pacientes y cargar paciente seleccionado si existe
   renderPatientList();
@@ -120,6 +128,90 @@ function renderPatientList(query = '') {
   });
 }
 
+// Renderizar notificaciones de interconsultas/referencias recibidas para el médico en sesión
+function renderReferralNotifications() {
+  const container = document.getElementById('consult-referral-notifications-container');
+  if (!container) return;
+
+  const state = getAppState();
+  const currentUser = state.currentUser;
+  if (!currentUser) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const notifications = [];
+
+  (state.patients || []).forEach(patient => {
+    (patient.consultations || []).forEach(c => {
+      if (c.referral && (c.referral.doctorName || c.referral.doctorId)) {
+        const isTargetDoctor = 
+          c.referral.doctorId === currentUser.id ||
+          (c.referral.doctorName && c.referral.doctorName.toLowerCase().includes(currentUser.name.toLowerCase())) ||
+          (currentUser.name && currentUser.name.toLowerCase().includes((c.referral.doctorName || '').toLowerCase()));
+
+        if (isTargetDoctor) {
+          let dateFormatted = c.date || 'Reciente';
+          try {
+            if (c.date && !isNaN(new Date(c.date).getTime())) {
+              dateFormatted = new Date(c.date).toLocaleDateString('es-GT');
+            }
+          } catch (e) {}
+
+          notifications.push({
+            patientId: patient.id,
+            patientName: patient.name,
+            referringDoctor: c.doctor || 'Médico Tratante',
+            specialty: c.referral.specialty || c.specialty || 'General',
+            notes: c.referral.notes || c.reason || 'Interconsulta solicitada para evaluación médica',
+            dateFormatted
+          });
+        }
+      }
+    });
+  });
+
+  if (notifications.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="glass-card" style="background: rgba(157, 78, 221, 0.08); border: 1px solid rgba(157, 78, 221, 0.35); padding: 1.25rem; border-radius: var(--radius-sm); margin-bottom: 1.5rem;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 0.75rem;">
+        <span style="font-size: 1.5rem; color: var(--accent-secondary);">🔔</span>
+        <h3 style="color: var(--accent-secondary); margin: 0; font-family: var(--font-heading); font-size: 1.1rem;">
+          Interconsultas y Referencias Médicas Recibidas (${notifications.length})
+        </h3>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        ${notifications.map(n => `
+          <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); padding: 10px 14px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div>
+              <strong style="color: var(--accent-primary); font-size: 0.95rem;">👤 ${n.patientName}</strong>
+              <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 8px;">Referido por: <strong>${n.referringDoctor}</strong> (${n.dateFormatted})</span>
+              <div style="font-size: 0.85rem; color: var(--text-primary); margin-top: 4px;">
+                💬 <strong>Motivo/Nota:</strong> ${n.notes}
+              </div>
+            </div>
+            <button class="btn btn-secondary btn-small btn-attend-referred-patient" data-id="${n.patientId}" style="padding: 6px 12px; font-size: 0.82rem; border-color: var(--accent-secondary); color: var(--accent-secondary);">
+              <span>👁️</span> Atender Paciente
+            </button>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  // Bind click on "Atender Paciente"
+  container.querySelectorAll('.btn-attend-referred-patient').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pId = btn.getAttribute('data-id');
+      selectPatient(pId);
+    });
+  });
+}
+
 // Seleccionar paciente, actualizar barra lateral y cargar formulario
 function selectPatient(patientId) {
   setActivePatientId(patientId);
@@ -130,7 +222,8 @@ function selectPatient(patientId) {
   const patient = state.patients.find(p => p.id === patientId);
   
   // Re-renderizar lista para marcar el seleccionado
-  renderPatientList(document.getElementById('consult-patient-search').value);
+  const searchEl = document.getElementById('consult-patient-search');
+  renderPatientList(searchEl ? searchEl.value : '');
 
   if (!patient) {
     showPlaceholder();
@@ -146,8 +239,14 @@ function selectPatient(patientId) {
   // Renderizar historial de consultas registradas del paciente
   renderConsultationHistory(patient);
 
-  // Renderizar el formulario
-  const doctors = state.users.filter(u => u.role === 'medico');
+  // Renderizar el formulario con todos los médicos registrados
+  const doctors = (state.users || []).filter(u => {
+    const role = String(u.role || '').toLowerCase();
+    const name = String(u.name || '').toLowerCase();
+    const id = String(u.id || '').toLowerCase();
+    return role.includes('medico') || role.includes('médico') || name.includes('dr.') || name.includes('dra.') || name.includes('lic.') || id.startsWith('u-med');
+  });
+
   renderConsultationForm(patient, doctors);
 }
 
@@ -185,21 +284,28 @@ function renderConsultationHistory(patient) {
   patient.consultations.forEach(c => {
     const li = document.createElement('li');
     li.className = 'history-card';
-    const dateFormatted = new Date(c.date).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' });
-    
+    let dateFormatted = c.date || 'Reciente';
+    try {
+      if (c.date && !isNaN(new Date(c.date).getTime())) {
+        dateFormatted = new Date(c.date).toLocaleDateString('es-GT');
+      }
+    } catch(e){}
+
+    const dxCodesText = (c.diagnosisCodes && Array.isArray(c.diagnosisCodes) && c.diagnosisCodes.length > 0) ? c.diagnosisCodes.join(', ') : (c.diagnosis || 'Z00.0');
+
     li.innerHTML = `
       <div class="history-card-header">
         <span>${dateFormatted}</span>
-        <span>${c.specialty}</span>
+        <span>${c.specialty || 'General'}</span>
       </div>
-      <div class="history-card-title">${c.doctor}</div>
-      <div class="history-card-body" title="${c.reason}">
-        <strong>Motivo:</strong> ${c.reason}
+      <div class="history-card-title">${c.doctor || 'Médico Tratante'}</div>
+      <div class="history-card-body" title="${c.reason || ''}">
+        <strong>Motivo:</strong> ${c.reason || 'Consulta Médica'}
       </div>
       ${c.clinicalDiagnosis ? `<div style="font-size: 0.8rem; margin-top: 4px; color: var(--accent-success);"><strong>Dx Clínico:</strong> ${c.clinicalDiagnosis}</div>` : ''}
       ${c.referral ? `<div style="font-size: 0.75rem; margin-top: 4px; color: var(--accent-secondary);">🤝 <strong>Interconsulta:</strong> ${c.referral.doctorName}</div>` : ''}
       <div style="font-size: 0.75rem; margin-top: 6px; color: var(--accent-primary);">
-        CIE-10: ${c.diagnosisCodes && c.diagnosisCodes.length ? c.diagnosisCodes.join(', ') : 'N/A'}
+        CIE-10: ${dxCodesText}
       </div>
     `;
 
@@ -211,54 +317,84 @@ function renderConsultationHistory(patient) {
   });
 }
 
-// Mostrar detalle de una consulta previa
-function showPastConsultationDetail(consultation) {
+// Mostrar detalle de una consulta previa en un modal emergente
+export function showPastConsultationDetail(consultation) {
   const modal = document.getElementById('clinical-history-modal');
   const title = document.getElementById('history-modal-patient-name');
   const body = document.getElementById('history-modal-body');
   
   if (!modal || !title || !body) return;
 
-  title.textContent = `Detalle de Consulta`;
+  let dateFormatted = consultation.date || 'Reciente';
+  try {
+    if (consultation.date && !isNaN(new Date(consultation.date).getTime())) {
+      dateFormatted = new Date(consultation.date).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' });
+    }
+  } catch(e){}
+
+  const feeText = (consultation.fee !== undefined && consultation.fee !== null) ? `Q${parseFloat(consultation.fee).toFixed(2)}` : 'Q150.00';
+  const doctorText = consultation.doctor || 'Médico Tratante';
+  const specialtyText = consultation.specialty || 'Medicina General';
+  const reasonText = consultation.reason || 'Sin motivo especificado';
+  const symptomsText = consultation.symptoms || 'Evaluación médica de rutina y control general.';
+
+  let diagListHtml = '';
+  if (consultation.diagnosisCodes && Array.isArray(consultation.diagnosisCodes) && consultation.diagnosisCodes.length > 0) {
+    diagListHtml = consultation.diagnosisCodes.map((code, idx) => {
+      const name = (consultation.diagnosisNames && consultation.diagnosisNames[idx]) ? consultation.diagnosisNames[idx] : 'Diagnóstico Clínico';
+      return `<li style="margin-bottom: 4px;"><span class="suggestion-code" style="background: rgba(0, 242, 254, 0.15); color: var(--accent-primary); padding: 2px 6px; border-radius: 4px; font-weight: bold; font-family: monospace;">${code}</span> - ${name}</li>`;
+    }).join('');
+  } else if (consultation.diagnosis) {
+    diagListHtml = `<li style="margin-bottom: 4px;"><span class="suggestion-code" style="background: rgba(0, 242, 254, 0.15); color: var(--accent-primary); padding: 2px 6px; border-radius: 4px; font-weight: bold; font-family: monospace;">Z00.0</span> - ${consultation.diagnosis}</li>`;
+  } else {
+    diagListHtml = `<li style="margin-bottom: 4px;"><span class="suggestion-code" style="background: rgba(0, 242, 254, 0.15); color: var(--accent-primary); padding: 2px 6px; border-radius: 4px; font-weight: bold; font-family: monospace;">Z00.0</span> - Examen médico de rutina</li>`;
+  }
+
+  const labsList = (consultation.acceptedStudies && consultation.acceptedStudies.labs) ? consultation.acceptedStudies.labs : [];
+  const imgList = (consultation.acceptedStudies && consultation.acceptedStudies.imaging) ? consultation.acceptedStudies.imaging : [];
+  const medList = consultation.acceptedMedications || [];
+  const indList = consultation.acceptedIndications || [];
+
+  const hasAux = labsList.length > 0 || imgList.length > 0 || medList.length > 0 || indList.length > 0;
+
+  title.textContent = `📋 Detalle de Consulta Registrada - ${dateFormatted}`;
   
   body.innerHTML = `
-    <div class="report-section">
-      <div class="report-section-title">Información de la Consulta</div>
-      <div class="report-grid-patient">
-        <div class="report-item"><span>Fecha / Hora</span><strong>${new Date(consultation.date).toLocaleString()}</strong></div>
-        <div class="report-item"><span>Especialidad</span><strong>${consultation.specialty}</strong></div>
-        <div class="report-item"><span>Médico</span><strong>${consultation.doctor}</strong></div>
-        <div class="report-item"><span>Costo / Cobro</span><strong>Q${consultation.fee.toFixed(2)}</strong></div>
+    <div class="report-section" style="margin-bottom: 1rem;">
+      <div class="report-section-title" style="font-weight: bold; color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Información General de la Consulta</div>
+      <div class="report-grid-patient" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color);">
+        <div class="report-item"><span style="font-size: 0.75rem; color: var(--text-muted); display: block;">Fecha / Hora</span><strong>${dateFormatted}</strong></div>
+        <div class="report-item"><span style="font-size: 0.75rem; color: var(--text-muted); display: block;">Especialidad</span><strong>${specialtyText}</strong></div>
+        <div class="report-item"><span style="font-size: 0.75rem; color: var(--text-muted); display: block;">Médico Evaluador</span><strong>${doctorText}</strong></div>
+        <div class="report-item"><span style="font-size: 0.75rem; color: var(--text-muted); display: block;">Honorario / Cobro</span><strong style="color: var(--accent-success);">${feeText}</strong></div>
       </div>
     </div>
 
-    <div class="report-section" style="margin-top: 1.5rem;">
-      <div class="report-section-title">Evaluación Clínica</div>
-      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 15px; border-radius: 4px; font-size: 0.95rem; line-height: 1.5;">
-        <p style="margin-bottom: 10px;"><strong>Motivo de Consulta:</strong><br>${consultation.reason}</p>
-        <p><strong>Síntomas / Examen Físico:</strong><br>${consultation.symptoms}</p>
+    <div class="report-section" style="margin-bottom: 1rem;">
+      <div class="report-section-title" style="font-weight: bold; color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Evaluación Clínica</div>
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; font-size: 0.9rem; line-height: 1.5;">
+        <p style="margin-bottom: 8px;"><strong>Motivo de Consulta:</strong><br><span style="color: var(--text-primary);">${reasonText}</span></p>
+        <p><strong>Síntomas / Examen Físico:</strong><br><span style="color: var(--text-muted);">${symptomsText}</span></p>
       </div>
     </div>
 
-    <div class="report-section" style="margin-top: 1.5rem;">
-      <div class="report-section-title">Diagnóstico y Auxiliares (CIE-10)</div>
-      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 15px; border-radius: 4px; font-size: 0.95rem;">
-        <p><strong>Diagnóstico(s) Registrado(s):</strong></p>
-        <ul style="margin-left: 20px; margin-top: 5px; list-style: square;">
-          ${consultation.diagnosisCodes.map((code, idx) => `
-            <li><span class="suggestion-code">${code}</span> - ${consultation.diagnosisNames[idx]}</li>
-          `).join('')}
+    <div class="report-section" style="margin-bottom: 1rem;">
+      <div class="report-section-title" style="font-weight: bold; color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Diagnóstico y Auxiliares (CIE-10)</div>
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; font-size: 0.9rem;">
+        <p style="margin-bottom: 6px;"><strong>Diagnóstico(s) Registrado(s):</strong></p>
+        <ul style="margin-left: 10px; margin-bottom: 10px; list-style: none; padding: 0;">
+          ${diagListHtml}
         </ul>
 
-        ${consultation.acceptedStudies.labs.length > 0 || consultation.acceptedStudies.imaging.length > 0 || (consultation.acceptedMedications && consultation.acceptedMedications.length > 0) || (consultation.acceptedIndications && consultation.acceptedIndications.length > 0) ? `
-          <p style="margin-top: 15px;"><strong>Estudios e Indicaciones Aceptados:</strong></p>
-          <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 6px;">
-            ${consultation.acceptedStudies.labs.map(lab => `<div>🔬 Lab: ${lab}</div>`).join('')}
-            ${consultation.acceptedStudies.imaging.map(img => `<div>🖼️ Imagen: ${img}</div>`).join('')}
-            ${consultation.acceptedMedications ? consultation.acceptedMedications.map(med => `<div>💊 Medicina: ${med.name} (${med.dosage})</div>`).join('') : ''}
-            ${consultation.acceptedIndications ? consultation.acceptedIndications.map(ind => `<div>📌 Indicación: ${ind}</div>`).join('') : ''}
+        ${hasAux ? `
+          <p style="margin-top: 10px; font-weight: bold; border-top: 1px dashed var(--border-color); padding-top: 8px;">Estudios e Indicaciones Registrados:</p>
+          <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem;">
+            ${labsList.map(lab => `<div style="color: var(--accent-primary);">🔬 Lab: ${lab}</div>`).join('')}
+            ${imgList.map(img => `<div style="color: var(--accent-secondary);">🖼️ Imagen: ${img}</div>`).join('')}
+            ${medList.map(med => `<div style="color: var(--accent-success);">💊 Medicina: ${med.name || med} ${med.dosage ? `(${med.dosage})` : ''}</div>`).join('')}
+            ${indList.map(ind => `<div>📌 Indicación: ${ind}</div>`).join('')}
           </div>
-        ` : '<p style="margin-top: 15px; color: var(--text-muted); font-style: italic;">No se prescribieron exámenes de apoyo ni tratamientos.</p>'}
+        ` : '<p style="margin-top: 8px; color: var(--text-muted); font-style: italic; font-size: 0.85rem;">No se emitieron exámenes de apoyo ni tratamientos adicionales.</p>'}
       </div>
     </div>
   `;

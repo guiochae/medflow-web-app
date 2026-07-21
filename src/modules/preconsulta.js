@@ -158,8 +158,8 @@ function showNewPatientForm() {
             <input type="tel" id="p-telephone" required placeholder="Ej. 5555-1234">
           </div>
           <div class="form-group">
-            <label for="p-email">Correo Electrónico</label>
-            <input type="email" id="p-email" placeholder="Ej. paciente@correo.com">
+            <label for="p-email">Correo Electrónico <small style="opacity: 0.7; font-weight: normal;">(Opcional)</small></label>
+            <input type="text" id="p-email" placeholder="Ej. paciente@correo.com (Opcional)">
           </div>
         </div>
         <div class="form-group">
@@ -307,8 +307,8 @@ function showEditPatientForm(patient) {
             <input type="tel" id="ep-telephone" required value="${patient.telephone}">
           </div>
           <div class="form-group">
-            <label for="ep-email">Correo Electrónico</label>
-            <input type="email" id="ep-email" value="${patient.email || ''}">
+            <label for="ep-email">Correo Electrónico <small style="opacity: 0.7; font-weight: normal;">(Opcional)</small></label>
+            <input type="text" id="ep-email" value="${patient.email && patient.email !== 'No provisto' ? patient.email : ''}" placeholder="Ej. paciente@correo.com (Opcional)">
           </div>
         </div>
         <div class="form-group">
@@ -742,6 +742,18 @@ function renderPatientDetails() {
   `;
 
   // Bind Tabs
+  const currentUser = state.currentUser;
+  const canBilling = isUserBillingAuthorized(currentUser);
+
+  const tabBillingBtn = document.getElementById('tab-billing');
+  if (tabBillingBtn) {
+    if (!canBilling) {
+      tabBillingBtn.style.display = 'none';
+    } else {
+      tabBillingBtn.style.display = 'inline-block';
+    }
+  }
+
   const tabs = {
     'tab-vitals': 'pane-vitals',
     'tab-appointments': 'pane-appointments',
@@ -750,14 +762,18 @@ function renderPatientDetails() {
   };
 
   Object.keys(tabs).forEach(tabId => {
-    document.getElementById(tabId).addEventListener('click', (e) => {
+    const btnEl = document.getElementById(tabId);
+    if (!btnEl) return;
+
+    btnEl.addEventListener('click', (e) => {
       // Remover clase activo de botones y paneles
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
 
       // Activar clickeado
       e.target.classList.add('active');
-      document.getElementById(tabs[tabId]).classList.add('active');
+      const paneEl = document.getElementById(tabs[tabId]);
+      if (paneEl) paneEl.classList.add('active');
     });
   });
 
@@ -2184,12 +2200,42 @@ function syncPatientBilling(patientObj, stateObj) {
   }
 }
 
+export function isUserBillingAuthorized(user) {
+  if (!user) return false;
+  const role = String(user.role || '').toLowerCase();
+  const name = String(user.name || '').toLowerCase();
+  const id = String(user.id || '').toLowerCase();
+
+  // Roles autorizados: Administrador, Medico 1, y Recepcionista
+  const isAdmin = role.includes('admin') || name.includes('admin') || id.includes('admin') || role === 'administrador';
+  const isRecepcionista = role.includes('recep') || role.includes('secretaria') || role === 'recepcionista';
+  const isMedico1 = id === 'u-med-1' || name.includes('carlos montenegro') || role === 'medico_1' || role === 'medico1' || role === 'medico';
+
+  return isAdmin || isRecepcionista || isMedico1;
+}
+
 // Renderizar listado de cobros y facturación del paciente
 function renderBilling(patient) {
   const tableBody = document.getElementById('table-billing-body');
-  if (!tableBody) return;
+  const paneBilling = document.getElementById('pane-billing');
+  if (!tableBody || !paneBilling) return;
 
   const stateObj = getAppState();
+  const currentUser = stateObj.currentUser;
+
+  if (!isUserBillingAuthorized(currentUser)) {
+    paneBilling.innerHTML = `
+      <div style="text-align: center; padding: 3.5rem 1.5rem; background: rgba(255, 0, 0, 0.04); border: 1px dashed var(--accent-danger); border-radius: 8px; margin: 1rem 0;">
+        <span style="font-size: 3rem;">🔒</span>
+        <h3 style="color: var(--accent-danger); margin-top: 1rem; font-family: var(--font-heading);">Acceso Restringido a Facturación</h3>
+        <p style="color: var(--text-muted); margin-top: 0.5rem; font-size: 0.95rem; max-width: 500px; margin-left: auto; margin-right: auto;">
+          La sección de <strong>Facturación y Comprobantes</strong> únicamente está accesible para los usuarios con rol de <strong>Administrador</strong>, <strong>Medico 1</strong> y <strong>Recepcionista</strong>.
+        </p>
+      </div>
+    `;
+    return;
+  }
+
   const currentPatient = stateObj.patients.find(p => p.id === patient.id) || patient;
 
   // Sincronizar automáticamente cualquier receta u orden de estudios pendiente de cobro
@@ -2205,7 +2251,12 @@ function renderBilling(patient) {
 
   billingHistory.forEach(bill => {
     const row = document.createElement('tr');
-    const dateFormatted = new Date(bill.date).toLocaleDateString('es-GT', { dateStyle: 'short' });
+    let dateFormatted = bill.date || 'Reciente';
+    try {
+      if (bill.date && !isNaN(new Date(bill.date).getTime())) {
+        dateFormatted = new Date(bill.date).toLocaleDateString('es-GT');
+      }
+    } catch(e){}
     
     // Si no tiene status, asumimos Pagado por compatibilidad
     if (!bill.status) bill.status = 'Pagado';
@@ -2229,22 +2280,28 @@ function renderBilling(patient) {
       `;
     }
 
-    const detailsList = (bill.details && bill.details.length > 0)
+    const detailsList = (bill.details && Array.isArray(bill.details) && bill.details.length > 0)
       ? `<ul style="margin: 6px 0 0 0; padding-left: 14px; font-size: 0.82rem; color: var(--text-muted); list-style: disc;">
-          ${bill.details.map(d => `<li>${d.description} — <strong style="color: var(--accent-secondary);">Q${parseFloat(d.amount).toFixed(2)}</strong></li>`).join('')}
+          ${bill.details.map(d => {
+            const desc = typeof d === 'string' ? d : (d.description || d.name || 'Servicio / Honorario');
+            const amt = (d && d.amount !== undefined && !isNaN(d.amount)) ? parseFloat(d.amount).toFixed(2) : ((bill.total !== undefined && !isNaN(bill.total)) ? parseFloat(bill.total).toFixed(2) : '50.00');
+            return `<li>${desc} — <strong style="color: var(--accent-secondary);">Q${amt}</strong></li>`;
+          }).join('')}
          </ul>`
       : '';
+
+    const billTotal = (bill.total !== undefined && !isNaN(bill.total)) ? bill.total : 50.00;
 
     row.innerHTML = `
       <td><strong>${bill.id}</strong></td>
       <td>${dateFormatted}</td>
       <td>
-        <strong style="color: var(--text-primary); font-size: 0.95rem;">${bill.concept}</strong>
+        <strong style="color: var(--text-primary); font-size: 0.95rem;">${bill.concept || 'Servicio Médico'}</strong>
         ${detailsList}
       </td>
       <td><span style="font-size: 0.8rem; color: var(--text-muted);">${bill.diagnosis || 'Ninguno'}</span></td>
       <td>${statusBadge}</td>
-      <td><strong style="color: var(--accent-success); font-size: 1.05rem;">Q ${parseFloat(bill.total).toFixed(2)}</strong></td>
+      <td><strong style="color: var(--accent-success); font-size: 1.05rem;">Q ${parseFloat(billTotal).toFixed(2)}</strong></td>
       <td>${actionButtons}</td>
     `;
 

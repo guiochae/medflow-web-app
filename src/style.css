@@ -1393,7 +1393,9 @@ tbody tr:hover {
 /* -------------------------------------------------------------
    Compatibilidad Multidispositivo Responsiva (Desktop, Tablet, Mobile)
    ------------------------------------------------------------- */
-@media (max-width: 992px) {
+
+/* Laptops & Tablets (< 1024px) */
+@media (max-width: 1024px) {
   #app {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
@@ -1404,54 +1406,124 @@ tbody tr:hover {
     height: auto;
     border-right: none;
     border-bottom: 1px solid var(--border-color);
-    padding: 1rem;
+    padding: 0.85rem 1rem;
+    position: sticky;
+    top: 0;
+    z-index: 90;
+    background: #0f1019;
+  }
+
+  .sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
   }
 
   .sidebar-nav {
     display: flex;
-    flex-wrap: wrap;
+    overflow-x: auto;
+    white-space: nowrap;
     gap: 8px;
-    margin-top: 1rem;
+    padding-bottom: 6px;
+    margin-top: 0.5rem;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
   }
 
   .nav-btn {
-    flex: 1 1 auto;
-    min-width: 125px;
+    flex: 0 0 auto;
+    min-width: 120px;
     padding: 8px 12px;
     font-size: 0.85rem;
   }
 
   .sidebar-footer {
-    margin-top: 1rem;
-    padding-top: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .grid-sidebar,
+  .grid-prescription {
+    grid-template-columns: 1fr !important;
+    gap: 1.25rem !important;
+  }
+
+  .search-sidebar {
+    max-height: none !important;
   }
 
   .main-content {
-    padding: 1rem;
+    padding: 1.25rem 1rem;
   }
 }
 
-@media (max-width: 640px) {
-  .login-card {
-    width: 92%;
-    padding: 1.5rem;
-    margin: 1rem auto;
+/* Smart Phones & Small Tablets (< 768px) */
+@media (max-width: 768px) {
+  .form-row {
+    flex-direction: column;
+    gap: 0.75rem;
   }
 
-  .module-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
+  .vitals-grid {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)) !important;
   }
 
   .patient-summary-grid {
     grid-template-columns: 1fr !important;
   }
 
-  .modal-container {
-    width: 95% !important;
+  .module-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .tabs-container {
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tab-btn {
+    padding: 8px 14px;
+    font-size: 0.85rem;
+  }
+}
+
+/* Mobile Devices (< 640px) */
+@media (max-width: 640px) {
+  .login-card {
+    width: 95%;
+    padding: 1.25rem;
+    margin: 1rem auto;
+  }
+
+  .glass-card {
     padding: 1rem !important;
-    max-height: 92vh;
+  }
+
+  .modal-overlay {
+    padding: 0.5rem;
+  }
+
+  .modal-content,
+  .modal-container {
+    width: 96% !important;
+    max-height: 94vh !important;
+    padding: 1rem !important;
+  }
+
+  .modal-header {
+    padding: 1rem !important;
+  }
+
+  .modal-body {
+    padding: 1rem !important;
   }
 
   .checklist-grid {
@@ -1460,12 +1532,19 @@ tbody tr:hover {
 
   table {
     display: block;
+    width: 100%;
     overflow-x: auto;
     white-space: nowrap;
     -webkit-overflow-scrolling: touch;
   }
 
   .btn {
-    min-height: 42px;
+    min-height: 44px;
+    padding: 10px 16px;
+    font-size: 0.9rem;
+  }
+
+  button, input, select, textarea {
+    font-size: 16px !important; /* Prevents auto-zoom on iOS */
   }
 }
