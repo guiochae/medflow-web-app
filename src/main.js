@@ -7,16 +7,10 @@ import { renderImagenologia } from './modules/imagenologia.js';
 import { renderConfiguracion } from './modules/configuracion.js';
 import { renderFarmacia } from './modules/farmacia.js';
 import logoUrl from './assets/logo.jpg';
-import { medicationsDatabase } from './data/medicamentos.js';
-import { laboratoryTests, imagingStudies } from './data/estudios.js';
-
-import migratedInitialData from './data/medflow_db.json';
-
 import {
   db,
   firestoreState,
   initRealtimeFirestore,
-  seedInitialFirestoreData,
   subscribeToStateUpdates,
   saveDocument,
   removeDocument,
@@ -64,10 +58,20 @@ export function setActivePatientId(id) {
   activePatientId = id;
 }
 
-// Obtener estado unificado desde Firestore (con fallback a local cache)
+// Obtener estado unificado desde Firestore
 export function getAppState() {
+  const adminUser = {
+    id: 'u-admin',
+    name: 'Administrador',
+    role: 'Administrador',
+    password: hashPassword('Glol5414'),
+    modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
+  };
+
   if (firestoreState.isLoaded) {
-    // Si el usuario actual está logueado, incluirlo en el estado
+    if (!firestoreState.users || firestoreState.users.length === 0) {
+      firestoreState.users = [adminUser];
+    }
     const loggedUser = sessionStorage.getItem('medflow_logged_user');
     if (loggedUser) {
       firestoreState.currentUser = JSON.parse(loggedUser);
@@ -75,37 +79,26 @@ export function getAppState() {
     return firestoreState;
   }
 
-  // Fallback a almacenamiento local solo mientras se conectan los escuchadores de Firestore
+  // Fallback a almacenamiento local solo mientras conectan los escuchadores de Firestore
   const localData = localStorage.getItem('medflow_db');
   let state = localData ? JSON.parse(localData) : null;
   
   if (!state) {
-    const isPurged = localStorage.getItem('medflow_db_purged') === 'true';
-    if (isPurged) {
-      state = {
-        users: [{
-          id: 'u-admin',
-          name: 'Administrador',
-          role: 'Administrador',
-          password: hashPassword('Glol5414'),
-          modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
-        }],
-        patients: [],
-        medications: [],
-        pharmacySales: [],
-        laboratoryTests: [],
-        imagingStudies: [],
-        consultationTypes: [],
-        clinicInfo: {
-          name: "LUGAMED 2.0 - Clínica Médica y Hospital",
-          address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
-          phone: "2200-0000",
-          email: "contacto@lugamed.gt"
-        }
-      };
-    } else {
-      state = JSON.parse(JSON.stringify(migratedInitialData));
-    }
+    state = {
+      users: [adminUser],
+      patients: [],
+      medications: [],
+      pharmacySales: [],
+      laboratoryTests: [],
+      imagingStudies: [],
+      consultationTypes: [],
+      clinicInfo: {
+        name: "LUGAMED 2.0 - Clínica Médica y Hospital",
+        address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
+        phone: "2200-0000",
+        email: "contacto@lugamed.gt"
+      }
+    };
   }
 
   const loggedUser = sessionStorage.getItem('medflow_logged_user');
@@ -117,11 +110,7 @@ export function getAppState() {
 }
 
 export function resetToOfficialDatabase() {
-  localStorage.removeItem('medflow_db_purged');
-  seedInitialFirestoreData(true);
-  const state = JSON.parse(JSON.stringify(migratedInitialData));
-  localStorage.setItem('medflow_db', JSON.stringify(state));
-  return state;
+  return purgeAllDatabases();
 }
 
 // Guardar cambios directamente en Firestore y sincronizar estado
@@ -261,7 +250,14 @@ function renderLoginScreen() {
   if (!loginContainer) return;
 
   const state = getAppState();
-  const users = (state.users && state.users.length > 0) ? state.users : (migratedInitialData.users || []);
+  const adminUser = {
+    id: 'u-admin',
+    name: 'Administrador',
+    role: 'Administrador',
+    password: hashPassword('Glol5414'),
+    modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
+  };
+  const users = (state.users && state.users.length > 0) ? state.users : [adminUser];
 
   loginContainer.className = 'login-screen-wrapper';
   loginContainer.style.display = 'flex';
@@ -438,8 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initThemeToggle();
   initMobileDrawer();
 
-  // 1. Iniciar Sembrado y Escuchadores en Tiempo Real de Firebase Firestore
-  seedInitialFirestoreData();
+  // 1. Iniciar Escuchadores en Tiempo Real de Firebase Firestore
   initRealtimeFirestore(() => {
     // Suscribir render a cambios en tiempo real
     subscribeToStateUpdates((updatedState) => {

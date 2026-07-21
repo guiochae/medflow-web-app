@@ -13,8 +13,6 @@ import {
   writeBatch
 } from 'firebase/firestore';
 
-import migratedInitialData from './data/medflow_db.json';
-
 // Configuración de Firebase para Medflow Web App
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyMedflowWebAppProductionKey2026",
@@ -39,6 +37,28 @@ export {
   deleteDoc, 
   onSnapshot,
   writeBatch 
+};
+
+// Función auxiliar para obtener el hash de la contraseña del Administrador
+function getAdminPasswordHash() {
+  const plainText = 'Glol5414';
+  let hash = 0;
+  for (let i = 0; i < plainText.length; i++) {
+    const char = plainText.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
+  }
+  const strHash = Math.abs(hash).toString(16);
+  return 'sha256_enc_' + btoa(plainText + '_LUGAMED_SALT_' + strHash);
+}
+
+// Usuario Administrador por defecto (único usuario del sistema si la colección está vacía)
+export const defaultAdminUser = {
+  id: 'u-admin',
+  name: 'Administrador',
+  role: 'Administrador',
+  password: getAdminPasswordHash(),
+  modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
 };
 
 // Estado centralizado en tiempo real sincronizado con Firestore
@@ -87,13 +107,25 @@ export function initRealtimeFirestore(onFirstLoad) {
     }
   }
 
-  // 1. Escuchador de Usuarios
-  onSnapshot(collection(db, 'users'), (snapshot) => {
-    firestoreState.users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  // 1. Escuchador de Usuarios (Si la colección está vacía en Firestore, crea únicamente al Administrador)
+  onSnapshot(collection(db, 'users'), async (snapshot) => {
+    if (snapshot.empty) {
+      firestoreState.users = [defaultAdminUser];
+      try {
+        await setDoc(doc(db, 'users', defaultAdminUser.id), defaultAdminUser);
+      } catch (e) {
+        console.warn("No se pudo crear usuario admin automático en Firestore:", e);
+      }
+    } else {
+      firestoreState.users = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    }
     notifySubscribers();
     checkFirstLoad();
   }, (error) => {
     console.warn("Firestore fallback (users):", error);
+    if (!firestoreState.users || firestoreState.users.length === 0) {
+      firestoreState.users = [defaultAdminUser];
+    }
     checkFirstLoad();
   });
 
@@ -193,93 +225,9 @@ export async function removeDocument(collectionName, docId) {
   }
 }
 
-// Sembrado asíncrono inicial si la base de Firestore está vacía en producción
-export async function seedInitialFirestoreData(force = false) {
-  try {
-    const isPurged = localStorage.getItem('medflow_db_purged') === 'true';
-    if (isPurged && !force) {
-      console.log("Base de datos en modo purgado (limpio). Omitiendo sembrado inicial.");
-      return;
-    }
-
-    const patientsSnap = await getDocs(collection(db, 'patients'));
-    if (patientsSnap.empty || force) {
-      console.log("Inicializando colecciones oficiales en Firebase Firestore...");
-      const batch = writeBatch(db);
-
-      // Cargar Usuarios
-      (migratedInitialData.users || []).forEach(user => {
-        const ref = doc(db, 'users', user.id);
-        batch.set(ref, user);
-      });
-
-      // Cargar Pacientes
-      (migratedInitialData.patients || []).forEach(patient => {
-        const ref = doc(db, 'patients', patient.id);
-        batch.set(ref, patient);
-      });
-
-      // Cargar Medicamentos
-      (migratedInitialData.medications || []).forEach(med => {
-        const ref = doc(db, 'medications', med.id);
-        batch.set(ref, med);
-      });
-
-      // Cargar Laboratorio
-      (migratedInitialData.laboratoryTests || []).forEach(lab => {
-        const ref = doc(db, 'laboratoryTests', lab.id);
-        batch.set(ref, lab);
-      });
-
-      // Cargar Imagenología
-      (migratedInitialData.imagingStudies || []).forEach(img => {
-        const ref = doc(db, 'imagingStudies', img.id);
-        batch.set(ref, img);
-      });
-
-      // Cargar Tipos de Consulta
-      (migratedInitialData.consultationTypes || []).forEach(cons => {
-        const ref = doc(db, 'consultationTypes', cons.id);
-        batch.set(ref, cons);
-      });
-
-      // Cargar Info de la Clínica
-      if (migratedInitialData.clinicInfo) {
-        const ref = doc(db, 'clinicInfo', 'main');
-        batch.set(ref, migratedInitialData.clinicInfo);
-      }
-
-      await batch.commit();
-      console.log("🎉 ¡Éxito! Colecciones de Firestore sincronizadas en la nube.");
-    }
-  } catch (err) {
-    console.warn("Sembrado inicial de Firestore (modo offline o restringido):", err);
-  }
-}
-
-function getAdminPasswordHash() {
-  const plainText = 'Glol5414';
-  let hash = 0;
-  for (let i = 0; i < plainText.length; i++) {
-    const char = plainText.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0;
-  }
-  const strHash = Math.abs(hash).toString(16);
-  return 'sha256_enc_' + btoa(plainText + '_LUGAMED_SALT_' + strHash);
-}
-
 // Borrado y vaciado completo de todas las bases de datos de producción (conservando únicamente al Administrador)
 export async function purgeAllFirestoreData() {
   try {
-    const defaultAdminUser = {
-      id: 'u-admin',
-      name: 'Administrador',
-      role: 'Administrador',
-      password: getAdminPasswordHash(),
-      modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
-    };
-
     // 1. Purgar usuarios y recrear únicamente al usuario Administrador
     const usersSnap = await getDocs(collection(db, 'users'));
     const userBatch = writeBatch(db);
@@ -327,16 +275,15 @@ export async function purgeAllFirestoreData() {
       email: "contacto@lugamed.gt"
     };
 
-    // 4. Marcar la base de datos como purgada y limpiar almacenamiento local
-    localStorage.setItem('medflow_db_purged', 'true');
-    localStorage.removeItem('medflow_db');
+    // 4. Limpiar almacenamiento del navegador y asegurar sesión activa del Administrador
+    localStorage.clear();
     sessionStorage.setItem('medflow_logged_user', JSON.stringify(defaultAdminUser));
 
     return true;
   } catch (err) {
     console.error("Error al purgar la base de datos:", err);
-    localStorage.setItem('medflow_db_purged', 'true');
-    localStorage.removeItem('medflow_db');
+    localStorage.clear();
+    sessionStorage.setItem('medflow_logged_user', JSON.stringify(defaultAdminUser));
     return false;
   }
 }
