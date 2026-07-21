@@ -1,5 +1,5 @@
 // src/modules/configuracion.js
-import { getAppState, saveAppState, resetToOfficialDatabase } from '../main.js';
+import { getAppState, saveAppState, resetToOfficialDatabase, removeFromFirestore } from '../main.js';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 
@@ -593,6 +593,7 @@ export function renderConfiguracion(container) {
       const id = deleteBtn.getAttribute('data-id');
       const stateObj = getAppState();
       stateObj[activeCatalogType] = stateObj[activeCatalogType].filter(x => x.id !== id);
+      removeFromFirestore(activeCatalogType, id);
       saveAppState(stateObj);
       renderCatalogTable();
       return;

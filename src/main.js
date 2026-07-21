@@ -12,7 +12,19 @@ import { laboratoryTests, imagingStudies } from './data/estudios.js';
 
 import migratedInitialData from './data/medflow_db.json';
 
-// Función de encriptación de contraseñas para producción (Hash SHA-256 con Salt)
+import {
+  db,
+  firestoreState,
+  initRealtimeFirestore,
+  seedInitialFirestoreData,
+  subscribeToStateUpdates,
+  saveDocument,
+  removeDocument
+} from './firebase.js';
+
+let currentRoute = 'preconsulta';
+
+// Función de encriptación de contraseñas (Hash SHA-256 con Salt)
 export function hashPassword(plainText) {
   if (!plainText) return '';
   if (plainText.startsWith('sha256_enc_')) return plainText;
@@ -26,137 +38,6 @@ export function hashPassword(plainText) {
   return 'sha256_enc_' + btoa(plainText + '_LUGAMED_SALT_' + strHash);
 }
 
-// Datos Iniciales de Producción (Migrados desde Hospital Multimedica Web App Export)
-const initialMockData = migratedInitialData;
-
-const DB_VERSION = 4.0; // Medflow Web App Full Production Database (Pacientes + Farmacia + Configuración)
-
-export function resetToOfficialDatabase() {
-  const state = JSON.parse(JSON.stringify(initialMockData));
-  state.version = DB_VERSION;
-  localStorage.setItem('medflow_db', JSON.stringify(state));
-  return state;
-}
-
-// Cargar estado inicial o guardar si no existe (incluye migración para Administrador y claves)
-export function getAppState() {
-  const data = localStorage.getItem('medflow_db');
-  let state;
-  let modified = false;
-
-  if (!data) {
-    state = JSON.parse(JSON.stringify(initialMockData));
-    state.version = DB_VERSION;
-    modified = true;
-  } else {
-    try {
-      state = JSON.parse(data);
-    } catch (e) {
-      state = JSON.parse(JSON.stringify(initialMockData));
-      state.version = DB_VERSION;
-      modified = true;
-    }
-  }
-
-  // Si la versión guardada en el dispositivo es menor a 4.0 o si faltan datos de Farmacia/Configuración/Pacientes
-  const isMissingMeds = !state.medications || state.medications.length < initialMockData.medications.length;
-  const isMissingPatients = !state.patients || state.patients.length < initialMockData.patients.length;
-  const isMissingClinic = !state.clinicInfo || !state.clinicInfo.name;
-  const isMissingLabs = !state.laboratoryTests || state.laboratoryTests.length < initialMockData.laboratoryTests.length;
-  const isMissingConsultations = !state.consultationTypes || state.consultationTypes.length === 0;
-
-  if (!state.version || state.version < DB_VERSION || isMissingMeds || isMissingPatients || isMissingClinic || isMissingLabs || isMissingConsultations) {
-    console.log("Sincronizando base de datos migrada oficial completa (Pacientes, Farmacia y Configuración)...");
-    state.patients = JSON.parse(JSON.stringify(initialMockData.patients));
-    state.users = JSON.parse(JSON.stringify(initialMockData.users));
-    state.medications = JSON.parse(JSON.stringify(initialMockData.medications));
-    state.laboratoryTests = JSON.parse(JSON.stringify(initialMockData.laboratoryTests));
-    state.imagingStudies = JSON.parse(JSON.stringify(initialMockData.imagingStudies));
-    state.consultationTypes = JSON.parse(JSON.stringify(initialMockData.consultationTypes || [
-      { id: 'c-1', name: 'Consulta General', specialty: 'Medicina General', price: 150.00 },
-      { id: 'c-2', name: 'Consulta Especializada', specialty: 'Especialista', price: 250.00 },
-      { id: 'c-3', name: 'Consulta de Control / Segunda Opinión', specialty: 'Control de Rutina', price: 100.00 }
-    ]));
-    state.appointments = JSON.parse(JSON.stringify(initialMockData.appointments || []));
-    state.pharmacySales = JSON.parse(JSON.stringify(initialMockData.pharmacySales || []));
-    state.clinicInfo = JSON.parse(JSON.stringify(initialMockData.clinicInfo || {
-      name: "LUGAMED 2.0 - Clínica Médica y Hospital",
-      address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
-      phone: "2200-0000",
-      email: "contacto@lugamed.gt"
-    }));
-    state.version = DB_VERSION;
-    modified = true;
-  }
-
-  // Asegurar que exista el usuario Administrador
-  const adminUser = {
-    id: 'u-admin',
-    name: 'Administrador',
-    role: 'Administrador',
-    password: hashPassword('Glol5414'),
-    modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
-  };
-
-  if (!state.users || state.users.length === 0) {
-    state.users = [adminUser];
-    modified = true;
-  } else {
-    const adminIdx = state.users.findIndex(u => u.id === 'u-admin' || u.name === 'Administrador');
-    if (adminIdx === -1) {
-      state.users.unshift(adminUser);
-      modified = true;
-    } else {
-      state.users[adminIdx].password = hashPassword('Glol5414');
-      modified = true;
-    }
-  }
-
-  // Migración para asegurar Médico Tratante en pacientes
-  const defaultDoctor = state.users.find(u => u.role === 'medico') || { id: 'u-med-1', name: 'Dr. Carlos Montenegro' };
-  if (state.patients) {
-    state.patients.forEach(p => {
-      if (!p.assignedDoctorId) {
-        p.assignedDoctorId = defaultDoctor.id;
-        p.assignedDoctorName = defaultDoctor.name;
-        modified = true;
-      }
-    });
-  }
-
-  if (modified) {
-    localStorage.setItem('medflow_db', JSON.stringify(state));
-  }
-
-  return state;
-}
-
-// Guardar cambios en el estado
-export function saveAppState(state) {
-  localStorage.setItem('medflow_db', JSON.stringify(state));
-  updateSidebarInfo(state);
-}
-
-// Actualizar información mostrada en la barra lateral
-function updateSidebarInfo(state) {
-  const clinicName = document.getElementById('sidebar-clinic-name');
-  const clinicPhone = document.getElementById('sidebar-clinic-phone');
-  const clinicLogo = document.querySelector('.clinic-mini-logo');
-  if (clinicName && state.clinicInfo.name) {
-    clinicName.textContent = state.clinicInfo.name;
-  }
-  if (clinicPhone && state.clinicInfo.phone) {
-    clinicPhone.textContent = state.clinicInfo.phone;
-  }
-  if (clinicLogo) {
-    if (state.clinicInfo.logoData) {
-      clinicLogo.innerHTML = `<img src="${state.clinicInfo.logoData}" style="width: 28px; height: 28px; object-fit: cover; border-radius: 4px;">`;
-    } else {
-      clinicLogo.innerHTML = state.clinicInfo.logoText || '🏥';
-    }
-  }
-}
-
 // Paciente Activo en el Contexto de la Sesión
 let activePatientId = "p-1";
 
@@ -168,11 +49,145 @@ export function setActivePatientId(id) {
   activePatientId = id;
 }
 
-// Router Simple
-function router(route) {
-  const container = document.getElementById('module-container');
-  if (!container) return;
+// Obtener estado unificado desde Firestore (con fallback a local cache)
+export function getAppState() {
+  if (firestoreState.isLoaded && firestoreState.patients.length > 0) {
+    // Si el usuario actual está logueado, incluirlo en el estado
+    const loggedUser = sessionStorage.getItem('medflow_logged_user');
+    if (loggedUser) {
+      firestoreState.currentUser = JSON.parse(loggedUser);
+    }
+    return firestoreState;
+  }
+
+  // Fallback a almacenamiento local o migrado si aún está cargando Firestore
+  const localData = localStorage.getItem('medflow_db');
+  let state = localData ? JSON.parse(localData) : JSON.parse(JSON.stringify(migratedInitialData));
   
+  if (!state.patients || state.patients.length === 0) {
+    state.patients = JSON.parse(JSON.stringify(migratedInitialData.patients));
+  }
+  if (!state.medications || state.medications.length === 0) {
+    state.medications = JSON.parse(JSON.stringify(migratedInitialData.medications));
+  }
+
+  const loggedUser = sessionStorage.getItem('medflow_logged_user');
+  if (loggedUser) {
+    state.currentUser = JSON.parse(loggedUser);
+  }
+
+  return state;
+}
+
+export function resetToOfficialDatabase() {
+  seedInitialFirestoreData();
+  const state = JSON.parse(JSON.stringify(migratedInitialData));
+  localStorage.setItem('medflow_db', JSON.stringify(state));
+  return state;
+}
+
+// Guardar cambios directamente en Firestore y sincronizar estado
+export async function saveAppState(state) {
+  localStorage.setItem('medflow_db', JSON.stringify(state));
+  updateSidebarInfo(state);
+
+  try {
+    // Sincronizar Pacientes con Firestore
+    if (state.patients && Array.isArray(state.patients)) {
+      state.patients.forEach(p => {
+        if (p && p.id) saveDocument('patients', p.id, p);
+      });
+    }
+
+    // Sincronizar Inventario de Farmacia
+    if (state.medications && Array.isArray(state.medications)) {
+      state.medications.forEach(m => {
+        if (m && m.id) saveDocument('medications', m.id, m);
+      });
+    }
+
+    // Sincronizar Usuarios
+    if (state.users && Array.isArray(state.users)) {
+      state.users.forEach(u => {
+        if (u && u.id) saveDocument('users', u.id, u);
+      });
+    }
+
+    // Sincronizar Ventas de Farmacia
+    if (state.pharmacySales && Array.isArray(state.pharmacySales)) {
+      state.pharmacySales.forEach(s => {
+        if (s && s.id) saveDocument('pharmacySales', s.id, s);
+      });
+    }
+
+    // Sincronizar Catálogos de Laboratorio e Imagenología
+    if (state.laboratoryTests && Array.isArray(state.laboratoryTests)) {
+      state.laboratoryTests.forEach(l => {
+        if (l && l.id) saveDocument('laboratoryTests', l.id, l);
+      });
+    }
+    if (state.imagingStudies && Array.isArray(state.imagingStudies)) {
+      state.imagingStudies.forEach(img => {
+        if (img && img.id) saveDocument('imagingStudies', img.id, img);
+      });
+    }
+
+    // Sincronizar Info de Clínica
+    if (state.clinicInfo) {
+      saveDocument('clinicInfo', 'main', state.clinicInfo);
+    }
+  } catch (err) {
+    console.warn("Error sincronizando cambios a Firestore:", err);
+  }
+}
+
+// Función asíncrona de guardado directo a colección Firestore
+export async function saveToFirestore(collectionName, docId, data) {
+  try {
+    await saveDocument(collectionName, docId, data);
+    return true;
+  } catch (err) {
+    console.error(`Error guardando en Firestore (${collectionName}/${docId}):`, err);
+    return false;
+  }
+}
+
+// Función asíncrona de eliminación en Firestore
+export async function removeFromFirestore(collectionName, docId) {
+  try {
+    await removeDocument(collectionName, docId);
+    return true;
+  } catch (err) {
+    console.error(`Error eliminando de Firestore (${collectionName}/${docId}):`, err);
+    return false;
+  }
+}
+
+// Actualizar logo y datos de la clínica en la barra lateral
+export function updateSidebarInfo(state) {
+  const clinicInfo = state.clinicInfo || { name: 'LUGAMED 2.0 - Clínica Médica y Hospital', phone: '2200-0000' };
+  const clinicLogo = document.querySelector('.clinic-mini-logo');
+  const sidebarClinicName = document.getElementById('sidebar-clinic-name');
+  const sidebarClinicPhone = document.getElementById('sidebar-clinic-phone');
+
+  if (sidebarClinicName) sidebarClinicName.textContent = clinicInfo.name;
+  if (sidebarClinicPhone) sidebarClinicPhone.textContent = clinicInfo.phone || '2200-0000';
+  
+  if (clinicLogo) {
+    if (clinicInfo.logoData) {
+      clinicLogo.innerHTML = `<img src="${clinicInfo.logoData}" style="width: 28px; height: 28px; object-fit: cover; border-radius: 4px;">`;
+    } else {
+      clinicLogo.innerHTML = clinicInfo.logoText || '🏥';
+    }
+  }
+}
+
+// Enrutador de Módulos
+export function router(route) {
+  currentRoute = route;
+  const container = document.getElementById('main-content-area');
+  if (!container) return;
+
   container.innerHTML = '';
   
   switch(route) {
@@ -202,13 +217,13 @@ function router(route) {
   }
 }
 
-// Renderizar Pantalla de Login (con lista desplegable)
+// Renderizar Pantalla de Login (Autenticación directa desde Firestore / Estado Remoto)
 function renderLoginScreen() {
   const loginContainer = document.getElementById('login-container');
   if (!loginContainer) return;
 
   const state = getAppState();
-  const users = state.users || [];
+  const users = (state.users && state.users.length > 0) ? state.users : (migratedInitialData.users || []);
 
   loginContainer.className = 'login-screen-wrapper';
   loginContainer.style.display = 'flex';
@@ -239,12 +254,12 @@ function renderLoginScreen() {
           ">
             ${users.map(u => {
               let roleIcon = '👤';
-              if (u.role === 'medico') roleIcon = '🩺';
-              else if (u.role === 'enfermero') roleIcon = '🫁';
+              if (u.role === 'medico' || (u.role && u.role.toLowerCase().includes('médico'))) roleIcon = '🩺';
+              else if (u.role === 'enfermero' || (u.role && u.role.toLowerCase().includes('enfermera'))) roleIcon = '🫁';
               else if (u.role === 'recepcionista') roleIcon = '📞';
               else if (u.role === 'administrador') roleIcon = '⚙️';
               
-              return `<option value="${u.id}">${roleIcon} ${u.name} (${u.role.toUpperCase()})</option>`;
+              return `<option value="${u.id}">${roleIcon} ${u.name} (${String(u.role).toUpperCase()})</option>`;
             }).join('')}
           </select>
         </div>
@@ -277,13 +292,10 @@ function renderLoginScreen() {
   const userSelect = loginContainer.querySelector('#login-user-select');
   const passwordInput = loginContainer.querySelector('#login-password');
 
-  // Enfocar contraseña al cambiar el select
-  userSelect.addEventListener('change', () => {
-    passwordInput.focus();
-  });
-
-  // Enfocar contraseña inicialmente
-  passwordInput.focus();
+  if (userSelect) {
+    userSelect.addEventListener('change', () => passwordInput.focus());
+  }
+  if (passwordInput) passwordInput.focus();
 
   loginContainer.querySelector('#login-form').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -294,7 +306,8 @@ function renderLoginScreen() {
     }
 
     const passwordVal = passwordInput.value.trim();
-    const user = users.find(u => u.id === selectedUserId);
+    const currentUsers = getAppState().users.length > 0 ? getAppState().users : users;
+    const user = currentUsers.find(u => u.id === selectedUserId);
     const hashedInput = hashPassword(passwordVal);
 
     const isMatch = user && (
@@ -377,7 +390,6 @@ function initMobileDrawer() {
     overlay.addEventListener('click', closeDrawer);
   }
 
-  // Cerrar el menú automáticamente al hacer clic en cualquier opción de navegación
   document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', closeDrawer);
   });
@@ -387,6 +399,19 @@ function initMobileDrawer() {
 document.addEventListener('DOMContentLoaded', () => {
   initThemeToggle();
   initMobileDrawer();
+
+  // 1. Iniciar Sembrado y Escuchadores en Tiempo Real de Firebase Firestore
+  seedInitialFirestoreData();
+  initRealtimeFirestore(() => {
+    // Suscribir render a cambios en tiempo real
+    subscribeToStateUpdates((updatedState) => {
+      const loggedUser = sessionStorage.getItem('medflow_logged_user');
+      if (loggedUser) {
+        updateSidebarInfo(updatedState);
+        router(currentRoute);
+      }
+    });
+  });
 
   const loggedUser = sessionStorage.getItem('medflow_logged_user');
   const appContainer = document.getElementById('app');
@@ -410,8 +435,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const sidebarUser = document.getElementById('sidebar-user-container');
     if (sidebarUser) {
       let roleIcon = '👤';
-      if (userObj.role === 'medico') roleIcon = '🩺';
-      else if (userObj.role === 'enfermero') roleIcon = '🫁';
+      if (userObj.role === 'medico' || (userObj.role && userObj.role.toLowerCase().includes('médico'))) roleIcon = '🩺';
+      else if (userObj.role === 'enfermero' || (userObj.role && userObj.role.toLowerCase().includes('enfermera'))) roleIcon = '🫁';
       else if (userObj.role === 'recepcionista') roleIcon = '📞';
       else if (userObj.role === 'administrador') roleIcon = '⚙️';
 
