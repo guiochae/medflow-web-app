@@ -1,5 +1,5 @@
 // src/modules/configuracion.js
-import { getAppState, saveAppState } from '../main.js';
+import { getAppState, saveAppState, resetToOfficialDatabase } from '../main.js';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 
@@ -299,6 +299,20 @@ export function renderConfiguracion(container) {
             </div>
             <button type="button" class="btn btn-secondary" id="btn-trigger-import-db" style="margin-top: 1.5rem; width: 100%;">
               <span>📥</span> Importar Información...
+            </button>
+          </div>
+
+          <!-- Tarjeta Sincronizar Base Oficial Migrada -->
+          <div style="background: rgba(76, 175, 80, 0.03); border: 1px solid rgba(76, 175, 80, 0.25); border-radius: var(--radius-md); padding: 1.5rem; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔄</div>
+              <h4 style="color: var(--accent-success); font-size: 1.2rem; margin-bottom: 0.5rem;">Sincronizar Base Oficial Migrada (51 Pacientes)</h4>
+              <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;">
+                Carga e instala en este dispositivo la base de datos oficial completa de <strong>51 pacientes migrados</strong>, expedientes, historial de consultas, recetas e inventarios.
+              </p>
+            </div>
+            <button type="button" class="btn btn-success" id="btn-trigger-sync-official-db" style="margin-top: 1.5rem; width: 100%;">
+              <span>🔄</span> Cargar Base de Datos Oficial (51 Pacientes)
             </button>
           </div>
         </div>
@@ -605,6 +619,18 @@ export function renderConfiguracion(container) {
     if (btnImportDb) {
       e.preventDefault();
       renderImportModal();
+      return;
+    }
+
+    // Trigger Sync Official Database
+    const btnSyncDb = e.target.closest('#btn-trigger-sync-official-db');
+    if (btnSyncDb) {
+      e.preventDefault();
+      if (confirm("¿Desea restablecer y cargar en este dispositivo la Base de Datos Oficial (51 Pacientes)?")) {
+        resetToOfficialDatabase();
+        alert("🎉 ¡Éxito! Se ha cargado la Base de Datos Oficial con los 51 pacientes migrados en este dispositivo.");
+        window.location.reload();
+      }
       return;
     }
   });

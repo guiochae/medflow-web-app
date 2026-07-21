@@ -29,6 +29,15 @@ export function hashPassword(plainText) {
 // Datos Iniciales de Producción (Migrados desde Hospital Multimedica Web App Export)
 const initialMockData = migratedInitialData;
 
+const DB_VERSION = 3.1; // Medflow Web App Migrated Database Version (51 pacientes)
+
+export function resetToOfficialDatabase() {
+  const state = JSON.parse(JSON.stringify(initialMockData));
+  state.version = DB_VERSION;
+  localStorage.setItem('medflow_db', JSON.stringify(state));
+  return state;
+}
+
 // Cargar estado inicial o guardar si no existe (incluye migración para Administrador y claves)
 export function getAppState() {
   const data = localStorage.getItem('medflow_db');
@@ -37,22 +46,34 @@ export function getAppState() {
 
   if (!data) {
     state = JSON.parse(JSON.stringify(initialMockData));
+    state.version = DB_VERSION;
     modified = true;
   } else {
-    state = JSON.parse(data);
+    try {
+      state = JSON.parse(data);
+    } catch (e) {
+      state = JSON.parse(JSON.stringify(initialMockData));
+      state.version = DB_VERSION;
+      modified = true;
+    }
   }
 
-  // Si el estado guardado en localStorage está vacío de pacientes, cargar la base migrada
-  if (!state.patients || state.patients.length === 0) {
+  // Si la versión guardada en localStorage es anterior a 3.1 o si el número de pacientes es menor al dataset migrado (51 pacientes)
+  if (!state.version || state.version < DB_VERSION || !state.patients || state.patients.length < initialMockData.patients.length) {
+    console.log("Sincronizando base de datos migrada oficial en dispositivo (51 pacientes)...");
     state.patients = JSON.parse(JSON.stringify(initialMockData.patients));
     state.users = JSON.parse(JSON.stringify(initialMockData.users));
     state.medications = JSON.parse(JSON.stringify(initialMockData.medications));
+    state.laboratoryTests = JSON.parse(JSON.stringify(initialMockData.laboratoryTests));
+    state.imagingStudies = JSON.parse(JSON.stringify(initialMockData.imagingStudies));
     state.appointments = JSON.parse(JSON.stringify(initialMockData.appointments));
     state.pharmacySales = JSON.parse(JSON.stringify(initialMockData.pharmacySales));
+    state.clinicInfo = JSON.parse(JSON.stringify(initialMockData.clinicInfo));
+    state.version = DB_VERSION;
     modified = true;
   }
 
-  // Asegurar que exista el usuario Administrador sin borrar los usuarios o pacientes existentes
+  // Asegurar que exista el usuario Administrador
   const adminUser = {
     id: 'u-admin',
     name: 'Administrador',
@@ -75,50 +96,8 @@ export function getAppState() {
     }
   }
 
-  if (!state.patients) {
-    state.patients = [];
-    modified = true;
-  }
-
-  // Inicializar catálogos si no existen en localStorage
-  // Inicializar catálogos si no existen en localStorage
-  if (!state.medications) {
-    state.medications = medicationsDatabase.map((m, idx) => ({ 
-      ...m, 
-      id: 'm-' + (idx + 1), 
-      price: 50.00,
-      stock: 120,
-      lote: 'L-MED-' + (1000 + idx),
-      vencimiento: '2027-06-30'
-    }));
-    modified = true;
-  } else {
-    // Migrar base existente si falta stock, lote o vencimiento
-    state.medications.forEach((m, idx) => {
-      if (m.stock === undefined) { m.stock = 120; modified = true; }
-      if (!m.lote) { m.lote = 'L-MED-' + (1000 + idx); modified = true; }
-      if (!m.vencimiento) { m.vencimiento = '2027-06-30'; modified = true; }
-    });
-  }
-  if (!state.laboratoryTests || state.laboratoryTests.length === 0 || !state.laboratoryTests[0].unit) {
-    state.laboratoryTests = JSON.parse(JSON.stringify(migratedInitialData.laboratoryTests));
-    modified = true;
-  }
-  if (!state.imagingStudies) {
-    state.imagingStudies = imagingStudies.map((i, idx) => ({ ...i, id: 'i-' + (idx + 1), price: 300.00 }));
-    modified = true;
-  }
-  if (!state.consultationTypes) {
-    state.consultationTypes = [
-      { id: 'c-1', name: "Consulta General", specialty: "Medicina General", price: 150.00 },
-      { id: 'c-2', name: "Consulta Especializada", specialty: "Especialista", price: 250.00 },
-      { id: 'c-3', name: "Consulta de Control", specialty: "Control de Rutina", price: 100.00 }
-    ];
-    modified = true;
-  }
-
   // Migración para asegurar Médico Tratante en pacientes
-  const defaultDoctor = state.users.find(u => u.role === 'medico') || { id: 'u-1', name: 'Dr. Carlos Mendoza' };
+  const defaultDoctor = state.users.find(u => u.role === 'medico') || { id: 'u-med-1', name: 'Dr. Carlos Montenegro' };
   if (state.patients) {
     state.patients.forEach(p => {
       if (!p.assignedDoctorId) {
