@@ -29,7 +29,7 @@ export function hashPassword(plainText) {
 // Datos Iniciales de Producción (Migrados desde Hospital Multimedica Web App Export)
 const initialMockData = migratedInitialData;
 
-const DB_VERSION = 3.1; // Medflow Web App Migrated Database Version (51 pacientes)
+const DB_VERSION = 4.0; // Medflow Web App Full Production Database (Pacientes + Farmacia + Configuración)
 
 export function resetToOfficialDatabase() {
   const state = JSON.parse(JSON.stringify(initialMockData));
@@ -58,17 +58,33 @@ export function getAppState() {
     }
   }
 
-  // Si la versión guardada en localStorage es anterior a 3.1 o si el número de pacientes es menor al dataset migrado (51 pacientes)
-  if (!state.version || state.version < DB_VERSION || !state.patients || state.patients.length < initialMockData.patients.length) {
-    console.log("Sincronizando base de datos migrada oficial en dispositivo (51 pacientes)...");
+  // Si la versión guardada en el dispositivo es menor a 4.0 o si faltan datos de Farmacia/Configuración/Pacientes
+  const isMissingMeds = !state.medications || state.medications.length < initialMockData.medications.length;
+  const isMissingPatients = !state.patients || state.patients.length < initialMockData.patients.length;
+  const isMissingClinic = !state.clinicInfo || !state.clinicInfo.name;
+  const isMissingLabs = !state.laboratoryTests || state.laboratoryTests.length < initialMockData.laboratoryTests.length;
+  const isMissingConsultations = !state.consultationTypes || state.consultationTypes.length === 0;
+
+  if (!state.version || state.version < DB_VERSION || isMissingMeds || isMissingPatients || isMissingClinic || isMissingLabs || isMissingConsultations) {
+    console.log("Sincronizando base de datos migrada oficial completa (Pacientes, Farmacia y Configuración)...");
     state.patients = JSON.parse(JSON.stringify(initialMockData.patients));
     state.users = JSON.parse(JSON.stringify(initialMockData.users));
     state.medications = JSON.parse(JSON.stringify(initialMockData.medications));
     state.laboratoryTests = JSON.parse(JSON.stringify(initialMockData.laboratoryTests));
     state.imagingStudies = JSON.parse(JSON.stringify(initialMockData.imagingStudies));
-    state.appointments = JSON.parse(JSON.stringify(initialMockData.appointments));
-    state.pharmacySales = JSON.parse(JSON.stringify(initialMockData.pharmacySales));
-    state.clinicInfo = JSON.parse(JSON.stringify(initialMockData.clinicInfo));
+    state.consultationTypes = JSON.parse(JSON.stringify(initialMockData.consultationTypes || [
+      { id: 'c-1', name: 'Consulta General', specialty: 'Medicina General', price: 150.00 },
+      { id: 'c-2', name: 'Consulta Especializada', specialty: 'Especialista', price: 250.00 },
+      { id: 'c-3', name: 'Consulta de Control / Segunda Opinión', specialty: 'Control de Rutina', price: 100.00 }
+    ]));
+    state.appointments = JSON.parse(JSON.stringify(initialMockData.appointments || []));
+    state.pharmacySales = JSON.parse(JSON.stringify(initialMockData.pharmacySales || []));
+    state.clinicInfo = JSON.parse(JSON.stringify(initialMockData.clinicInfo || {
+      name: "LUGAMED 2.0 - Clínica Médica y Hospital",
+      address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
+      phone: "2200-0000",
+      email: "contacto@lugamed.gt"
+    }));
     state.version = DB_VERSION;
     modified = true;
   }
