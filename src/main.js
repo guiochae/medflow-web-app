@@ -66,7 +66,7 @@ export function setActivePatientId(id) {
 
 // Obtener estado unificado desde Firestore (con fallback a local cache)
 export function getAppState() {
-  if (firestoreState.isLoaded && firestoreState.patients.length > 0) {
+  if (firestoreState.isLoaded) {
     // Si el usuario actual está logueado, incluirlo en el estado
     const loggedUser = sessionStorage.getItem('medflow_logged_user');
     if (loggedUser) {
@@ -75,15 +75,37 @@ export function getAppState() {
     return firestoreState;
   }
 
-  // Fallback a almacenamiento local o migrado si aún está cargando Firestore
+  // Fallback a almacenamiento local solo mientras se conectan los escuchadores de Firestore
   const localData = localStorage.getItem('medflow_db');
-  let state = localData ? JSON.parse(localData) : JSON.parse(JSON.stringify(migratedInitialData));
+  let state = localData ? JSON.parse(localData) : null;
   
-  if (!state.patients || state.patients.length === 0) {
-    state.patients = JSON.parse(JSON.stringify(migratedInitialData.patients));
-  }
-  if (!state.medications || state.medications.length === 0) {
-    state.medications = JSON.parse(JSON.stringify(migratedInitialData.medications));
+  if (!state) {
+    const isPurged = localStorage.getItem('medflow_db_purged') === 'true';
+    if (isPurged) {
+      state = {
+        users: [{
+          id: 'u-admin',
+          name: 'Administrador',
+          role: 'Administrador',
+          password: hashPassword('Glol5414'),
+          modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
+        }],
+        patients: [],
+        medications: [],
+        pharmacySales: [],
+        laboratoryTests: [],
+        imagingStudies: [],
+        consultationTypes: [],
+        clinicInfo: {
+          name: "LUGAMED 2.0 - Clínica Médica y Hospital",
+          address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
+          phone: "2200-0000",
+          email: "contacto@lugamed.gt"
+        }
+      };
+    } else {
+      state = JSON.parse(JSON.stringify(migratedInitialData));
+    }
   }
 
   const loggedUser = sessionStorage.getItem('medflow_logged_user');
@@ -95,7 +117,8 @@ export function getAppState() {
 }
 
 export function resetToOfficialDatabase() {
-  seedInitialFirestoreData();
+  localStorage.removeItem('medflow_db_purged');
+  seedInitialFirestoreData(true);
   const state = JSON.parse(JSON.stringify(migratedInitialData));
   localStorage.setItem('medflow_db', JSON.stringify(state));
   return state;

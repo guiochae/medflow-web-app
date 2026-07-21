@@ -194,10 +194,16 @@ export async function removeDocument(collectionName, docId) {
 }
 
 // Sembrado asíncrono inicial si la base de Firestore está vacía en producción
-export async function seedInitialFirestoreData() {
+export async function seedInitialFirestoreData(force = false) {
   try {
-    const usersSnap = await getDocs(collection(db, 'users'));
-    if (usersSnap.empty) {
+    const isPurged = localStorage.getItem('medflow_db_purged') === 'true';
+    if (isPurged && !force) {
+      console.log("Base de datos en modo purgado (limpio). Omitiendo sembrado inicial.");
+      return;
+    }
+
+    const patientsSnap = await getDocs(collection(db, 'patients'));
+    if (patientsSnap.empty || force) {
       console.log("Inicializando colecciones oficiales en Firebase Firestore...");
       const batch = writeBatch(db);
 
@@ -321,13 +327,15 @@ export async function purgeAllFirestoreData() {
       email: "contacto@lugamed.gt"
     };
 
-    // 4. Limpiar almacenamiento del navegador y asegurar sesión activa del Administrador
+    // 4. Marcar la base de datos como purgada y limpiar almacenamiento local
+    localStorage.setItem('medflow_db_purged', 'true');
     localStorage.removeItem('medflow_db');
     sessionStorage.setItem('medflow_logged_user', JSON.stringify(defaultAdminUser));
 
     return true;
   } catch (err) {
     console.error("Error al purgar la base de datos:", err);
+    localStorage.setItem('medflow_db_purged', 'true');
     localStorage.removeItem('medflow_db');
     return false;
   }
