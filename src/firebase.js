@@ -250,3 +250,46 @@ export async function seedInitialFirestoreData() {
     console.warn("Sembrado inicial de Firestore (modo offline o restringido):", err);
   }
 }
+
+// Borrado y vaciado completo de todas las bases de datos de producción
+export async function purgeAllFirestoreData() {
+  try {
+    const collectionsToPurge = [
+      'patients',
+      'medications',
+      'pharmacySales',
+      'laboratoryTests',
+      'imagingStudies',
+      'consultationTypes',
+      'clinicInfo'
+    ];
+
+    for (const colName of collectionsToPurge) {
+      const snap = await getDocs(collection(db, colName));
+      if (!snap.empty) {
+        const batch = writeBatch(db);
+        snap.docs.forEach(docSnap => {
+          batch.delete(docSnap.ref);
+        });
+        await batch.commit();
+      }
+    }
+
+    // Limpiar estado local en memoria
+    firestoreState.patients = [];
+    firestoreState.medications = [];
+    firestoreState.pharmacySales = [];
+    firestoreState.laboratoryTests = [];
+    firestoreState.imagingStudies = [];
+    firestoreState.consultationTypes = [];
+
+    // Limpiar almacenamiento del navegador
+    localStorage.removeItem('medflow_db');
+
+    return true;
+  } catch (err) {
+    console.error("Error al purgar la base de datos:", err);
+    localStorage.removeItem('medflow_db');
+    return false;
+  }
+}

@@ -19,8 +19,16 @@ import {
   seedInitialFirestoreData,
   subscribeToStateUpdates,
   saveDocument,
-  removeDocument
+  removeDocument,
+  purgeAllFirestoreData
 } from './firebase.js';
+
+export async function purgeAllDatabases() {
+  await purgeAllFirestoreData();
+  localStorage.clear();
+  sessionStorage.clear();
+  return true;
+}
 
 let currentRoute = 'preconsulta';
 

@@ -1,5 +1,5 @@
 // src/modules/configuracion.js
-import { getAppState, saveAppState, resetToOfficialDatabase, removeFromFirestore } from '../main.js';
+import { getAppState, saveAppState, resetToOfficialDatabase, removeFromFirestore, purgeAllDatabases } from '../main.js';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 
@@ -313,6 +313,20 @@ export function renderConfiguracion(container) {
             </div>
             <button type="button" class="btn btn-success" id="btn-trigger-sync-official-db" style="margin-top: 1.5rem; width: 100%;">
               <span>🔄</span> Cargar Base de Datos Oficial (51 Pacientes)
+            </button>
+          </div>
+
+          <!-- Tarjeta Vaciar / Borrar Todas las Bases de Datos -->
+          <div style="background: rgba(239, 68, 68, 0.04); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-md); padding: 1.5rem; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🗑️</div>
+              <h4 style="color: #ef4444; font-size: 1.2rem; margin-bottom: 0.5rem;">Borrar Todas las Bases de Datos</h4>
+              <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;">
+                Elimina por completo toda la información almacenada en el servidor (Firebase Firestore) y en el almacenamiento local: pacientes, expedientes, recetas, laboratorio, imagenología e inventario.
+              </p>
+            </div>
+            <button type="button" class="btn" id="btn-trigger-purge-all-db" style="margin-top: 1.5rem; width: 100%; background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: none; font-weight: 700; padding: 12px; border-radius: var(--radius-sm); cursor: pointer;">
+              <span>🗑️</span> Borrar Todas las Bases de Datos
             </button>
           </div>
         </div>
@@ -631,6 +645,30 @@ export function renderConfiguracion(container) {
         resetToOfficialDatabase();
         alert("🎉 ¡Éxito! Se ha cargado la Base de Datos Oficial con los 51 pacientes migrados en este dispositivo.");
         window.location.reload();
+      }
+      return;
+    }
+
+    // Trigger Purge All Database
+    const btnPurgeDb = e.target.closest('#btn-trigger-purge-all-db');
+    if (btnPurgeDb) {
+      e.preventDefault();
+      const confirmed = confirm("⚠️ ATENCIÓN Y ADVERTENCIA:\n\n¿Está completamente seguro de que desea BORRAR Y ELIMINAR toda la base de datos de producción (Pacientes, Consultas, Recetas, Laboratorio, Imagenología e Inventario)?\n\nEsta acción borrará los datos tanto de la nube (Firebase Firestore) como del almacenamiento local de forma IRREVERSIBLE.");
+      if (confirmed) {
+        const doubleCheck = prompt("Escriba 'BORRAR' en mayúsculas para confirmar la eliminación total:");
+        if (doubleCheck && doubleCheck.trim() === 'BORRAR') {
+          btnPurgeDb.disabled = true;
+          btnPurgeDb.textContent = "⏳ Eliminando base de datos...";
+          purgeAllDatabases().then(() => {
+            alert("🗑️ Toda la información de la base de datos ha sido borrada exitosamente.");
+            window.location.reload();
+          }).catch(err => {
+            alert("❌ Ocurrió un error al eliminar los datos: " + err.message);
+            window.location.reload();
+          });
+        } else {
+          alert("Operación cancelada. Debe escribir 'BORRAR' exactamente para confirmar.");
+        }
       }
       return;
     }
