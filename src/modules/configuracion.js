@@ -1,5 +1,7 @@
 // src/modules/configuracion.js
 import { getAppState, saveAppState } from '../main.js';
+import * as XLSX from 'xlsx';
+import mammoth from 'mammoth';
 
 let editingUserId = null;
 let activeCatalogType = null; // 'medications' | 'laboratoryTests' | 'imagingStudies' | 'consultationTypes'
@@ -1110,7 +1112,14 @@ function processFileImport() {
   } else if (extension === 'docx') {
     reader.onload = function(evt) {
       const arrayBuffer = evt.target.result;
-      mammoth.convertToHtml({ arrayBuffer: arrayBuffer })
+      const mammothObj = mammoth || window.mammoth;
+
+      if (!mammothObj) {
+        alert("❌ Error: Módulo de lectura de Word no disponible.");
+        return;
+      }
+
+      mammothObj.convertToHtml({ arrayBuffer: arrayBuffer })
         .then(function(result) {
           const html = result.value;
           const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -1119,28 +1128,32 @@ function processFileImport() {
           if (table) {
             table.querySelectorAll('tr').forEach(tr => {
               const cells = [];
-              tr.querySelectorAll('td').forEach(td => {
-                cells.push(td.innerText || td.textContent || '');
+              tr.querySelectorAll('td, th').forEach(cell => {
+                cells.push((cell.innerText || cell.textContent || '').trim());
               });
-              rows.push(cells);
+              if (cells.some(c => c.length > 0)) {
+                rows.push(cells);
+              }
             });
             processImportedRows(rows);
           } else {
-            const paragraphs = doc.querySelectorAll('p, li');
+            const paragraphs = doc.querySelectorAll('p, li, tr');
             const textRows = [];
             paragraphs.forEach(p => {
-              const txt = p.innerText || p.textContent || '';
-              if (txt.trim()) {
-                const parts = txt.split(/[-,\t]/).map(x => x.trim());
-                if (parts.length > 0) textRows.push(parts);
+              const txt = (p.innerText || p.textContent || '').trim();
+              if (txt) {
+                const parts = txt.split(/[-,\t|]/).map(x => x.trim());
+                if (parts.length > 0 && parts.some(x => x.length > 0)) {
+                  textRows.push(parts);
+                }
               }
             });
             processImportedRows(textRows);
           }
         })
         .catch(function(err) {
-          console.error(err);
-          alert("❌ Error al procesar el archivo Word.");
+          console.error('Error parsing docx:', err);
+          alert("❌ Error al procesar el archivo Word: " + (err.message || err));
         });
     };
     reader.readAsArrayBuffer(file);
@@ -1157,13 +1170,20 @@ function processImportedRows(rows) {
   let catalog = appState[activeCatalogType] || [];
   let count = 0;
 
+  const headerRow = rows[0] || [];
+  let nameIdx = 0;
+  let priceIdx = -1;
+  let genericIdx = -1;
+  let presentationIdx = -1;
+  let categoryIdx = -1;
+  let specialtyIdx = -1;
   let unitIdx = -1;
   let referenceIdx = -1;
 
   headerRow.forEach((col, idx) => {
-    if (typeof col === 'string') {
-      const text = col.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      if (text.includes("nombre") || text.includes("estudio") || text.includes("examen") || text.includes("producto") || text.includes("servicio")) {
+    if (col !== undefined && col !== null) {
+      const text = String(col).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (text.includes("nombre") || text.includes("estudio") || text.includes("examen") || text.includes("producto") || text.includes("servicio") || text.includes("medicamento") || text.includes("item")) {
         nameIdx = idx;
       } else if (text.includes("precio") || text.includes("costo") || text.includes("valor") || text.includes("honorario") || text.includes("tarifa")) {
         priceIdx = idx;
@@ -1191,6 +1211,12 @@ function processImportedRows(rows) {
 
     const nameVal = row[nameIdx];
     if (!nameVal || String(nameVal).trim() === '') continue;
+
+    // Omitir fila si es el encabezado repetido
+    const checkHeaderStr = String(nameVal).toLowerCase();
+    if (checkHeaderStr.includes("nombre") || checkHeaderStr.includes("medicamento") || checkHeaderStr.includes("estudio") || checkHeaderStr.includes("examen")) {
+      if (i === 0) continue;
+    }
 
     let priceVal = 50.00;
     if (priceIdx !== -1 && row[priceIdx] !== undefined) {
