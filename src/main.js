@@ -185,7 +185,7 @@ export function updateSidebarInfo(state) {
 // Enrutador de Módulos
 export function router(route) {
   currentRoute = route;
-  const container = document.getElementById('main-content-area');
+  const container = document.getElementById('module-container') || document.getElementById('main-content-area');
   if (!container) return;
 
   container.innerHTML = '';
