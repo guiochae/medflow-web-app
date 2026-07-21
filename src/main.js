@@ -429,10 +429,123 @@ function initMobileDrawer() {
   });
 }
 
+function initializeSidebar(loggedUser) {
+  const userObj = JSON.parse(loggedUser);
+  const sidebarUser = document.getElementById('sidebar-user-container');
+  if (sidebarUser) {
+    let roleIcon = '👤';
+    if (userObj.role === 'medico' || (userObj.role && userObj.role.toLowerCase().includes('médico'))) roleIcon = '🩺';
+    else if (userObj.role === 'enfermero' || (userObj.role && userObj.role.toLowerCase().includes('enfermera'))) roleIcon = '🫁';
+    else if (userObj.role === 'recepcionista') roleIcon = '📞';
+    else if (userObj.role === 'administrador') roleIcon = '⚙️';
+
+    sidebarUser.innerHTML = `
+      <div class="sidebar-user-card" style="
+        display: flex; 
+        align-items: center; 
+        gap: 10px; 
+        padding: 12px 15px; 
+        background: rgba(255,255,255,0.02); 
+        border-top: 1px solid var(--border-color); 
+        border-bottom: 1px solid var(--border-color);
+        margin-top: 1.5rem;
+        margin-bottom: 0.5rem;
+        font-size: 0.85rem;
+      ">
+        <span style="font-size: 1.25rem;">${roleIcon}</span>
+        <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          <strong style="color: var(--text-primary);">${userObj.name}</strong><br>
+          <span style="font-size: 0.75rem; color: var(--accent-primary); text-transform: uppercase;">${userObj.role}</span>
+        </div>
+        <button id="btn-logout" title="Cerrar Sesión" style="
+          background: transparent; 
+          border: none; 
+          color: #ff5252; 
+          cursor: pointer; 
+          font-size: 1.1rem; 
+          padding: 4px;
+          transition: all 0.2s;
+        ">
+          🚪
+        </button>
+      </div>
+    `;
+
+    document.getElementById('btn-logout').addEventListener('click', () => {
+      sessionStorage.removeItem('medflow_logged_user');
+      window.location.reload();
+    });
+  }
+
+  // Configurar menú de navegación con filtrado de permisos por usuario
+  const userModules = userObj.modules || ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion'];
+  const isFullAdmin = userObj.role === 'administrador' || userObj.role === 'Administrador' || userObj.role === 'medico_1' || userObj.role === 'Médico 1' || userObj.name === 'Administrador';
+
+  const navItems = document.querySelectorAll('.nav-item');
+  let firstAllowedRoute = null;
+
+  navItems.forEach(item => {
+    const target = item.getAttribute('data-target');
+    const hasAccess = isFullAdmin || userModules.includes(target);
+
+    if (!hasAccess) {
+      item.style.display = 'none';
+    } else {
+      item.style.display = 'block';
+      if (!firstAllowedRoute) firstAllowedRoute = target;
+    }
+
+    item.addEventListener('click', () => {
+      navItems.forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+      router(target);
+    });
+  });
+
+  const activeRoute = firstAllowedRoute || 'preconsulta';
+  const activeNav = document.querySelector(`.nav-item[data-target="${activeRoute}"]`);
+  if (activeNav) {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    activeNav.classList.add('active');
+  }
+  router(activeRoute);
+}
+
 // Configurar los listeners y el estado al cargar la app
 document.addEventListener('DOMContentLoaded', () => {
   initThemeToggle();
   initMobileDrawer();
+
+  const appContainer = document.getElementById('app');
+  const loginContainer = document.getElementById('login-container');
+
+  // Mostrar indicador visual de carga inicial para evitar mostrar usuarios fantasmas locales
+  if (appContainer) appContainer.style.display = 'none';
+  if (loginContainer) {
+    loginContainer.className = 'login-screen-wrapper';
+    loginContainer.style.display = 'flex';
+    loginContainer.innerHTML = `
+      <div class="login-card" style="text-align: center; padding: 3rem;">
+        <div class="spinner" style="
+          width: 50px;
+          height: 50px;
+          border: 5px solid rgba(255,255,255,0.05);
+          border-top: 5px solid var(--accent-primary);
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+          margin: 0 auto 1.5rem auto;
+        "></div>
+        <style>
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        </style>
+        <h3 style="color: var(--text-primary); margin-bottom: 0.5rem;">Cargando Medflow 2.0...</h3>
+        <p style="color: var(--text-muted); font-size: 0.85rem;">Estableciendo conexión segura con la base de datos de producción...</p>
+      </div>
+    `;
+  }
 
   // 1. Iniciar Escuchadores en Tiempo Real de Firebase Firestore
   initRealtimeFirestore(() => {
@@ -442,106 +555,26 @@ document.addEventListener('DOMContentLoaded', () => {
       if (loggedUser) {
         updateSidebarInfo(updatedState);
         router(currentRoute);
-      }
-    });
-  });
-
-  const loggedUser = sessionStorage.getItem('medflow_logged_user');
-  const appContainer = document.getElementById('app');
-  const loginContainer = document.getElementById('login-container');
-
-  if (!loggedUser) {
-    if (appContainer) appContainer.style.display = 'none';
-    if (loginContainer) {
-      loginContainer.style.display = 'flex';
-      renderLoginScreen();
-    }
-  } else {
-    if (loginContainer) loginContainer.style.display = 'none';
-    if (appContainer) appContainer.style.display = 'flex';
-
-    const state = getAppState();
-    updateSidebarInfo(state);
-
-    // Cargar perfil en la barra lateral
-    const userObj = JSON.parse(loggedUser);
-    const sidebarUser = document.getElementById('sidebar-user-container');
-    if (sidebarUser) {
-      let roleIcon = '👤';
-      if (userObj.role === 'medico' || (userObj.role && userObj.role.toLowerCase().includes('médico'))) roleIcon = '🩺';
-      else if (userObj.role === 'enfermero' || (userObj.role && userObj.role.toLowerCase().includes('enfermera'))) roleIcon = '🫁';
-      else if (userObj.role === 'recepcionista') roleIcon = '📞';
-      else if (userObj.role === 'administrador') roleIcon = '⚙️';
-
-      sidebarUser.innerHTML = `
-        <div class="sidebar-user-card" style="
-          display: flex; 
-          align-items: center; 
-          gap: 10px; 
-          padding: 12px 15px; 
-          background: rgba(255,255,255,0.02); 
-          border-top: 1px solid var(--border-color); 
-          border-bottom: 1px solid var(--border-color);
-          margin-top: 1.5rem;
-          margin-bottom: 0.5rem;
-          font-size: 0.85rem;
-        ">
-          <span style="font-size: 1.25rem;">${roleIcon}</span>
-          <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-            <strong style="color: var(--text-primary);">${userObj.name}</strong><br>
-            <span style="font-size: 0.75rem; color: var(--accent-primary); text-transform: uppercase;">${userObj.role}</span>
-          </div>
-          <button id="btn-logout" title="Cerrar Sesión" style="
-            background: transparent; 
-            border: none; 
-            color: #ff5252; 
-            cursor: pointer; 
-            font-size: 1.1rem; 
-            padding: 4px;
-            transition: all 0.2s;
-          ">
-            🚪
-          </button>
-        </div>
-      `;
-
-      document.getElementById('btn-logout').addEventListener('click', () => {
-        sessionStorage.removeItem('medflow_logged_user');
-        window.location.reload();
-      });
-    }
-
-    // Configurar menú de navegación con filtrado de permisos por usuario
-    const userModules = userObj.modules || ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion'];
-    const isFullAdmin = userObj.role === 'administrador' || userObj.role === 'Administrador' || userObj.role === 'medico_1' || userObj.role === 'Médico 1' || userObj.name === 'Administrador';
-
-    const navItems = document.querySelectorAll('.nav-item');
-    let firstAllowedRoute = null;
-
-    navItems.forEach(item => {
-      const target = item.getAttribute('data-target');
-      const hasAccess = isFullAdmin || userModules.includes(target);
-
-      if (!hasAccess) {
-        item.style.display = 'none';
       } else {
-        item.style.display = 'block';
-        if (!firstAllowedRoute) firstAllowedRoute = target;
+        renderLoginScreen();
       }
-
-      item.addEventListener('click', () => {
-        navItems.forEach(i => i.classList.remove('active'));
-        item.classList.add('active');
-        router(target);
-      });
     });
 
-    const activeRoute = firstAllowedRoute || 'preconsulta';
-    const activeNav = document.querySelector(`.nav-item[data-target="${activeRoute}"]`);
-    if (activeNav) {
-      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-      activeNav.classList.add('active');
+    // Validar sesión una vez que Firestore esté verificado y cargado
+    const loggedUser = sessionStorage.getItem('medflow_logged_user');
+    if (!loggedUser) {
+      if (appContainer) appContainer.style.display = 'none';
+      if (loginContainer) {
+        loginContainer.style.display = 'flex';
+        renderLoginScreen();
+      }
+    } else {
+      if (loginContainer) loginContainer.style.display = 'none';
+      if (appContainer) appContainer.style.display = 'flex';
+
+      const state = getAppState();
+      updateSidebarInfo(state);
+      initializeSidebar(loggedUser);
     }
-    router(activeRoute);
-  }
+  });
 });
