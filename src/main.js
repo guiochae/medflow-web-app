@@ -24,9 +24,16 @@ import {
 } from './firebase.js';
 
 export async function purgeAllDatabases() {
-  await purgeAllFirestoreData();
   localStorage.clear();
-  sessionStorage.clear();
+  await purgeAllFirestoreData();
+  const adminUser = {
+    id: 'u-admin',
+    name: 'Administrador',
+    role: 'Administrador',
+    password: hashPassword('Glol5414'),
+    modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
+  };
+  sessionStorage.setItem('medflow_logged_user', JSON.stringify(adminUser));
   return true;
 }
 

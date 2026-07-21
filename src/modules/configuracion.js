@@ -322,7 +322,7 @@ export function renderConfiguracion(container) {
               <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🗑️</div>
               <h4 style="color: #ef4444; font-size: 1.2rem; margin-bottom: 0.5rem;">Borrar Todas las Bases de Datos</h4>
               <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;">
-                Elimina por completo toda la información almacenada en el servidor (Firebase Firestore) y en el almacenamiento local: pacientes, expedientes, recetas, laboratorio, imagenología e inventario.
+                Elimina por completo toda la información almacenada en el servidor (Firebase Firestore) y localmente (pacientes, expedientes, recetas, laboratorio, imagenología e inventario), borrando todos los usuarios adicionales y conservando únicamente al usuario <strong>Administrador</strong> (clave: <code>Glol5414</code>).
               </p>
             </div>
             <button type="button" class="btn" id="btn-trigger-purge-all-db" style="margin-top: 1.5rem; width: 100%; background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: none; font-weight: 700; padding: 12px; border-radius: var(--radius-sm); cursor: pointer;">

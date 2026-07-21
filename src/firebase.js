@@ -251,9 +251,40 @@ export async function seedInitialFirestoreData() {
   }
 }
 
-// Borrado y vaciado completo de todas las bases de datos de producción
+function getAdminPasswordHash() {
+  const plainText = 'Glol5414';
+  let hash = 0;
+  for (let i = 0; i < plainText.length; i++) {
+    const char = plainText.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
+  }
+  const strHash = Math.abs(hash).toString(16);
+  return 'sha256_enc_' + btoa(plainText + '_LUGAMED_SALT_' + strHash);
+}
+
+// Borrado y vaciado completo de todas las bases de datos de producción (conservando únicamente al Administrador)
 export async function purgeAllFirestoreData() {
   try {
+    const defaultAdminUser = {
+      id: 'u-admin',
+      name: 'Administrador',
+      role: 'Administrador',
+      password: getAdminPasswordHash(),
+      modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
+    };
+
+    // 1. Purgar usuarios y recrear únicamente al usuario Administrador
+    const usersSnap = await getDocs(collection(db, 'users'));
+    const userBatch = writeBatch(db);
+    usersSnap.docs.forEach(docSnap => {
+      userBatch.delete(docSnap.ref);
+    });
+    const adminRef = doc(db, 'users', defaultAdminUser.id);
+    userBatch.set(adminRef, defaultAdminUser);
+    await userBatch.commit();
+
+    // 2. Purgar todas las demás colecciones de producción
     const collectionsToPurge = [
       'patients',
       'medications',
@@ -275,16 +306,24 @@ export async function purgeAllFirestoreData() {
       }
     }
 
-    // Limpiar estado local en memoria
+    // 3. Limpiar estado local en memoria dejando solo al Administrador
+    firestoreState.users = [defaultAdminUser];
     firestoreState.patients = [];
     firestoreState.medications = [];
     firestoreState.pharmacySales = [];
     firestoreState.laboratoryTests = [];
     firestoreState.imagingStudies = [];
     firestoreState.consultationTypes = [];
+    firestoreState.clinicInfo = {
+      name: "LUGAMED 2.0 - Clínica Médica y Hospital",
+      address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
+      phone: "2200-0000",
+      email: "contacto@lugamed.gt"
+    };
 
-    // Limpiar almacenamiento del navegador
+    // 4. Limpiar almacenamiento del navegador y asegurar sesión activa del Administrador
     localStorage.removeItem('medflow_db');
+    sessionStorage.setItem('medflow_logged_user', JSON.stringify(defaultAdminUser));
 
     return true;
   } catch (err) {
