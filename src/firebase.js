@@ -106,6 +106,7 @@ export function initRealtimeFirestore(onFirstLoad) {
   const totalCollections = 3; // multimedica_users, multimedica_pacientes, multimedica
 
   function checkFirstLoad() {
+    if (firestoreState.isLoaded) return;
     loadedCollections++;
     if (loadedCollections >= totalCollections) {
       firestoreState.isLoaded = true;
