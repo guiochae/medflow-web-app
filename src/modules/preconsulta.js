@@ -2297,7 +2297,13 @@ function renderBilling(patient) {
           ${bill.details.map(d => {
             const desc = typeof d === 'string' ? d : (d.description || d.name || 'Servicio / Honorario');
             const amt = (d && d.amount !== undefined && !isNaN(d.amount)) ? parseFloat(d.amount).toFixed(2) : ((bill.total !== undefined && !isNaN(bill.total)) ? parseFloat(bill.total).toFixed(2) : '50.00');
-            return `<li>${desc} — <strong style="color: var(--accent-secondary);">Q${amt}</strong></li>`;
+            
+            const isRecipeBill = bill.id.startsWith('FAC-REC-') || String(bill.concept).toLowerCase().includes('receta');
+            const deleteAction = (bill.status === 'Pendiente' && isRecipeBill)
+              ? `<button class="btn-delete-bill-item" data-bill-id="${bill.id}" data-desc="${desc}" style="background: none; border: none; color: var(--accent-danger); font-size: 0.75rem; cursor: pointer; padding: 0 4px; margin-left: 5px;" title="Eliminar de la receta y cobro">❌</button>`
+              : '';
+
+            return `<li>${desc} — <strong style="color: var(--accent-secondary);">Q${amt}</strong>${deleteAction}</li>`;
           }).join('')}
          </ul>`
       : '';
@@ -2316,6 +2322,67 @@ function renderBilling(patient) {
       <td><strong style="color: var(--accent-success); font-size: 1.05rem;">Q ${parseFloat(billTotal).toFixed(2)}</strong></td>
       <td>${actionButtons}</td>
     `;
+
+    // Bind delete item from billing / recipe events
+    row.querySelectorAll('.btn-delete-bill-item').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const bId = btn.getAttribute('data-bill-id');
+        const itemDesc = btn.getAttribute('data-desc');
+
+        if (!confirm(`¿Está seguro de que el paciente no desea adquirir el medicamento:\n"${itemDesc}"?`)) return;
+
+        const stateToSave = getAppState();
+        const pObj = stateToSave.patients.find(p => p.id === currentPatient.id);
+        const billObj = pObj.billingHistory.find(b => b.id === bId);
+        if (!billObj) return;
+
+        // Find associated recipe
+        const recipeObj = pObj.prescriptions && pObj.prescriptions.find(r => r.billId === bId);
+
+        // Extract medicine name
+        let medName = '';
+        const prefixMatch = itemDesc.match(/Medicamento Recetado:\s*([^\(]+)/);
+        if (prefixMatch) {
+          medName = prefixMatch[1].trim();
+        } else {
+          medName = itemDesc.replace('Medicamento Recetado:', '').trim();
+        }
+
+        // Remove item from bill details
+        const detailIndex = billObj.details.findIndex(d => (d.description || d.name) === itemDesc);
+        if (detailIndex !== -1) {
+          const removedAmount = parseFloat(billObj.details[detailIndex].amount || 0);
+          billObj.details.splice(detailIndex, 1);
+          billObj.total = Math.max(0, parseFloat(billObj.total) - removedAmount);
+        }
+
+        // Remove medicine from recipe
+        if (recipeObj && recipeObj.medicines) {
+          const medIndex = recipeObj.medicines.findIndex(m => m.name.toLowerCase().trim() === medName.toLowerCase().trim() || medName.toLowerCase().includes(m.name.toLowerCase().trim()));
+          if (medIndex !== -1) {
+            recipeObj.medicines.splice(medIndex, 1);
+          }
+        }
+
+        let isEntirelyDeleted = false;
+        // If all medicines are removed, delete the recipe and bill completely
+        if (!recipeObj || !recipeObj.medicines || recipeObj.medicines.length === 0) {
+          const deleteEntire = confirm("Esta receta ya no tiene medicamentos. ¿Desea eliminar completamente la receta y su cobro asociado?");
+          if (deleteEntire) {
+            if (recipeObj) {
+              pObj.prescriptions = pObj.prescriptions.filter(r => r.id !== recipeObj.id);
+            }
+            pObj.billingHistory = pObj.billingHistory.filter(b => b.id !== bId);
+            isEntirelyDeleted = true;
+          }
+        }
+
+        saveAppState(stateToSave);
+        alert(isEntirelyDeleted ? "¡Receta y cobro eliminados completamente!" : "¡Receta y cobro actualizados correctamente!");
+        renderBilling(pObj);
+      });
+    });
 
     // Bind events
     const printBtn = row.querySelector('.btn-print-bill');
