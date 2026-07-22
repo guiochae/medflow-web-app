@@ -1342,7 +1342,7 @@ function showOrderPreviewModal(patient, order) {
   
   if (!modal || !previewContainer || !printActionBtn) return;
 
-  const db = JSON.parse(localStorage.getItem('medflow_db')) || {};
+  const db = getAppState();
   const clinicInfo = db.clinicInfo || {};
   let logoImgHtml = '🏥';
   if (clinicInfo.logoData) {
@@ -1429,7 +1429,7 @@ export function showLocalLabReportPrintWindow(study, patient) {
     return;
   }
 
-  const db = JSON.parse(localStorage.getItem('medflow_db')) || {};
+  const db = getAppState();
   const clinicInfo = db.clinicInfo || {};
   let logoImgHtml = '🏥';
   if (clinicInfo.logoData) {

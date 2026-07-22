@@ -110,134 +110,6 @@ export function getAppState() {
       });
     }
 
-    // 3. Aplicar eliminaciones pendientes locales que no se han sincronizado con Firestore
-    const deletedData = localStorage.getItem('medflow_deleted_ids');
-    if (deletedData) {
-      try {
-        const deleted = JSON.parse(deletedData);
-        if (deleted.users && Array.isArray(deleted.users)) {
-          firestoreState.users = firestoreState.users.filter(u => !deleted.users.includes(u.id));
-        }
-        if (deleted.patients && Array.isArray(deleted.patients)) {
-          firestoreState.patients = firestoreState.patients.filter(p => !deleted.patients.includes(p.id));
-        }
-        if (deleted.medications && Array.isArray(deleted.medications)) {
-          firestoreState.medications = firestoreState.medications.filter(m => !deleted.medications.includes(m.id));
-        }
-        if (deleted.laboratoryTests && Array.isArray(deleted.laboratoryTests)) {
-          firestoreState.laboratoryTests = firestoreState.laboratoryTests.filter(l => !deleted.laboratoryTests.includes(l.id));
-        }
-        if (deleted.imagingStudies && Array.isArray(deleted.imagingStudies)) {
-          firestoreState.imagingStudies = firestoreState.imagingStudies.filter(i => !deleted.imagingStudies.includes(i.id));
-        }
-      } catch (e) {
-        console.warn("Fallo al filtrar eliminaciones locales:", e);
-      }
-    }
-
-    // 4. Fusión de contingencia: Mezclar y priorizar modificaciones locales (localStorage)
-    // en caso de que la cuota de escritura de Firestore esté agotada o falle la red
-    const localData = localStorage.getItem('medflow_db');
-    if (localData) {
-      try {
-        const localState = JSON.parse(localData);
-        // 1. Fusionar Usuarios (Priorizar localmente modificados)
-        if (localState.users && Array.isArray(localState.users)) {
-          const mergedUsers = [];
-          firestoreState.users.forEach(u => {
-            const localUser = localState.users.find(lu => lu.id === u.id);
-            if (localUser) {
-              mergedUsers.push(localUser);
-            } else {
-              mergedUsers.push(u);
-            }
-          });
-          localState.users.forEach(lu => {
-            if (lu && lu.id && !mergedUsers.some(u => u.id === lu.id)) {
-              const luIdLower = String(lu.id).toLowerCase();
-              if (luIdLower === 'admin' || luIdLower === 'u-admin') return;
-              mergedUsers.push(lu);
-            }
-          });
-          firestoreState.users = mergedUsers;
-        }
-        // 2. Fusionar Pacientes (Priorizar localmente modificados)
-        if (localState.patients && Array.isArray(localState.patients)) {
-          const mergedPatients = [];
-          firestoreState.patients.forEach(p => {
-            const localPatient = localState.patients.find(lp => lp.id === p.id);
-            if (localPatient) {
-              mergedPatients.push(localPatient);
-            } else {
-              mergedPatients.push(p);
-            }
-          });
-          localState.patients.forEach(lp => {
-            if (lp && lp.id && !mergedPatients.some(p => p.id === lp.id)) {
-              mergedPatients.push(lp);
-            }
-          });
-          firestoreState.patients = mergedPatients;
-        }
-        // 3. Fusionar Medicamentos (Priorizar localmente modificados)
-        if (localState.medications && Array.isArray(localState.medications)) {
-          const mergedMeds = [];
-          firestoreState.medications.forEach(m => {
-            const localMed = localState.medications.find(lm => lm.id === m.id);
-            if (localMed) {
-              mergedMeds.push(localMed);
-            } else {
-              mergedMeds.push(m);
-            }
-          });
-          localState.medications.forEach(lm => {
-            if (lm && lm.id && !mergedMeds.some(m => m.id === lm.id)) {
-              mergedMeds.push(lm);
-            }
-          });
-          firestoreState.medications = mergedMeds;
-        }
-        // 4. Fusionar Exámenes (Priorizar localmente modificados)
-        if (localState.laboratoryTests && Array.isArray(localState.laboratoryTests)) {
-          const mergedLabs = [];
-          firestoreState.laboratoryTests.forEach(l => {
-            const localLab = localState.laboratoryTests.find(ll => ll.id === l.id);
-            if (localLab) {
-              mergedLabs.push(localLab);
-            } else {
-              mergedLabs.push(l);
-            }
-          });
-          localState.laboratoryTests.forEach(ll => {
-            if (ll && ll.id && !mergedLabs.some(l => l.id === ll.id)) {
-              mergedLabs.push(ll);
-            }
-          });
-          firestoreState.laboratoryTests = mergedLabs;
-        }
-        // 5. Fusionar Estudios de Imagenología (Priorizar localmente modificados)
-        if (localState.imagingStudies && Array.isArray(localState.imagingStudies)) {
-          const mergedImgs = [];
-          firestoreState.imagingStudies.forEach(i => {
-            const localImg = localState.imagingStudies.find(li => li.id === i.id);
-            if (localImg) {
-              mergedImgs.push(localImg);
-            } else {
-              mergedImgs.push(i);
-            }
-          });
-          localState.imagingStudies.forEach(li => {
-            if (li && li.id && !mergedImgs.some(i => i.id === li.id)) {
-              mergedImgs.push(li);
-            }
-          });
-          firestoreState.imagingStudies = mergedImgs;
-        }
-      } catch (e) {
-        console.warn("Fallo al fusionar contingencia local en getAppState:", e);
-      }
-    }
-
     const loggedUser = sessionStorage.getItem('medflow_logged_user');
     if (loggedUser) {
       firestoreState.currentUser = JSON.parse(loggedUser);
@@ -245,34 +117,29 @@ export function getAppState() {
     return firestoreState;
   }
 
-  // Fallback a almacenamiento local solo mientras conectan los escuchadores de Firestore
-  const localData = localStorage.getItem('medflow_db');
-  let state = localData ? JSON.parse(localData) : null;
-  
-  if (!state) {
-    state = {
-      users: [adminUser],
-      patients: [],
-      medications: [],
-      pharmacySales: [],
-      laboratoryTests: [],
-      imagingStudies: [],
-      consultationTypes: [],
-      clinicInfo: {
-        name: "LUGAMED 2.0 - Clínica Médica y Hospital",
-        address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
-        phone: "2200-0000",
-        email: "contacto@lugamed.gt"
-      }
-    };
-  }
+  // Estado inicial por defecto mientras Firestore está cargando
+  const defaultState = {
+    users: [adminUser],
+    patients: [],
+    medications: [],
+    pharmacySales: [],
+    laboratoryTests: [],
+    imagingStudies: [],
+    consultationTypes: [],
+    clinicInfo: {
+      name: "LUGAMED 2.0 - Clínica Médica y Hospital",
+      address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
+      phone: "2200-0000",
+      email: "contacto@lugamed.gt"
+    }
+  };
 
   const loggedUser = sessionStorage.getItem('medflow_logged_user');
   if (loggedUser) {
-    state.currentUser = JSON.parse(loggedUser);
+    defaultState.currentUser = JSON.parse(loggedUser);
   }
 
-  return state;
+  return defaultState;
 }
 
 export function resetToOfficialDatabase() {
@@ -281,7 +148,6 @@ export function resetToOfficialDatabase() {
 
 // Guardar cambios directamente en Firestore y sincronizar estado
 export async function saveAppState(state) {
-  localStorage.setItem('medflow_db', JSON.stringify(state));
   updateSidebarInfo(state);
 
   try {
@@ -388,36 +254,10 @@ export async function saveToFirestore(collectionName, docId, data) {
   }
 }
 
-// Función asíncrona de eliminación en Firestore (con soporte local de persistencia)
+// Función asíncrona de eliminación en Firestore
 export async function removeFromFirestore(collectionName, docId) {
-  // 1. Registrar la eliminación en local storage para que persista ante fallos de conexión o cuota
-  try {
-    const deletedData = localStorage.getItem('medflow_deleted_ids');
-    const deleted = deletedData ? JSON.parse(deletedData) : {};
-    if (!deleted[collectionName]) deleted[collectionName] = [];
-    if (!deleted[collectionName].includes(docId)) {
-      deleted[collectionName].push(docId);
-    }
-    localStorage.setItem('medflow_deleted_ids', JSON.stringify(deleted));
-  } catch(e) {
-    console.warn("Error guardando ID eliminado localmente:", e);
-  }
-
   try {
     await removeDocument(collectionName, docId);
-
-    // 2. Si la eliminación en Firestore tuvo éxito, remover el ID de la lista local de borrados
-    try {
-      const deletedData = localStorage.getItem('medflow_deleted_ids');
-      if (deletedData) {
-        const deleted = JSON.parse(deletedData);
-        if (deleted[collectionName]) {
-          deleted[collectionName] = deleted[collectionName].filter(id => id !== docId);
-          localStorage.setItem('medflow_deleted_ids', JSON.stringify(deleted));
-        }
-      }
-    } catch(e){}
-
     return true;
   } catch (err) {
     console.error(`Error eliminando de Firestore (${collectionName}/${docId}):`, err);

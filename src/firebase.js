@@ -105,21 +105,10 @@ export function initRealtimeFirestore(onFirstLoad) {
   let loadedCollections = 0;
   const totalCollections = 3; // multimedica_users, multimedica_pacientes, multimedica
 
-  // Liveness timeout: si Firestore no responde en 3 segundos (por cuota agotada o falta de red),
-  // procedemos automáticamente en modo local/offline para no bloquear al usuario.
-  const fallbackTimeout = setTimeout(() => {
-    if (!firestoreState.isLoaded) {
-      console.warn("Firestore tardó demasiado en responder. Iniciando modo offline/fallback local.");
-      firestoreState.isLoaded = true;
-      if (typeof onFirstLoad === 'function') onFirstLoad(firestoreState);
-    }
-  }, 3000);
-
   function checkFirstLoad() {
     if (firestoreState.isLoaded) return;
     loadedCollections++;
     if (loadedCollections >= totalCollections) {
-      clearTimeout(fallbackTimeout);
       firestoreState.isLoaded = true;
       if (typeof onFirstLoad === 'function') onFirstLoad(firestoreState);
     }
@@ -203,7 +192,6 @@ export function initRealtimeFirestore(onFirstLoad) {
 
   }).catch(err => {
     console.error("Fallo de autenticación en Firestore:", err);
-    clearTimeout(fallbackTimeout);
     // Permitir flujo offline si falla la conexión
     firestoreState.isLoaded = true;
     if (typeof onFirstLoad === 'function') onFirstLoad(firestoreState);

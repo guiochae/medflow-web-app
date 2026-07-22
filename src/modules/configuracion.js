@@ -1368,9 +1368,9 @@ function processImportedRows(rows) {
     count++;
   }
 
-  // Guardar estado localmente
+  // Guardar estado
   appState[activeCatalogType] = catalog;
-  localStorage.setItem('medflow_db', JSON.stringify(appState));
+  saveAppState(appState);
   
   // Renderizar la tabla de inmediato
   renderCatalogTable();
