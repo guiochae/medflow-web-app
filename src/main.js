@@ -262,6 +262,52 @@ export function updateSidebarInfo(state) {
       clinicLogo.innerHTML = clinicInfo.logoText || '🏥';
     }
   }
+
+  // Actualizar notificaciones en la barra lateral
+  const userObj = state.currentUser;
+  if (userObj) {
+    const roleLower = String(userObj.role || '').toLowerCase();
+    const isLaboratorista = roleLower.includes('laboratorista') || roleLower.includes('laboratorio');
+    
+    const labNavItem = document.querySelector('.nav-item[data-target="laboratorio"] button');
+    if (labNavItem) {
+      const existingBadge = labNavItem.querySelector('.sidebar-badge');
+      if (existingBadge) existingBadge.remove();
+
+      if (isLaboratorista) {
+        let pendingCount = 0;
+        if (state.patients && Array.isArray(state.patients)) {
+          state.patients.forEach(p => {
+            if (p.localLabs && Array.isArray(p.localLabs)) {
+              p.localLabs.forEach(lab => {
+                if (lab.stage === 'procesar') {
+                  pendingCount++;
+                }
+              });
+            }
+          });
+        }
+
+        if (pendingCount > 0) {
+          const badgeEl = document.createElement('span');
+          badgeEl.className = 'sidebar-badge';
+          badgeEl.textContent = pendingCount;
+          badgeEl.style.cssText = `
+            background: #ff9800;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.72rem;
+            font-weight: bold;
+            margin-left: auto;
+            display: inline-block;
+            box-shadow: 0 2px 4px rgba(255,152,0,0.4);
+          `;
+          labNavItem.appendChild(badgeEl);
+        }
+      }
+    }
+  }
 }
 
 // Enrutador de Módulos

@@ -190,6 +190,15 @@ const LAB_STUDIES_CATALOG = [
 
 export function renderLaboratorio(container) {
   const state = getAppState();
+  const currentUser = state.currentUser;
+  const roleLower = String(currentUser && currentUser.role || '').toLowerCase();
+  const isLaboratorista = roleLower.includes('laboratorista') || roleLower.includes('laboratorio');
+
+  if (isLaboratorista) {
+    renderLaboratoristaDashboard(container);
+    return;
+  }
+
   const activePatientId = getActivePatientId();
   const patient = state.patients.find(p => p.id === activePatientId);
   const doctors = state.users.filter(u => u.role === 'medico');
@@ -1022,7 +1031,7 @@ function renderLabBuilder(patient, doctors) {
   const btnCancelResults = document.getElementById('btn-cancel-results');
   const resultsForm = document.getElementById('results-entry-form');
 
-  function openResultsModal(study) {
+  function openResultsModal(study, customPatient) {
     if (!resultsModal || !resultsBody) return;
 
     resultsTitle.textContent = `Ingreso de Resultados: ${study.name}`;
@@ -1093,8 +1102,9 @@ function renderLabBuilder(patient, doctors) {
     resultsForm.onsubmit = (e) => {
       e.preventDefault();
       
+      const targetPatient = customPatient || patient;
       const stateObj = getAppState();
-      const pObj = stateObj.patients.find(p => p.id === patient.id);
+      const pObj = stateObj.patients.find(p => p.id === targetPatient.id);
       const sObj = pObj.localLabs.find(s => s.id === study.id);
 
       if (sObj && sObj.parameters) {
@@ -1110,13 +1120,19 @@ function renderLabBuilder(patient, doctors) {
 
         sObj.stage = 'completado';
         saveAppState(stateObj);
-        sObj.stage = 'completado';
-        saveAppState(stateObj);
-        patient.localLabs = pObj.localLabs;
+        if (patient && patient.id === targetPatient.id) {
+          patient.localLabs = pObj.localLabs;
+        }
       }
 
       resultsModal.style.display = 'none';
-      renderLocalProcessList();
+      
+      const roleLower = String(stateObj.currentUser && stateObj.currentUser.role || '').toLowerCase();
+      if (roleLower.includes('laboratorista') || roleLower.includes('laboratorio')) {
+        renderLaboratoristaDashboard(document.getElementById('app'));
+      } else {
+        renderLocalProcessList();
+      }
     };
   }
 
@@ -1556,4 +1572,333 @@ export function showLocalLabReportPrintWindow(study, patient) {
     </html>
   `);
   printWindow.document.close();
+}
+
+function renderLaboratoristaDashboard(container) {
+  const stateObj = getAppState();
+  
+  // Agrupar todas las órdenes de todos los pacientes
+  const allOrders = [];
+  let pendingCount = 0;
+  let processingCount = 0;
+  let completedCount = 0;
+
+  stateObj.patients.forEach(p => {
+    if (p.localLabs && Array.isArray(p.localLabs)) {
+      p.localLabs.forEach(lab => {
+        let age = 'N/A';
+        if (p.birthdate) {
+          const dob = new Date(p.birthdate);
+          if (!isNaN(dob.getTime())) {
+            const diffMs = Date.now() - dob.getTime();
+            const ageDt = new Date(diffMs);
+            age = Math.abs(ageDt.getUTCFullYear() - 1970);
+          }
+        } else if (p.age) {
+          age = p.age;
+        }
+
+        const orderObj = {
+          ...lab,
+          patientId: p.id,
+          patientName: p.name,
+          patientAge: age,
+          patientGender: p.gender || 'N/A',
+          patientObj: p
+        };
+
+        allOrders.push(orderObj);
+
+        if (lab.stage === 'procesar') pendingCount++;
+        else if (lab.stage === 'ingresar_resultados') processingCount++;
+        else if (lab.stage === 'completado') completedCount++;
+      });
+    }
+  });
+
+  // Ordenar órdenes por fecha descendente
+  allOrders.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  container.innerHTML = `
+    <div style="padding: 1.5rem; max-width: 1200px; margin: 0 auto;">
+      <!-- Encabezado -->
+      <div style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <div>
+          <h1 style="color: var(--accent-primary); font-family: var(--font-heading); margin: 0 0 5px 0; font-size: 1.75rem;">🔬 Dashboard del Laboratorista</h1>
+          <p style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">Gestión centralizada de análisis clínicos y resultados de laboratorio.</p>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <span style="font-size: 0.85rem; color: var(--text-muted);">Sesión activa: <strong>${stateObj.currentUser.name}</strong></span>
+          <button id="btn-lab-refresh" class="btn btn-secondary btn-small" style="padding: 8px 12px;">🔄 Actualizar</button>
+        </div>
+      </div>
+
+      <!-- Resumen de Contadores -->
+      <div class="grid-3" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+        <div class="glass-card" style="padding: 1.25rem; border-left: 4px solid #ff9800; display: flex; align-items: center; justify-content: space-between;">
+          <div>
+            <span style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; font-weight: bold;">Pendientes de Procesar</span>
+            <h2 style="margin: 5px 0 0 0; color: var(--text-primary); font-size: 2rem;">${pendingCount}</h2>
+          </div>
+          <span style="font-size: 2.25rem; filter: drop-shadow(0 2px 8px rgba(255,152,0,0.3));">🔔</span>
+        </div>
+        
+        <div class="glass-card" style="padding: 1.25rem; border-left: 4px solid var(--accent-primary); display: flex; align-items: center; justify-content: space-between;">
+          <div>
+            <span style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; font-weight: bold;">Ingreso de Resultados</span>
+            <h2 style="margin: 5px 0 0 0; color: var(--text-primary); font-size: 2rem;">${processingCount}</h2>
+          </div>
+          <span style="font-size: 2.25rem; filter: drop-shadow(0 2px 8px rgba(0,242,254,0.3));">✏️</span>
+        </div>
+
+        <div class="glass-card" style="padding: 1.25rem; border-left: 4px solid var(--accent-success); display: flex; align-items: center; justify-content: space-between;">
+          <div>
+            <span style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; font-weight: bold;">Completados</span>
+            <h2 style="margin: 5px 0 0 0; color: var(--text-primary); font-size: 2rem;">${completedCount}</h2>
+          </div>
+          <span style="font-size: 2.25rem; filter: drop-shadow(0 2px 8px rgba(0,230,118,0.3));">✅</span>
+        </div>
+      </div>
+
+      <!-- Alerta de Notificación de Nuevas Órdenes -->
+      ${pendingCount > 0 ? `
+        <div class="glass-card" style="background: rgba(255, 152, 0, 0.08); border: 1px solid rgba(255, 152, 0, 0.25); padding: 12px 20px; border-radius: var(--radius-sm); margin-bottom: 1.5rem; display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.2rem;">⚠️</span>
+          <span style="font-size: 0.9rem; color: var(--text-primary); font-weight: 500;">
+            Atención: Hay <strong>${pendingCount}</strong> órdenes nuevas de laboratorio pendientes de procesar.
+          </span>
+        </div>
+      ` : ''}
+
+      <!-- Listado Principal de Órdenes -->
+      <div class="glass-card" style="padding: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 10px;">
+          <h3 style="color: var(--text-primary); font-family: var(--font-heading); margin: 0; font-size: 1.2rem;">📋 Solicitudes y Órdenes Clínicas</h3>
+          <div>
+            <select id="laboratorista-filter-stage" style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text-primary); outline: none;">
+              <option value="todos">Todos los Estados</option>
+              <option value="procesar">Pendientes de Procesar</option>
+              <option value="ingresar_resultados">Ingresar Resultados</option>
+              <option value="completado">Completados</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="overflow-x: auto;">
+          <table class="studies-table" style="width: 100%; border-collapse: collapse; text-align: left;">
+            <thead>
+              <tr style="border-bottom: 2px solid var(--border-color); color: var(--text-muted); font-size: 0.85rem; font-weight: 700;">
+                <th style="padding: 12px 10px;">Paciente</th>
+                <th style="padding: 12px 10px;">Código de Orden</th>
+                <th style="padding: 12px 10px;">Fecha Solicitada</th>
+                <th style="padding: 12px 10px;">Estudios Solicitados</th>
+                <th style="padding: 12px 10px; text-align: center;">Estado</th>
+                <th style="padding: 12px 10px; text-align: center;">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="laboratorista-orders-table-body">
+              <!-- Cargado dinámicamente -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Bind botón de actualizar
+  document.getElementById('btn-lab-refresh').onclick = () => {
+    renderLaboratoristaDashboard(container);
+  };
+
+  const tableBody = document.getElementById('laboratorista-orders-table-body');
+  const filterSelect = document.getElementById('laboratorista-filter-stage');
+
+  function populateTable(filter = 'todos') {
+    if (!tableBody) return;
+    tableBody.innerHTML = '';
+
+    const filteredOrders = allOrders.filter(o => {
+      if (filter === 'todos') return true;
+      return o.stage === filter;
+    });
+
+    if (filteredOrders.length === 0) {
+      tableBody.innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align: center; padding: 30px; color: var(--text-muted); font-size: 0.9rem;">
+            No se encontraron órdenes de laboratorio en este estado.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    filteredOrders.forEach(order => {
+      const row = document.createElement('tr');
+      row.style.borderBottom = '1px solid var(--border-color)';
+      row.style.cursor = 'pointer';
+      row.style.transition = 'background 0.2s';
+      row.addEventListener('mouseover', () => { row.style.background = 'rgba(255,255,255,0.02)'; });
+      row.addEventListener('mouseout', () => { row.style.background = 'transparent'; });
+
+      let stageBadge = '';
+      let actionBtn = '';
+      if (order.stage === 'procesar') {
+        stageBadge = '<span class="status-badge status-pending" style="background: rgba(255,160,0,0.15); color: #ff9800; border: 1px solid #ff9800; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Pendiente de Procesar</span>';
+        actionBtn = `<button class="btn btn-primary btn-small btn-act-order" style="font-size: 0.78rem; padding: 4px 8px;">⚙️ Procesar</button>`;
+      } else if (order.stage === 'ingresar_resultados') {
+        stageBadge = '<span class="status-badge status-progress" style="background: rgba(0,242,254,0.15); color: var(--accent-primary); border: 1px solid var(--accent-primary); padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Ingresar Resultados</span>';
+        actionBtn = `<button class="btn btn-secondary btn-small btn-act-order" style="font-size: 0.78rem; padding: 4px 8px;">✏️ Resultados</button>`;
+      } else if (order.stage === 'completado') {
+        stageBadge = '<span class="status-badge status-completed" style="background: rgba(0,230,118,0.15); color: var(--accent-success); border: 1px solid var(--accent-success); padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Completado</span>';
+        actionBtn = `<button class="btn btn-success btn-small btn-act-order" style="font-size: 0.78rem; padding: 4px 8px;">🖨️ Reporte</button>`;
+      }
+
+      const studiesBadges = (order.studyNames && order.studyNames.length > 0)
+        ? order.studyNames.map(s => `<span style="background: rgba(37, 99, 235, 0.08); color: var(--accent-primary); border: 1px solid rgba(37, 99, 235, 0.25); padding: 2px 6px; border-radius: 12px; font-size: 0.72rem; margin-right: 4px; display: inline-block;">🧪 ${s}</span>`).join('')
+        : `<span style="font-size: 0.85rem; color: var(--text-muted);">${order.name}</span>`;
+
+      row.innerHTML = `
+        <td style="padding: 12px 10px; font-weight: 600; color: var(--text-primary);">${order.patientName}</td>
+        <td style="padding: 12px 10px; font-family: monospace; font-size: 0.82rem; color: var(--text-muted);">${order.id}</td>
+        <td style="padding: 12px 10px; font-size: 0.8rem; color: var(--text-muted);">${new Date(order.date).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' })}</td>
+        <td style="padding: 12px 10px;">${studiesBadges}</td>
+        <td style="padding: 12px 10px; text-align: center;">${stageBadge}</td>
+        <td style="padding: 12px 10px; text-align: center;">${actionBtn}</td>
+      `;
+
+      // Al hacer clic en la fila se abre el modal de detalles
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-act-order')) return;
+        openOrderDetailsModal(order, order.patientObj);
+      });
+
+      // Al hacer clic en el botón de acción
+      row.querySelector('.btn-act-order').onclick = (e) => {
+        e.stopPropagation();
+        openOrderDetailsModal(order, order.patientObj);
+      };
+
+      tableBody.appendChild(row);
+    });
+  }
+
+  // Filtrado de estados
+  if (filterSelect) {
+    filterSelect.onchange = (e) => {
+      populateTable(e.target.value);
+    };
+  }
+
+  populateTable();
+}
+
+function openOrderDetailsModal(order, patientObj) {
+  let modal = document.getElementById('laboratorista-order-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'laboratorista-order-modal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+  
+  modal.style.display = 'flex';
+  
+  let actionButtonHtml = '';
+  if (order.stage === 'procesar') {
+    actionButtonHtml = `<button class="btn btn-primary" id="btn-modal-action" style="padding: 10px 20px; font-weight: bold;">⚙️ PROCESAR</button>`;
+  } else if (order.stage === 'ingresar_resultados') {
+    actionButtonHtml = `<button class="btn btn-secondary" id="btn-modal-action" style="padding: 10px 20px; font-weight: bold;">✏️ INGRESAR RESULTADOS</button>`;
+  } else if (order.stage === 'completado') {
+    actionButtonHtml = `<button class="btn btn-success" id="btn-modal-action" style="padding: 10px 20px; font-weight: bold;">🖨️ IMPRIMIR REPORTE</button>`;
+  }
+
+  let statusText = '';
+  let statusBadgeStyle = '';
+  if (order.stage === 'procesar') {
+    statusText = 'Pendiente de Procesar';
+    statusBadgeStyle = 'background: rgba(255, 152, 0, 0.15); color: #ff9800; border: 1px solid #ff9800;';
+  } else if (order.stage === 'ingresar_resultados') {
+    statusText = 'En Proceso (Ingresar Resultados)';
+    statusBadgeStyle = 'background: rgba(0, 242, 254, 0.15); color: var(--accent-primary); border: 1px solid var(--accent-primary);';
+  } else {
+    statusText = 'Completado';
+    statusBadgeStyle = 'background: rgba(76, 175, 80, 0.15); color: var(--accent-success); border: 1px solid var(--accent-success);';
+  }
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width: 550px; width: 90%; border-radius: var(--radius-sm); box-shadow: 0 8px 32px rgba(0,0,0,0.4);">
+      <div class="modal-header" style="border-bottom: 1px solid var(--border-color); padding-bottom: 15px;">
+        <h2 style="color: var(--text-primary); font-family: var(--font-heading); margin: 0; font-size: 1.25rem;">🔬 Detalle de Solicitud de Laboratorio</h2>
+        <button class="modal-close" id="btn-close-order-modal">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 20px 0;">
+        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 15px; border-radius: var(--radius-sm); margin-bottom: 1.5rem;">
+          <h4 style="margin: 0 0 10px 0; color: var(--accent-secondary); font-size: 0.95rem; text-transform: uppercase;">Información del Paciente</h4>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.88rem; color: var(--text-primary);">
+            <div><strong>Nombre:</strong> ${patientObj.name}</div>
+            <div><strong>Edad:</strong> ${order.patientAge} años</div>
+            <div><strong>Género:</strong> ${order.patientGender}</div>
+            <div><strong>Teléfono:</strong> ${patientObj.telephone || 'N/A'}</div>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+          <h4 style="margin: 0 0 8px 0; color: var(--accent-secondary); font-size: 0.95rem; text-transform: uppercase;">Estudios Solicitados</h4>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            ${order.studyNames ? order.studyNames.map(s => `<span style="background: rgba(37,99,235,0.1); color: var(--accent-primary); border: 1px solid rgba(37,99,235,0.3); padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600;">🧪 ${s}</span>`).join('') : `<span style="color: var(--text-primary);">${order.name}</span>`}
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+          <h4 style="margin: 0 0 8px 0; color: var(--accent-secondary); font-size: 0.95rem; text-transform: uppercase;">Indicaciones Médicas</h4>
+          <p style="margin: 0; padding: 10px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 0.88rem; color: var(--text-muted); min-height: 40px; white-space: pre-wrap;">${order.notes || 'Ninguna indicación adicional'}</p>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; font-size: 0.9rem;">
+          <strong>Estado de la Orden:</strong>
+          <span style="padding: 4px 10px; border-radius: 4px; font-weight: 600; font-size: 0.8rem; ${statusBadgeStyle}">${statusText}</span>
+        </div>
+      </div>
+      <div class="modal-footer" style="border-top: 1px solid var(--border-color); padding-top: 15px; display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="btn btn-secondary" id="btn-cancel-order-modal">Cerrar</button>
+        ${actionButtonHtml}
+      </div>
+    </div>
+  `;
+
+  const closeBtn = modal.querySelector('#btn-close-order-modal');
+  const cancelBtn = modal.querySelector('#btn-cancel-order-modal');
+  const actionBtn = modal.querySelector('#btn-modal-action');
+
+  const closeModal = () => { modal.style.display = 'none'; };
+  if (closeBtn) closeBtn.onclick = closeModal;
+  if (cancelBtn) cancelBtn.onclick = closeModal;
+
+  if (actionBtn) {
+    actionBtn.onclick = async () => {
+      if (order.stage === 'procesar') {
+        const stateObj = getAppState();
+        const pObj = stateObj.patients.find(p => p.id === patientObj.id);
+        const sObj = pObj.localLabs.find(s => s.id === order.id);
+        if (sObj) {
+          sObj.stage = 'ingresar_resultados';
+          await saveAppState(stateObj);
+          alert("¡La orden ha sido marcada como PROCESANDO!\n\nAhora puede ingresar los resultados clínicos de los estudios.");
+          
+          order.stage = 'ingresar_resultados';
+          closeModal();
+          openOrderDetailsModal(order, patientObj);
+          
+          renderLaboratoristaDashboard(document.getElementById('app'));
+        }
+      } else if (order.stage === 'ingresar_resultados') {
+        closeModal();
+        openResultsModal(order, patientObj);
+      } else if (order.stage === 'completado') {
+        closeModal();
+        showLocalLabReportPrintWindow(order, patientObj);
+      }
+    };
+  }
 }
