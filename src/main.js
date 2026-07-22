@@ -75,6 +75,58 @@ export function getAppState() {
     if (!firestoreState.users || firestoreState.users.length === 0) {
       firestoreState.users = [adminUser];
     }
+
+    // Fusión de contingencia: Mezclar elementos locales (localStorage) creados recientemente
+    // en caso de que la cuota de escritura de Firestore esté agotada o falle la red
+    const localData = localStorage.getItem('medflow_db');
+    if (localData) {
+      try {
+        const localState = JSON.parse(localData);
+        // 1. Fusionar Usuarios
+        if (localState.users && Array.isArray(localState.users)) {
+          localState.users.forEach(lu => {
+            if (lu && lu.id && !firestoreState.users.some(u => u.id === lu.id)) {
+              firestoreState.users.push(lu);
+            }
+          });
+        }
+        // 2. Fusionar Pacientes
+        if (localState.patients && Array.isArray(localState.patients)) {
+          localState.patients.forEach(lp => {
+            if (lp && lp.id && !firestoreState.patients.some(p => p.id === lp.id)) {
+              firestoreState.patients.push(lp);
+            }
+          });
+        }
+        // 3. Fusionar Medicamentos
+        if (localState.medications && Array.isArray(localState.medications)) {
+          localState.medications.forEach(lm => {
+            if (lm && lm.id && !firestoreState.medications.some(m => m.id === lm.id)) {
+              firestoreState.medications.push(lm);
+            }
+          });
+        }
+        // 4. Fusionar Exámenes
+        if (localState.laboratoryTests && Array.isArray(localState.laboratoryTests)) {
+          localState.laboratoryTests.forEach(ll => {
+            if (ll && ll.id && !firestoreState.laboratoryTests.some(l => l.id === ll.id)) {
+              firestoreState.laboratoryTests.push(ll);
+            }
+          });
+        }
+        // 5. Fusionar Estudios de Imagenología
+        if (localState.imagingStudies && Array.isArray(localState.imagingStudies)) {
+          localState.imagingStudies.forEach(li => {
+            if (li && li.id && !firestoreState.imagingStudies.some(i => i.id === li.id)) {
+              firestoreState.imagingStudies.push(li);
+            }
+          });
+        }
+      } catch (e) {
+        console.warn("Fallo al fusionar contingencia local en getAppState:", e);
+      }
+    }
+
     const loggedUser = sessionStorage.getItem('medflow_logged_user');
     if (loggedUser) {
       firestoreState.currentUser = JSON.parse(loggedUser);
