@@ -180,7 +180,9 @@ export function renderFarmacia(container) {
   // ==========================================
 
   // 1. Clics en la pestaña principal
-  container.addEventListener('click', (e) => {
+  if (!container.dataset.farmaciaListenersInitialized) {
+    container.dataset.farmaciaListenersInitialized = 'true';
+    container.addEventListener('click', (e) => {
     const tabBtn = e.target.closest('.tab-btn');
     if (tabBtn && tabBtn.id) {
       e.preventDefault();
@@ -257,9 +259,9 @@ export function renderFarmacia(container) {
       if (sale) {
         printSalesVoucher(sale);
       }
-      return;
     }
   });
+}
 
   // 2. Eventos de entrada de texto (Buscador Autocomplete)
   const medSearchInput = document.getElementById('pharmacy-med-search');

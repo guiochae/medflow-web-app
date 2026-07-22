@@ -6,6 +6,7 @@ import mammoth from 'mammoth';
 let editingUserId = null;
 let activeCatalogType = null; // 'medications' | 'laboratoryTests' | 'imagingStudies' | 'consultationTypes'
 let selectedImportFile = null;
+let activeConfigTab = 'tab-clinic-info';
 
 export function renderConfiguracion(container) {
   const state = getAppState();
@@ -400,6 +401,25 @@ export function renderConfiguracion(container) {
     </div>
   `;
 
+  // Restore active tab
+  if (activeConfigTab && activeConfigTab !== 'tab-clinic-info') {
+    const activeBtn = container.querySelector(`#${activeConfigTab}`);
+    if (activeBtn) {
+      container.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      container.querySelectorAll('.tab-pane').forEach(pane => {
+        pane.classList.remove('active');
+        pane.style.display = 'none';
+      });
+      activeBtn.classList.add('active');
+      const paneId = tabs[activeConfigTab];
+      const targetPane = container.querySelector(`#${paneId}`);
+      if (targetPane) {
+        targetPane.classList.add('active');
+        targetPane.style.display = 'block';
+      }
+    }
+  }
+
   // Render list of users
   renderUsersList();
 
@@ -407,27 +427,31 @@ export function renderConfiguracion(container) {
   // ENCAPSULATED EVENT DELEGATION ON CONTAINER
   // ==========================================
   
-  // 1. Click events
-  container.addEventListener('click', (e) => {
-    // sub-module tab switcher
-    const tabBtn = e.target.closest('.tab-btn');
-    if (tabBtn && tabBtn.id && tabs[tabBtn.id]) {
-      e.preventDefault();
-      console.log(`Pestaña interna seleccionada: ${tabBtn.id}`);
-      container.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-      container.querySelectorAll('.tab-pane').forEach(pane => {
-        pane.classList.remove('active');
-        pane.style.display = 'none';
-      });
+  if (!container.dataset.configListenersInitialized) {
+    container.dataset.configListenersInitialized = 'true';
 
-      tabBtn.classList.add('active');
-      const targetPane = document.getElementById(tabs[tabBtn.id]);
-      if (targetPane) {
-        targetPane.classList.add('active');
-        targetPane.style.display = 'block';
+    // 1. Click events
+    container.addEventListener('click', (e) => {
+      // sub-module tab switcher
+      const tabBtn = e.target.closest('.tab-btn');
+      if (tabBtn && tabBtn.id && tabs[tabBtn.id]) {
+        e.preventDefault();
+        console.log(`Pestaña interna seleccionada: ${tabBtn.id}`);
+        activeConfigTab = tabBtn.id;
+        container.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        container.querySelectorAll('.tab-pane').forEach(pane => {
+          pane.classList.remove('active');
+          pane.style.display = 'none';
+        });
+
+        tabBtn.classList.add('active');
+        const targetPane = document.getElementById(tabs[tabBtn.id]);
+        if (targetPane) {
+          targetPane.classList.add('active');
+          targetPane.style.display = 'block';
+        }
+        return;
       }
-      return;
-    }
 
     // sub-module buttons (Farmacia, Laboratorio, Imagenología, Consulta)
     const btnFarmacia = e.target.closest('#btn-config-farmacia');
@@ -473,6 +497,7 @@ export function renderConfiguracion(container) {
         return;
       }
       stateObj.users = stateObj.users.filter(x => x.id !== idToDelete);
+      removeFromFirestore('users', idToDelete);
       saveAppState(stateObj);
       renderUsersList();
       return;
@@ -828,6 +853,7 @@ export function renderConfiguracion(container) {
       return;
     }
   });
+}
 }
 
 // Module-level supporting functions
