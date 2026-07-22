@@ -691,7 +691,12 @@ function renderRecipeBuilder(patient, doctors) {
     }
 
     const stateObj = getAppState();
-    const doctorObj = stateObj.users.find(u => u.id === doctorId);
+    const doctorObj = stateObj.users.find(u => u.id === doctorId) || 
+                      stateObj.users.find(u => u.name === doctorId || (u.name && u.name.toLowerCase().includes(String(doctorId).toLowerCase())));
+    
+    const doctorName = doctorObj ? doctorObj.name : 'Dr. Randy Rosado';
+    const doctorLicense = doctorObj ? (doctorObj.license || 'N/A') : 'N/A';
+    const doctorPhone = doctorObj ? (doctorObj.phone || 'N/A') : 'N/A';
     
     const indicationsVal = document.getElementById('r-indications') ? document.getElementById('r-indications').value : "";
 
@@ -738,7 +743,7 @@ function renderRecipeBuilder(patient, doctors) {
       const newBill = {
         id: billId,
         date: new Date().toISOString(),
-        concept: `Receta Médica - Dr. ${doctorObj.name}`,
+        concept: `Receta Médica - Dr. ${doctorName}`,
         details,
         diagnosis: 'Pre-consulta / Recetario',
         total,
@@ -750,9 +755,9 @@ function renderRecipeBuilder(patient, doctors) {
     const newRecipe = {
       id: 'r-' + Date.now(),
       date: new Date().toISOString(),
-      doctorName: doctorObj.name,
-      doctorLicense: doctorObj.license || 'N/A',
-      doctorPhone: doctorObj.phone || 'N/A',
+      doctorName: doctorName,
+      doctorLicense: doctorLicense,
+      doctorPhone: doctorPhone,
       medicines: [...currentPrescriptionMedicines],
       indications: indicationsVal,
       billId: billId,
