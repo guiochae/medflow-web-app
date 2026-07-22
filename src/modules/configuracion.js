@@ -118,6 +118,7 @@ export function renderConfiguracion(container) {
                   <option value="Enfermera">Enfermera</option>
                   <option value="Regente Farmacia">Regente Farmacia</option>
                   <option value="Regente Laboratorio">Regente Laboratorio</option>
+                  <option value="Laboratorista">Laboratorista</option>
                 </select>
               </div>
               <div class="form-group" style="margin-bottom: 1.25rem;">
@@ -831,6 +832,23 @@ export function renderConfiguracion(container) {
       }
       return;
     }
+    // user role dropdown change
+    if (e.target && e.target.id === 'u-role') {
+      const selectedRole = e.target.value.toLowerCase();
+      let roleKey = selectedRole;
+      if (selectedRole.includes('medico') || selectedRole.includes('médico')) {
+        roleKey = 'medico';
+      } else if (selectedRole.includes('enfermer')) {
+        roleKey = 'enfermero';
+      } else if (selectedRole.includes('recep')) {
+        roleKey = 'recepcionista';
+      } else if (selectedRole.includes('laboratorio') || selectedRole.includes('laboratorista')) {
+        roleKey = 'laboratorista';
+      }
+      handleRoleChange(roleKey);
+      return;
+    }
+
     // mass catalog file upload change
     if (e.target && e.target.id === 'config-catalog-import-file') {
       const file = e.target.files[0];
@@ -882,7 +900,7 @@ function handleRoleChange(role) {
     if (licenseInput) licenseInput.setAttribute('required', 'true');
     if (phoneGroup) phoneGroup.style.display = 'block';
     if (phoneInput) phoneInput.setAttribute('required', 'true');
-  } else if (role === 'enfermero' || role === 'recepcionista') {
+  } else if (role === 'enfermero' || role === 'recepcionista' || role === 'laboratorista') {
     extraFieldsContainer.style.display = 'block';
     if (licenseGroup) licenseGroup.style.display = 'none';
     if (licenseInput) licenseInput.removeAttribute('required');
@@ -920,10 +938,10 @@ function renderUsersList() {
     let roleIcon = '👤';
     if (u.role && (u.role.includes('Médico') || u.role.includes('medico'))) roleIcon = '🩺';
     else if (u.role === 'Enfermera' || u.role === 'enfermero') roleIcon = '🫁';
-    else if (u.role === 'Recepcionista') roleIcon = '📞';
+    else if (u.role === 'Recepcionista' || u.role === 'recepcionista') roleIcon = '📞';
     else if (u.role === 'Administrador' || u.role === 'administrador') roleIcon = '⚙️';
     else if (u.role && u.role.includes('Farmacia')) roleIcon = '🏪';
-    else if (u.role && u.role.includes('Laboratorio')) roleIcon = '🔬';
+    else if (u.role && (u.role.includes('Laboratorio') || u.role.includes('Laboratorista') || u.role.includes('laboratorista'))) roleIcon = '🔬';
 
     const modulesList = u.modules && u.modules.length > 0 ? u.modules.join(', ') : 'Todos';
 

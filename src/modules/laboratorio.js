@@ -869,21 +869,55 @@ function renderLabBuilder(patient, doctors) {
     // Generar checklist con estructura de tarjetas agrupadas por categoría
     let listHtml = `<div class="checklist-container">`;
     categories.forEach(cat => {
+      const groupStudies = catalog.filter(s => s.category === cat);
+      if (groupStudies.length === 0) return;
+      
       listHtml += `
-        <div class="checklist-group-title">${cat}</div>
-        <div class="checklist-grid">
-          ${catalog.filter(s => s.category === cat).map(study => `
-            <div class="checklist-item-card" data-name="${study.name}">
-              <input type="checkbox" id="chk-${study.name}" value="${study.name}">
-              <span class="checklist-item-label">${study.name}</span>
-            </div>
-          `).join('')}
+        <div class="checklist-group" data-category="${cat}">
+          <div class="checklist-group-title">${cat}</div>
+          <div class="checklist-grid">
+            ${groupStudies.map(study => `
+              <div class="checklist-item-card" data-name="${study.name}">
+                <input type="checkbox" id="chk-${study.name}" value="${study.name}">
+                <span class="checklist-item-label">${study.name}</span>
+              </div>
+            `).join('')}
+          </div>
         </div>
       `;
     });
     listHtml += `</div>`;
     
     checklistBody.innerHTML = listHtml;
+
+    // Configurar la barra de búsqueda del checklist
+    const searchInput = document.getElementById('checklist-search-input');
+    if (searchInput) {
+      searchInput.value = '';
+      searchInput.oninput = function() {
+        const query = String(this.value).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const groups = checklistBody.querySelectorAll('.checklist-group');
+        groups.forEach(group => {
+          let visibleInGroup = 0;
+          const cards = group.querySelectorAll('.checklist-item-card');
+          cards.forEach(card => {
+            const studyName = String(card.getAttribute('data-name')).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            if (studyName.includes(query)) {
+              card.style.display = 'flex';
+              visibleInGroup++;
+            } else {
+              card.style.display = 'none';
+            }
+          });
+          
+          if (visibleInGroup > 0) {
+            group.style.display = 'block';
+          } else {
+            group.style.display = 'none';
+          }
+        });
+      };
+    }
 
     // Vincular clic en la tarjeta entera para seleccionar
     const cards = checklistBody.querySelectorAll('.checklist-item-card');

@@ -291,10 +291,12 @@ function renderLoginScreen() {
           ">
             ${users.map(u => {
               let roleIcon = '👤';
-              if (u.role === 'medico' || (u.role && u.role.toLowerCase().includes('médico'))) roleIcon = '🩺';
-              else if (u.role === 'enfermero' || (u.role && u.role.toLowerCase().includes('enfermera'))) roleIcon = '🫁';
-              else if (u.role === 'recepcionista') roleIcon = '📞';
-              else if (u.role === 'administrador') roleIcon = '⚙️';
+              const roleLower = String(u.role || '').toLowerCase();
+              if (roleLower.includes('medico') || roleLower.includes('médico')) roleIcon = '🩺';
+              else if (roleLower.includes('enfermero') || roleLower.includes('enfermera')) roleIcon = '🫁';
+              else if (roleLower.includes('recepcionista')) roleIcon = '📞';
+              else if (roleLower.includes('administrador')) roleIcon = '⚙️';
+              else if (roleLower.includes('laboratorio') || roleLower.includes('laboratorista')) roleIcon = '🔬';
               
               return `<option value="${u.id}">${roleIcon} ${u.name} (${String(u.role).toUpperCase()})</option>`;
             }).join('')}
@@ -437,10 +439,12 @@ function initializeSidebar(loggedUser) {
   const sidebarUser = document.getElementById('sidebar-user-container');
   if (sidebarUser) {
     let roleIcon = '👤';
-    if (userObj.role === 'medico' || (userObj.role && userObj.role.toLowerCase().includes('médico'))) roleIcon = '🩺';
-    else if (userObj.role === 'enfermero' || (userObj.role && userObj.role.toLowerCase().includes('enfermera'))) roleIcon = '🫁';
-    else if (userObj.role === 'recepcionista') roleIcon = '📞';
-    else if (userObj.role === 'administrador') roleIcon = '⚙️';
+    const roleLower = String(userObj.role || '').toLowerCase();
+    if (roleLower.includes('medico') || roleLower.includes('médico')) roleIcon = '🩺';
+    else if (roleLower.includes('enfermero') || roleLower.includes('enfermera')) roleIcon = '🫁';
+    else if (roleLower.includes('recepcionista')) roleIcon = '📞';
+    else if (roleLower.includes('administrador')) roleIcon = '⚙️';
+    else if (roleLower.includes('laboratorio') || roleLower.includes('laboratorista')) roleIcon = '🔬';
 
     sidebarUser.innerHTML = `
       <div class="sidebar-user-card" style="
