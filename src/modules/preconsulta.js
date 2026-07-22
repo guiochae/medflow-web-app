@@ -22,7 +22,12 @@ export function renderPreconsulta(container) {
     <div class="grid-sidebar">
       <!-- Barra lateral de pacientes -->
       <div class="glass-card search-sidebar">
-        <h3>Pacientes</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <h3 style="margin: 0;">Pacientes</h3>
+          <span id="patient-count-badge" style="background: var(--accent-primary); color: #fff; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem; font-weight: bold;">
+            ${state.patients ? state.patients.length : 0} registrados
+          </span>
+        </div>
         <div class="form-group" style="margin-top: 10px;">
           <input type="text" id="patient-search" placeholder="🔍 Buscar paciente...">
         </div>
@@ -54,6 +59,12 @@ export function renderPreconsulta(container) {
 // Renderizar la lista de pacientes en la barra lateral
 function renderPatientList(query = '') {
   const state = getAppState();
+  
+  const badge = document.getElementById('patient-count-badge');
+  if (badge) {
+    badge.textContent = `${state.patients ? state.patients.length : 0} registrados`;
+  }
+
   const listContainer = document.getElementById('patient-list-container');
   if (!listContainer) return;
   

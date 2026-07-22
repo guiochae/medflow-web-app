@@ -423,6 +423,16 @@ export function renderConfiguracion(container) {
   // Render list of users
   renderUsersList();
 
+  // Restore open catalog modal if any
+  if (activeCatalogType) {
+    setTimeout(() => {
+      if (activeCatalogType) {
+        openCatalogConfig(activeCatalogType);
+        renderCatalogTable();
+      }
+    }, 0);
+  }
+
   // ==========================================
   // ENCAPSULATED EVENT DELEGATION ON CONTAINER
   // ==========================================
