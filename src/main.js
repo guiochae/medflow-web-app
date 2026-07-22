@@ -24,8 +24,8 @@ export async function purgeAllDatabases() {
   localStorage.clear();
   await purgeAllFirestoreData();
   const adminUser = {
-    id: 'u-admin',
-    name: 'Administrador',
+    id: 'Admin',
+    name: 'Administrador Maestro',
     role: 'Administrador',
     password: hashPassword('Glol5414'),
     modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
@@ -61,19 +61,53 @@ export function setActivePatientId(id) {
   activePatientId = id;
 }
 
-// Obtener estado unificado desde Firestore
 export function getAppState() {
   const adminUser = {
-    id: 'u-admin',
-    name: 'Administrador',
+    id: 'Admin',
+    name: 'Administrador Maestro',
     role: 'Administrador',
     password: hashPassword('Glol5414'),
     modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
   };
 
   if (firestoreState.isLoaded) {
-    if (!firestoreState.users || firestoreState.users.length === 0) {
-      firestoreState.users = [adminUser];
+    // 1. Filtrar y limpiar duplicados de administrador
+    const cleanedUsers = [];
+    const seenIds = new Set();
+    
+    firestoreState.users.forEach(u => {
+      if (!u || !u.id) return;
+      const uIdLower = String(u.id).toLowerCase();
+      if (uIdLower === 'admin' || uIdLower === 'u-admin') {
+        if (seenIds.has('Admin')) return;
+        seenIds.add('Admin');
+        u.id = 'Admin';
+        u.name = 'Administrador Maestro';
+      } else {
+        seenIds.add(u.id);
+      }
+      cleanedUsers.push(u);
+    });
+    firestoreState.users = cleanedUsers;
+
+    if (!firestoreState.users.some(u => u.id === 'Admin')) {
+      firestoreState.users.unshift(adminUser);
+    }
+
+    // 2. Asegurar que exista al menos un usuario con rol de Laboratorista
+    const hasLabUser = firestoreState.users.some(u => {
+      const r = String(u.role || '').toLowerCase();
+      return r.includes('laboratorista') || r.includes('laboratorio');
+    });
+
+    if (!hasLabUser) {
+      firestoreState.users.push({
+        id: 'laboratorista',
+        name: 'Laboratorista de Turno',
+        role: 'Laboratorista',
+        password: 'L123',
+        modules: ['preconsulta', 'laboratorio']
+      });
     }
 
     // Fusión de contingencia: Mezclar elementos locales (localStorage) creados recientemente
@@ -85,8 +119,12 @@ export function getAppState() {
         // 1. Fusionar Usuarios
         if (localState.users && Array.isArray(localState.users)) {
           localState.users.forEach(lu => {
-            if (lu && lu.id && !firestoreState.users.some(u => u.id === lu.id)) {
-              firestoreState.users.push(lu);
+            if (lu && lu.id) {
+              const luIdLower = String(lu.id).toLowerCase();
+              if (luIdLower === 'admin' || luIdLower === 'u-admin') return; // ignorar viejos duplicados
+              if (!firestoreState.users.some(u => u.id === lu.id)) {
+                firestoreState.users.push(lu);
+              }
             }
           });
         }
@@ -352,8 +390,8 @@ function renderLoginScreen() {
 
   const state = getAppState();
   const adminUser = {
-    id: 'u-admin',
-    name: 'Administrador',
+    id: 'Admin',
+    name: 'Administrador Maestro',
     role: 'Administrador',
     password: hashPassword('Glol5414'),
     modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']

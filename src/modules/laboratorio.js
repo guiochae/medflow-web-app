@@ -385,12 +385,69 @@ function showPlaceholder() {
   if (!container) return;
 
   container.innerHTML = `
+    <!-- Pestañas de Navegación del Laboratorio -->
+    <div class="tabs-container" style="display: flex; gap: 10px; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+      <button class="tab-btn active" id="btn-lab-tab-local" style="
+        padding: 10px 18px; 
+        background: rgba(0,242,254,0.08); 
+        border: 1px solid var(--accent-primary); 
+        border-radius: var(--radius-sm); 
+        color: var(--text-primary); 
+        cursor: pointer; 
+        font-weight: 600;
+      ">
+        🔬 Análisis Propios (Locales)
+      </button>
+      <button class="tab-btn" id="btn-lab-tab-externos" style="
+        padding: 10px 18px; 
+        background: transparent; 
+        border: 1px solid var(--border-color); 
+        border-radius: var(--radius-sm); 
+        color: var(--text-muted); 
+        cursor: pointer; 
+        font-weight: 600;
+      ">
+        🖼️ Órdenes Externas
+      </button>
+    </div>
+
     <div class="glass-card" style="text-align: center; padding: 4rem 2rem;">
       <span style="font-size: 3rem;">🔬</span>
       <h2 style="margin-top: 1rem;">Selecciona un paciente</h2>
       <p style="color: var(--text-muted); margin-top: 0.5rem;">Utiliza la barra lateral para buscar y seleccionar al paciente para el cual emitirá la orden o reporte de laboratorio.</p>
     </div>
   `;
+
+  // Vincular eventos a las pestañas del placeholder para indicar que debe seleccionar un paciente
+  const btnLocal = document.getElementById('btn-lab-tab-local');
+  const btnExterno = document.getElementById('btn-lab-tab-externos');
+  
+  if (btnLocal && btnExterno) {
+    btnLocal.onclick = () => {
+      btnLocal.className = 'tab-btn active';
+      btnLocal.style.background = 'rgba(0,242,254,0.08)';
+      btnLocal.style.borderColor = 'var(--accent-primary)';
+      btnLocal.style.color = 'var(--text-primary)';
+      
+      btnExterno.className = 'tab-btn';
+      btnExterno.style.background = 'transparent';
+      btnExterno.style.borderColor = 'var(--border-color)';
+      btnExterno.style.color = 'var(--text-muted)';
+      alert("Por favor, seleccione un paciente de la barra lateral derecha para emitir un análisis clínico local.");
+    };
+    btnExterno.onclick = () => {
+      btnExterno.className = 'tab-btn active';
+      btnExterno.style.background = 'rgba(0,242,254,0.08)';
+      btnExterno.style.borderColor = 'var(--accent-primary)';
+      btnExterno.style.color = 'var(--text-primary)';
+      
+      btnLocal.className = 'tab-btn';
+      btnLocal.style.background = 'transparent';
+      btnLocal.style.borderColor = 'var(--border-color)';
+      btnLocal.style.color = 'var(--text-muted)';
+      alert("Por favor, seleccione un paciente de la barra lateral derecha para emitir una orden de laboratorio externo.");
+    };
+  }
 
   const banner = document.getElementById('lab-patient-banner-area');
   if (banner) banner.innerHTML = '';

@@ -59,8 +59,8 @@ function getAdminPasswordHash() {
 
 // Usuario Administrador por defecto (único usuario del sistema si la colección está vacía)
 export const defaultAdminUser = {
-  id: 'u-admin',
-  name: 'Administrador',
+  id: 'Admin',
+  name: 'Administrador Maestro',
   role: 'administrador',
   password: getAdminPasswordHash(),
   modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
