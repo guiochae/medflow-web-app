@@ -96,10 +96,11 @@ function renderPatientList(query = '') {
     );
   }
 
-  const filtered = basePatients.filter(p => 
-    p.name.toLowerCase().includes(query.toLowerCase()) || 
-    p.telephone.includes(query)
-  );
+  const filtered = basePatients.filter(p => {
+    const nameVal = p.name ? String(p.name).toLowerCase() : '';
+    const telVal = p.telephone ? String(p.telephone) : '';
+    return nameVal.includes(query.toLowerCase()) || telVal.includes(query);
+  });
 
   if (filtered.length === 0) {
     listContainer.innerHTML = '<li style="padding: 10px; color: var(--text-muted); font-size: 0.85rem; text-align: center;">No se encontraron pacientes</li>';
