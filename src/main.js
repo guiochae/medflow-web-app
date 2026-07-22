@@ -15,7 +15,9 @@ import {
   saveDocument,
   saveDocumentsBatch,
   removeDocument,
-  purgeAllFirestoreData
+  purgeAllFirestoreData,
+  writeBatch,
+  doc
 } from './firebase.js';
 
 export { saveDocumentsBatch };
@@ -151,66 +153,87 @@ export async function saveAppState(state) {
   updateSidebarInfo(state);
 
   try {
-    // Sincronizar Pacientes con Firestore (solo modificados)
+    const batch = writeBatch(db);
+    let hasWrites = false;
+
+    // Helper interno para estructurar documentos dentro de las colecciones correspondientes
+    function addWriteToBatch(collectionName, docId, data) {
+      let targetCollection = 'multimedica';
+      let docData = { ...data };
+
+      if (collectionName === 'users') {
+        targetCollection = 'multimedica_users';
+      } else if (collectionName === 'patients') {
+        targetCollection = 'multimedica_pacientes';
+      } else {
+        docData._collectionType = collectionName;
+      }
+
+      const docRef = doc(db, targetCollection, docId);
+      batch.set(docRef, docData, { merge: true });
+      hasWrites = true;
+    }
+
+    // 1. Sincronizar Pacientes con Firestore (solo modificados)
     if (state.patients && Array.isArray(state.patients)) {
       state.patients.forEach(p => {
         if (p && p.id) {
           const prevP = lastSyncedState && lastSyncedState.patients && lastSyncedState.patients.find(x => x.id === p.id);
           const hasChanged = !prevP || JSON.stringify(prevP) !== JSON.stringify(p);
           if (hasChanged) {
-            saveDocument('patients', p.id, p);
+            addWriteToBatch('patients', p.id, p);
           }
         }
       });
     }
 
-    // Sincronizar Inventario de Farmacia (solo modificados)
+    // 2. Sincronizar Inventario de Farmacia (solo modificados)
     if (state.medications && Array.isArray(state.medications)) {
       state.medications.forEach(m => {
         if (m && m.id) {
           const prevM = lastSyncedState && lastSyncedState.medications && lastSyncedState.medications.find(x => x.id === m.id);
           const hasChanged = !prevM || JSON.stringify(prevM) !== JSON.stringify(m);
           if (hasChanged) {
-            saveDocument('medications', m.id, m);
+            addWriteToBatch('medications', m.id, m);
           }
         }
       });
     }
 
-    // Sincronizar Usuarios (solo modificados)
+    // 3. Sincronizar Usuarios (solo modificados)
     if (state.users && Array.isArray(state.users)) {
       state.users.forEach(u => {
         if (u && u.id) {
           const prevU = lastSyncedState && lastSyncedState.users && lastSyncedState.users.find(x => x.id === u.id);
           const hasChanged = !prevU || JSON.stringify(prevU) !== JSON.stringify(u);
           if (hasChanged) {
-            saveDocument('users', u.id, u);
+            addWriteToBatch('users', u.id, u);
           }
         }
       });
     }
 
-    // Sincronizar Ventas de Farmacia (solo modificados)
+    // 4. Sincronizar Ventas de Farmacia (solo modificados)
     if (state.pharmacySales && Array.isArray(state.pharmacySales)) {
       state.pharmacySales.forEach(s => {
         if (s && s.id) {
           const prevS = lastSyncedState && lastSyncedState.pharmacySales && lastSyncedState.pharmacySales.find(x => x.id === s.id);
           const hasChanged = !prevS || JSON.stringify(prevS) !== JSON.stringify(s);
           if (hasChanged) {
-            saveDocument('pharmacySales', s.id, s);
+            addWriteToBatch('pharmacySales', s.id, s);
           }
         }
       });
     }
 
-    // Sincronizar Catálogos de Laboratorio e Imagenología (solo modificados)
+    // 5. Sincronizar Catálogos de Laboratorio e Imagenología (solo modificados)
     if (state.laboratoryTests && Array.isArray(state.laboratoryTests)) {
       state.laboratoryTests.forEach(l => {
         if (l && l.id) {
           const prevL = lastSyncedState && lastSyncedState.laboratoryTests && lastSyncedState.laboratoryTests.find(x => x.id === l.id);
           const hasChanged = !prevL || JSON.stringify(prevL) !== JSON.stringify(l);
           if (hasChanged) {
-            saveDocument('laboratoryTests', l.id, l);
+            addWriteToBatch('laboratoryTests', l.id, l);
           }
         }
       });
@@ -221,25 +244,30 @@ export async function saveAppState(state) {
           const prevImg = lastSyncedState && lastSyncedState.imagingStudies && lastSyncedState.imagingStudies.find(x => x.id === img.id);
           const hasChanged = !prevImg || JSON.stringify(prevImg) !== JSON.stringify(img);
           if (hasChanged) {
-            saveDocument('imagingStudies', img.id, img);
+            addWriteToBatch('imagingStudies', img.id, img);
           }
         }
       });
     }
 
-    // Sincronizar Info de Clínica (solo modificada)
+    // 6. Sincronizar Info de Clínica (solo modificada)
     if (state.clinicInfo) {
       const prevClinic = lastSyncedState && lastSyncedState.clinicInfo;
       const hasChanged = !prevClinic || JSON.stringify(prevClinic) !== JSON.stringify(state.clinicInfo);
       if (hasChanged) {
-        saveDocument('clinicInfo', 'main', state.clinicInfo);
+        addWriteToBatch('clinicInfo', 'main', state.clinicInfo);
       }
+    }
+
+    // Confirmar y realizar todas las escrituras de forma atómica en un único lote
+    if (hasWrites) {
+      await batch.commit();
     }
 
     // Actualizar el estado de sincronización de referencia
     lastSyncedState = JSON.parse(JSON.stringify(state));
   } catch (err) {
-    console.warn("Error sincronizando cambios a Firestore:", err);
+    console.warn("Error sincronizando cambios a Firestore via Batch:", err);
   }
 }
 

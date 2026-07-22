@@ -1,7 +1,7 @@
-// src/firebase.js
-import { initializeApp } from 'firebase/app';
 import { 
-  getFirestore, 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager,
   collection, 
   doc, 
   getDocs, 
@@ -24,9 +24,13 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:248851715131:web:76de4f3fb5d6c6662d381e"
 };
 
-// Inicializar la App de Firebase, Auth y Firestore
+// Inicializar la App de Firebase, Auth y Firestore con Caché Local persistente (IndexedDB)
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+});
 
 // Forzar base de datos "default" para compatibilidad con lugamed-db
 if (db._databaseId) db._databaseId.database = "default";
