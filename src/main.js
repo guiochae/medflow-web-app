@@ -37,6 +37,7 @@ export async function purgeAllDatabases() {
 }
 
 let currentRoute = 'preconsulta';
+let lastSyncedState = null;
 
 // Función de encriptación de contraseñas (Hash SHA-256 con Salt)
 export function hashPassword(plainText) {
