@@ -61,7 +61,7 @@ function getAdminPasswordHash() {
 export const defaultAdminUser = {
   id: 'u-admin',
   name: 'Administrador',
-  role: 'Administrador',
+  role: 'administrador',
   password: getAdminPasswordHash(),
   modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
 };
