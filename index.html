@@ -9,6 +9,14 @@
   <meta name="description" content="LUGAMED 2.0 - Plataforma integral de gestión de consultorio médico inteligente.">
   <title>LUGAMED 2.0 | Gestión de Consultorio Médica</title>
   <link rel="stylesheet" href="./src/style.css">
+  <script>
+    window.addEventListener('error', function(e) {
+      alert("Error detectado en Medflow: " + e.message + "\nArchivo: " + e.filename + "\nLínea: " + e.lineno + ":" + e.colno + "\n\nPor favor reporta esto para solucionarlo.");
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      alert("Promesa rechazada en Medflow: " + e.reason + "\n\nPor favor reporta esto para solucionarlo.");
+    });
+  </script>
 </head>
 <body>
   <div id="login-container" style="display: none;"></div>
