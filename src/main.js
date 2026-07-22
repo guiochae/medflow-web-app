@@ -581,7 +581,16 @@ function initMobileDrawer() {
 }
 
 function initializeSidebar(loggedUser) {
-  const userObj = JSON.parse(loggedUser);
+  let userObj;
+  try {
+    userObj = JSON.parse(loggedUser);
+    if (!userObj || !userObj.id || !userObj.role) throw new Error("Invalid session data");
+  } catch (e) {
+    console.warn("Error parsing userObj inside initializeSidebar, clearing session:", e);
+    sessionStorage.removeItem('medflow_logged_user');
+    window.location.reload();
+    return;
+  }
   const sidebarUser = document.getElementById('sidebar-user-container');
   if (sidebarUser) {
     let roleIcon = '👤';
@@ -706,17 +715,46 @@ document.addEventListener('DOMContentLoaded', () => {
     // Suscribir render a cambios en tiempo real
     subscribeToStateUpdates((updatedState) => {
       const loggedUser = sessionStorage.getItem('medflow_logged_user');
+      let isValidSession = false;
       if (loggedUser) {
+        try {
+          const userObj = JSON.parse(loggedUser);
+          if (userObj && userObj.id && userObj.role) {
+            isValidSession = true;
+          }
+        } catch (e) {
+          sessionStorage.removeItem('medflow_logged_user');
+        }
+      }
+
+      if (isValidSession) {
         updateSidebarInfo(updatedState);
         router(currentRoute);
       } else {
-        renderLoginScreen();
+        if (appContainer) appContainer.style.display = 'none';
+        if (loginContainer) {
+          loginContainer.style.display = 'flex';
+          renderLoginScreen();
+        }
       }
     });
 
     // Validar sesión una vez que Firestore esté verificado y cargado
     const loggedUser = sessionStorage.getItem('medflow_logged_user');
-    if (!loggedUser) {
+    let isValidSession = false;
+    if (loggedUser) {
+      try {
+        const userObj = JSON.parse(loggedUser);
+        if (userObj && userObj.id && userObj.role) {
+          isValidSession = true;
+        }
+      } catch (e) {
+        console.warn("Sesión inválida detectada al cargar la página, limpiando...");
+        sessionStorage.removeItem('medflow_logged_user');
+      }
+    }
+
+    if (!isValidSession) {
       if (appContainer) appContainer.style.display = 'none';
       if (loginContainer) {
         loginContainer.style.display = 'flex';
