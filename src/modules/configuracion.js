@@ -1,5 +1,5 @@
 // src/modules/configuracion.js
-import { getAppState, saveAppState, removeFromFirestore, purgeAllDatabases } from '../main.js';
+import { getAppState, saveAppState, removeFromFirestore, purgeAllDatabases, saveDocumentsBatch } from '../main.js';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 
@@ -1278,6 +1278,7 @@ function processImportedRows(rows) {
     }
   });
 
+  const newItemsList = [];
   const startRow = (priceIdx === -1 && genericIdx === -1 && categoryIdx === -1 && unitIdx === -1 && referenceIdx === -1) ? 0 : 1;
 
   for (let i = startRow; i < rows.length; i++) {
@@ -1345,13 +1346,18 @@ function processImportedRows(rows) {
     }
 
     catalog.unshift(newItem);
+    newItemsList.push(newItem);
     count++;
   }
 
+  // Guardar estado localmente
   appState[activeCatalogType] = catalog;
-  saveAppState(appState);
+  localStorage.setItem('medflow_db', JSON.stringify(appState));
+  
+  // Renderizar la tabla de inmediato
   renderCatalogTable();
   
+  // Reset de campos de importación
   const importFile = document.getElementById('config-catalog-import-file');
   const importFileName = document.getElementById('import-file-name');
   const btnProcessImport = document.getElementById('btn-process-import-file');
@@ -1360,7 +1366,24 @@ function processImportedRows(rows) {
   if (importFileName) importFileName.textContent = 'Ningún archivo seleccionado';
   if (btnProcessImport) btnProcessImport.style.display = 'none';
 
-  alert(`🎉 Éxito: Se importaron ${count} elementos correctamente al catálogo.`);
+  // Guardar en Firestore en segundo plano usando lotes asíncronos para evitar bloquear el hilo principal
+  if (newItemsList.length > 0) {
+    (async () => {
+      try {
+        const chunkSize = 500;
+        for (let i = 0; i < newItemsList.length; i += chunkSize) {
+          const chunk = newItemsList.slice(i, i + chunkSize);
+          await saveDocumentsBatch(activeCatalogType, chunk);
+        }
+        alert(`🎉 Éxito: Se importaron ${count} elementos correctamente al catálogo.`);
+      } catch (err) {
+        console.error("Error al guardar lote en Firestore:", err);
+        alert("❌ Error al sincronizar los elementos importados con la base de datos en la nube.");
+      }
+    })();
+  } else {
+    alert("No se encontraron registros nuevos para importar.");
+  }
 }
 
 // ==========================================

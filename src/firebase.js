@@ -220,6 +220,32 @@ export async function saveDocument(collectionName, docId, data) {
   }
 }
 
+export async function saveDocumentsBatch(collectionName, items) {
+  try {
+    const batch = writeBatch(db);
+    items.forEach(item => {
+      let targetCollection = 'multimedica';
+      let docData = { ...item };
+
+      if (collectionName === 'users') {
+        targetCollection = 'multimedica_users';
+      } else if (collectionName === 'patients') {
+        targetCollection = 'multimedica_pacientes';
+      } else {
+        docData._collectionType = collectionName;
+      }
+
+      const docRef = doc(db, targetCollection, item.id);
+      batch.set(docRef, docData, { merge: true });
+    });
+    await batch.commit();
+    return true;
+  } catch (err) {
+    console.error(`Error guardando batch en ${collectionName}:`, err);
+    throw err;
+  }
+}
+
 export async function removeDocument(collectionName, docId) {
   try {
     let targetCollection = 'multimedica';

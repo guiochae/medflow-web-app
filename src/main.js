@@ -13,9 +13,12 @@ import {
   initRealtimeFirestore,
   subscribeToStateUpdates,
   saveDocument,
+  saveDocumentsBatch,
   removeDocument,
   purgeAllFirestoreData
 } from './firebase.js';
+
+export { saveDocumentsBatch };
 
 export async function purgeAllDatabases() {
   localStorage.clear();
