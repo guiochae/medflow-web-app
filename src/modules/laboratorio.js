@@ -1,6 +1,16 @@
 // src/modules/laboratorio.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
 
+function normalizeString(str) {
+  if (!str) return '';
+  return String(str)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
 // Listas temporales de estudios de laboratorio agregados en la orden externa activa
 let currentOrderLabs = [];
 
@@ -1044,14 +1054,15 @@ function renderLabBuilder(patient, doctors) {
         const combinedParameters = [];
 
         selectedStudyNames.forEach(studyName => {
-          const catalogItem = catalog.find(c => c.name === studyName);
+          const normStudyName = normalizeString(studyName);
+          const catalogItem = catalog.find(c => normalizeString(c.name) === normStudyName);
           if (catalogItem && catalogItem.parameters && catalogItem.parameters.length > 0) {
             catalogItem.parameters.forEach(p => {
               combinedParameters.push({
                 studyName,
                 name: p.name || studyName,
-                unit: p.unit || '',
-                normal: p.normal || 'Estable',
+                unit: p.unit && p.unit !== 'N/A' ? p.unit : '',
+                normal: p.normal && p.normal !== 'N/A' ? p.normal : '',
                 value: ''
               });
             });
@@ -1059,8 +1070,8 @@ function renderLabBuilder(patient, doctors) {
             combinedParameters.push({
               studyName,
               name: studyName,
-              unit: '',
-              normal: 'Estable',
+              unit: catalogItem && catalogItem.unit && catalogItem.unit !== 'N/A' ? catalogItem.unit : '',
+              normal: catalogItem && catalogItem.reference && catalogItem.reference !== 'N/A' ? catalogItem.reference : '',
               value: ''
             });
           }
@@ -1911,21 +1922,46 @@ function openResultsModal(study, customPatient, onSaveCallback) {
 
   resultsTitle.textContent = `Ingreso de Resultados: ${study.name}`;
   
+  const stateObj = getAppState();
+  const cloudCatalog = stateObj.laboratoryTests || [];
+
   const tableRowsHtml = (study.parameters || []).map((param, index) => {
-    // Buscar valores estándar en el catálogo local si vienen vacíos
-    let defaultUnit = param.unit || '';
-    let defaultNormal = param.normal || '';
+    let defaultUnit = param.unit && param.unit !== 'N/A' ? param.unit : '';
+    let defaultNormal = param.normal && param.normal !== 'N/A' ? param.normal : '';
 
     if (!defaultUnit || !defaultNormal) {
-      for (const catItem of LAB_STUDIES_CATALOG) {
-        const found = catItem.parameters && catItem.parameters.find(p => p.name === param.name);
-        if (found) {
-          if (!defaultUnit) defaultUnit = found.unit || '';
-          if (!defaultNormal) defaultNormal = found.normal || '';
-          break;
+      const normStudyName = normalizeString(param.studyName || study.name);
+      const normParamName = normalizeString(param.name);
+
+      // 1. Intentar buscar en el catálogo cargado en la nube (cargado por Excel)
+      const cloudStudy = cloudCatalog.find(c => normalizeString(c.name) === normStudyName);
+      if (cloudStudy) {
+        const foundParam = cloudStudy.parameters && cloudStudy.parameters.find(p => normalizeString(p.name) === normParamName);
+        if (foundParam) {
+          if (!defaultUnit) defaultUnit = foundParam.unit && foundParam.unit !== 'N/A' ? foundParam.unit : '';
+          if (!defaultNormal) defaultNormal = foundParam.normal && foundParam.normal !== 'N/A' ? foundParam.normal : '';
+        } else if (cloudStudy.parameters && cloudStudy.parameters.length === 1 && normParamName === normalizeString('Resultado General')) {
+          if (!defaultUnit) defaultUnit = cloudStudy.parameters[0].unit && cloudStudy.parameters[0].unit !== 'N/A' ? cloudStudy.parameters[0].unit : '';
+          if (!defaultNormal) defaultNormal = cloudStudy.parameters[0].normal && cloudStudy.parameters[0].normal !== 'N/A' ? cloudStudy.parameters[0].normal : '';
+        }
+      }
+
+      // 2. Si no se encontró, buscar en el catálogo estático predefinido
+      if (!defaultUnit || !defaultNormal) {
+        const staticStudy = LAB_STUDIES_CATALOG.find(c => normalizeString(c.name) === normStudyName);
+        if (staticStudy) {
+          const foundParam = staticStudy.parameters && staticStudy.parameters.find(p => normalizeString(p.name) === normParamName);
+          if (foundParam) {
+            if (!defaultUnit) defaultUnit = foundParam.unit && foundParam.unit !== 'N/A' ? foundParam.unit : '';
+            if (!defaultNormal) defaultNormal = foundParam.normal && foundParam.normal !== 'N/A' ? foundParam.normal : '';
+          }
         }
       }
     }
+
+    // Si después de buscar siguen siendo N/A, dejarlos vacíos para comodidad
+    if (defaultUnit === 'N/A') defaultUnit = '';
+    if (defaultNormal === 'N/A') defaultNormal = '';
 
     return `
       <tr style="border-bottom: 1px solid var(--border-color);">
