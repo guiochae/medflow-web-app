@@ -1654,8 +1654,12 @@ function renderLaboratoristaDashboard(container) {
       <div class="glass-card" style="padding: 1.5rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 10px;">
           <h3 style="color: var(--text-primary); font-family: var(--font-heading); margin: 0; font-size: 1.2rem;">📋 Solicitudes y Órdenes Clínicas</h3>
-          <div>
-            <select id="laboratorista-filter-stage" style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text-primary); outline: none;">
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <div style="position: relative; display: flex; align-items: center;">
+              <input type="text" id="laboratorista-search-patient" placeholder="Buscar por paciente..." style="padding: 8px 12px 8px 32px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text-primary); outline: none; width: 220px; font-size: 0.85rem;">
+              <span style="position: absolute; left: 10px; color: var(--text-muted); pointer-events: none; font-size: 0.85rem;">🔍</span>
+            </div>
+            <select id="laboratorista-filter-stage" style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text-primary); outline: none; font-size: 0.85rem;">
               <option value="todos">Todos los Estados</option>
               <option value="procesar">Pendientes de Procesar</option>
               <option value="ingresar_resultados">Ingresar Resultados</option>
@@ -1692,14 +1696,24 @@ function renderLaboratoristaDashboard(container) {
 
   const tableBody = document.getElementById('laboratorista-orders-table-body');
   const filterSelect = document.getElementById('laboratorista-filter-stage');
+  const searchInput = document.getElementById('laboratorista-search-patient');
 
-  function populateTable(filter = 'todos') {
+  function populateTable() {
     if (!tableBody) return;
     tableBody.innerHTML = '';
 
+    const filterVal = filterSelect ? filterSelect.value : 'todos';
+    const query = searchInput ? normalizeString(searchInput.value) : '';
+
     const filteredOrders = allOrders.filter(o => {
-      if (filter === 'todos') return true;
-      return o.stage === filter;
+      // Filtrar por estado
+      if (filterVal !== 'todos' && o.stage !== filterVal) return false;
+      // Filtrar por nombre de paciente
+      if (query) {
+        const normPatientName = normalizeString(o.patientName);
+        if (!normPatientName.includes(query)) return false;
+      }
+      return true;
     });
 
     if (filteredOrders.length === 0) {
@@ -1789,10 +1803,16 @@ function renderLaboratoristaDashboard(container) {
     });
   }
 
-  // Filtrado de estados
+  // Filtrado de estados y búsqueda
   if (filterSelect) {
-    filterSelect.onchange = (e) => {
-      populateTable(e.target.value);
+    filterSelect.onchange = () => {
+      populateTable();
+    };
+  }
+
+  if (searchInput) {
+    searchInput.oninput = () => {
+      populateTable();
     };
   }
 
