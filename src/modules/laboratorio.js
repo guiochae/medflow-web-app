@@ -1862,49 +1862,66 @@ function openResultsModal(study, customPatient, onSaveCallback) {
 
   resultsTitle.textContent = `Ingreso de Resultados: ${study.name}`;
   
-  const tableRowsHtml = (study.parameters || []).map((param, index) => `
-    <tr style="border-bottom: 1px solid var(--border-color);">
-      <td style="padding: 10px 12px;">
-        <strong style="color: var(--text-primary); font-size: 0.9rem;">${param.name}</strong>
-        ${param.studyName && param.studyName !== param.name ? `<div style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal; margin-top: 2px;">🧪 ${param.studyName}</div>` : ''}
-      </td>
-      <td style="padding: 8px 12px;">
-        <input type="text" name="param-val-${index}" value="${param.value || ''}" required placeholder="Ej. 110 o Negativo" style="
-          width: 100%;
-          padding: 8px 12px;
-          background: var(--bg-card, rgba(255,255,255,0.05));
-          border: 1px solid var(--border-color);
-          color: var(--text-primary);
-          border-radius: var(--radius-sm);
-          font-weight: 700;
-        ">
-      </td>
-      <td style="padding: 8px 12px;">
-        <input type="text" name="param-unit-${index}" value="${param.unit || ''}" placeholder="Ej. ml/min" style="
-          width: 100%;
-          padding: 8px 12px;
-          background: var(--bg-card, rgba(255,255,255,0.05));
-          border: 1px solid var(--border-color);
-          color: var(--text-muted);
-          border-radius: var(--radius-sm);
-        ">
-      </td>
-      <td style="padding: 8px 12px;">
-        <input type="text" name="param-ref-${index}" value="${param.normal || ''}" placeholder="Ej. 88 - 128 ml/min" style="
-          width: 100%;
-          padding: 8px 12px;
-          background: var(--bg-card, rgba(255,255,255,0.05));
-          border: 1px solid var(--border-color);
-          color: var(--text-muted);
-          border-radius: var(--radius-sm);
-        ">
-      </td>
-    </tr>
-  `).join('');
+  const tableRowsHtml = (study.parameters || []).map((param, index) => {
+    // Buscar valores estándar en el catálogo local si vienen vacíos
+    let defaultUnit = param.unit || '';
+    let defaultNormal = param.normal || '';
+
+    if (!defaultUnit || !defaultNormal) {
+      for (const catItem of LAB_STUDIES_CATALOG) {
+        const found = catItem.parameters && catItem.parameters.find(p => p.name === param.name);
+        if (found) {
+          if (!defaultUnit) defaultUnit = found.unit || '';
+          if (!defaultNormal) defaultNormal = found.normal || '';
+          break;
+        }
+      }
+    }
+
+    return `
+      <tr style="border-bottom: 1px solid var(--border-color);">
+        <td style="padding: 10px 12px;">
+          <strong style="color: var(--text-primary); font-size: 0.9rem;">${param.name}</strong>
+          ${param.studyName && param.studyName !== param.name ? `<div style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal; margin-top: 2px;">🧪 ${param.studyName}</div>` : ''}
+        </td>
+        <td style="padding: 8px 12px;">
+          <input type="text" name="param-val-${index}" value="${param.value || ''}" required placeholder="Ej. 110 o Negativo" style="
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: var(--radius-sm);
+            font-weight: 700;
+          ">
+        </td>
+        <td style="padding: 8px 12px;">
+          <input type="text" name="param-unit-${index}" value="${defaultUnit}" placeholder="Ninguna" style="
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            border-radius: var(--radius-sm);
+          ">
+        </td>
+        <td style="padding: 8px 12px;">
+          <input type="text" name="param-ref-${index}" value="${defaultNormal}" placeholder="Estable / Normal" style="
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg-card, rgba(255,255,255,0.05));
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            border-radius: var(--radius-sm);
+          ">
+        </td>
+      </tr>
+    `;
+  }).join('');
 
   resultsBody.innerHTML = `
     <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
-      Complete los resultados analíticos para cada uno de los estudios solicitados en esta orden.
+      Complete los resultados analíticos para cada uno de los estudios solicitados en esta orden. Las unidades y valores de referencia son completamente opcionales.
     </p>
     <div style="overflow-x: auto; margin-bottom: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
       <table class="results-table-input" style="width: 100%; border-collapse: collapse; text-align: left;">
@@ -1912,8 +1929,8 @@ function openResultsModal(study, customPatient, onSaveCallback) {
           <tr style="background: rgba(37, 99, 235, 0.12); border-bottom: 2px solid var(--accent-primary);">
             <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 35%;">Análisis / Parámetro</th>
             <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 25%;">Resultado Obtenido</th>
-            <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 18%;">Unidades</th>
-            <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 22%;">Valores de Referencia</th>
+            <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 18%;">Unidades (Opcional)</th>
+            <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 22%;">Valores de Referencia (Opcional)</th>
           </tr>
         </thead>
         <tbody>
