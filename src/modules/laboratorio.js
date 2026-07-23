@@ -1162,7 +1162,8 @@ function renderLabBuilder(patient, doctors) {
           studyNames: selectedStudyNames,
           stage: 'procesar',
           parameters: combinedParameters,
-          notes: ''
+          notes: '',
+          doctorName: stateObj.currentUser ? stateObj.currentUser.name : (pObj.assignedDoctorName || 'Dr. Carlos Mendoza')
         };
 
         pObj.localLabs.unshift(newLocalLabOrder);
@@ -1810,10 +1811,11 @@ function renderLaboratoristaDashboard(container) {
     const filteredOrders = allOrders.filter(o => {
       // Filtrar por estado
       if (filterVal !== 'todos' && o.stage !== filterVal) return false;
-      // Filtrar por nombre de paciente
+      // Filtrar por nombre de paciente o médico
       if (query) {
         const normPatientName = normalizeString(o.patientName);
-        if (!normPatientName.includes(query)) return false;
+        const normDoctorName = normalizeString(o.doctorName || (o.patientObj && o.patientObj.assignedDoctorName) || 'Dr. Carlos Mendoza');
+        if (!normPatientName.includes(query) && !normDoctorName.includes(query)) return false;
       }
       return true;
     });
