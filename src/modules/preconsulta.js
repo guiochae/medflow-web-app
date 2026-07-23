@@ -1,5 +1,5 @@
 // src/modules/preconsulta.js
-import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
+import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
 import logoUrl from '../assets/logo.jpg';
 
 export function renderPreconsulta(container) {
@@ -452,10 +452,15 @@ function renderPatientDetails() {
             <span>📍 Dirección: ${patient.address}</span>
           </p>
         </div>
-        <div style="display: flex; gap: 0.5rem;">
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
           <button class="btn btn-secondary" id="btn-edit-patient">
             <span>✏️</span> Editar Paciente
           </button>
+          ${isAdminUser() ? `
+            <button class="btn" id="btn-delete-patient" style="background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: none; font-weight: 600;">
+              <span>🗑️</span> Eliminar Paciente
+            </button>
+          ` : ''}
           <button class="btn btn-primary" id="btn-show-history-modal" onclick="window.openClinicalHistoryModal()">
             <span>📋</span> Historial Clínico Completo
           </button>
@@ -794,6 +799,23 @@ function renderPatientDetails() {
   if (btnEditPatient) {
     btnEditPatient.addEventListener('click', () => {
       showEditPatientForm(patient);
+    });
+  }
+
+  // Bind Delete Patient Button (Admin Only)
+  const btnDeletePatient = document.getElementById('btn-delete-patient');
+  if (btnDeletePatient) {
+    btnDeletePatient.addEventListener('click', async () => {
+      const confirmDelete = confirm(`⚠️ ADVERTENCIA DE ELIMINACIÓN:\n\n¿Está completamente seguro de que desea eliminar al paciente "${patient.name}" y todo su historial clínico de forma permanente?\n\nEsta acción no se puede deshacer.`);
+      if (confirmDelete) {
+        const stateObj = getAppState();
+        stateObj.patients = stateObj.patients.filter(p => p.id !== patient.id);
+        await saveAppState(stateObj);
+        alert("🗑️ Paciente eliminado exitosamente.");
+        setActivePatientId(null);
+        renderPatientList();
+        renderPatientDetails();
+      }
     });
   }
 

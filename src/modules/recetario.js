@@ -1,5 +1,5 @@
 // src/modules/recetario.js
-import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
+import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
 import { medicationsDatabase } from '../data/medicamentos.js';
 
 function searchMedications(query) {
@@ -363,15 +363,44 @@ function renderRecipeHistory(patient) {
     const medsCount = (r.medicines && Array.isArray(r.medicines)) ? r.medicines.length : 1;
 
     li.innerHTML = `
-      <div class="history-card-header">
+      <div class="history-card-header" style="position: relative; display: flex; justify-content: space-between; align-items: center;">
         <span>${dateFormatted}</span>
-        <span>${medsCount} med(s)</span>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span>${medsCount} med(s)</span>
+          ${isAdminUser() ? `
+            <button class="btn-delete-recipe" data-id="${r.id}" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 2px; font-size: 0.95rem; line-height: 1;" title="Eliminar Receta">🗑️</button>
+          ` : ''}
+        </div>
       </div>
       <div class="history-card-title">${r.doctorName || 'Médico Tratante'}</div>
       <div class="history-card-body" title="${medsList}">
         <strong>Medicamentos:</strong> ${medsList}
       </div>
     `;
+
+    const delBtn = li.querySelector('.btn-delete-recipe');
+    if (delBtn) {
+      delBtn.addEventListener('click', async (e) => {
+        e.stopPropagation(); // Evitar abrir la vista previa de la receta al hacer clic en borrar
+        const confirmDel = confirm(`⚠️ ATENCIÓN:\n\n¿Está completamente seguro de que desea eliminar permanentemente este registro de receta y su cobro asociado del día ${dateFormatted}?\n\nEsta acción es irreversible.`);
+        if (confirmDel) {
+          const stateObj = getAppState();
+          const pObj = stateObj.patients.find(p => p.id === patient.id);
+          if (pObj) {
+            // Eliminar la receta
+            pObj.prescriptions = (pObj.prescriptions || []).filter(item => item.id !== r.id);
+            // Eliminar cobro asociado de farmacia (si existe en el historial de facturación)
+            pObj.billingHistory = (pObj.billingHistory || []).filter(item => item.recipeId !== r.id);
+            
+            await saveAppState(stateObj);
+            alert("🗑️ Receta y cobro asociados eliminados correctamente.");
+            patient.prescriptions = pObj.prescriptions;
+            patient.billingHistory = pObj.billingHistory;
+            renderRecipeHistory(patient);
+          }
+        }
+      });
+    }
 
     // Clic para previsualizar/reimprimir
     li.addEventListener('click', () => {

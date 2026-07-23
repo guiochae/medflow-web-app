@@ -1,5 +1,5 @@
 // src/modules/consulta.js
-import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
+import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
 import { searchDiagnosticSuggestions } from '../data/cie10.js';
 
 // Estado temporal de la consulta activa (diagnósticos, estudios y tratamientos aceptados)
@@ -295,9 +295,14 @@ function renderConsultationHistory(patient) {
     const dxCodesText = (c.diagnosisCodes && Array.isArray(c.diagnosisCodes) && c.diagnosisCodes.length > 0) ? c.diagnosisCodes.join(', ') : (c.diagnosis || 'Z00.0');
 
     li.innerHTML = `
-      <div class="history-card-header">
+      <div class="history-card-header" style="position: relative; display: flex; justify-content: space-between; align-items: center;">
         <span>${dateFormatted}</span>
-        <span>${c.specialty || 'General'}</span>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span>${c.specialty || 'General'}</span>
+          ${isAdminUser() ? `
+            <button class="btn-delete-consultation" data-id="${c.id}" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 2px; font-size: 0.95rem; line-height: 1;" title="Eliminar Consulta">🗑️</button>
+          ` : ''}
+        </div>
       </div>
       <div class="history-card-title">${c.doctor || 'Médico Tratante'}</div>
       <div class="history-card-body" title="${c.reason || ''}">
@@ -309,6 +314,25 @@ function renderConsultationHistory(patient) {
         CIE-10: ${dxCodesText}
       </div>
     `;
+
+    const delBtn = li.querySelector('.btn-delete-consultation');
+    if (delBtn) {
+      delBtn.addEventListener('click', async (e) => {
+        e.stopPropagation(); // Evitar abrir el detalle de la consulta al hacer clic en borrar
+        const confirmDel = confirm(`⚠️ ATENCIÓN:\n\n¿Está completamente seguro de que desea eliminar permanentemente este registro de consulta médica de la fecha ${dateFormatted}?\n\nEsta acción es irreversible.`);
+        if (confirmDel) {
+          const stateObj = getAppState();
+          const pObj = stateObj.patients.find(p => p.id === patient.id);
+          if (pObj) {
+            pObj.consultations = (pObj.consultations || []).filter(item => item.id !== c.id);
+            await saveAppState(stateObj);
+            alert("🗑️ Consulta eliminada correctamente.");
+            patient.consultations = pObj.consultations;
+            renderConsultationHistory(patient);
+          }
+        }
+      });
+    }
 
     li.addEventListener('click', () => {
       showPastConsultationDetail(c);

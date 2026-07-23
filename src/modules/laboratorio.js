@@ -1,5 +1,5 @@
 // src/modules/laboratorio.js
-import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
+import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
 
 // Listas temporales de estudios de laboratorio agregados en la orden externa activa
 let currentOrderLabs = [];
@@ -890,6 +890,9 @@ function renderLabBuilder(patient, doctors) {
         <div style="display: flex; align-items: center; gap: 15px;">
           ${stageBadge}
           ${actionBtn}
+          ${isAdminUser() ? `
+            <button class="btn btn-danger btn-small" id="btn-del-lab-${study.id}" style="background: var(--accent-danger); border: none; color: #fff; padding: 6px 10px; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.8rem; line-height: 1;" title="Eliminar Orden">🗑️</button>
+          ` : ''}
         </div>
       `;
 
@@ -911,6 +914,26 @@ function renderLabBuilder(patient, doctors) {
         card.querySelector(`#btn-print-local-${study.id}`).addEventListener('click', () => {
           showLocalLabReportPrintWindow(study, patient);
         });
+      }
+
+      if (isAdminUser()) {
+        const delBtn = card.querySelector(`#btn-del-lab-${study.id}`);
+        if (delBtn) {
+          delBtn.addEventListener('click', async () => {
+            const confirmDel = confirm(`⚠️ ATENCIÓN:\n\n¿Está completamente seguro de que desea eliminar permanentemente esta orden de laboratorio (#${study.id})?\n\nEsta acción es irreversible.`);
+            if (confirmDel) {
+              const stateObj = getAppState();
+              const pObj = stateObj.patients.find(p => p.id === patient.id);
+              if (pObj) {
+                pObj.localLabs = (pObj.localLabs || []).filter(item => item.id !== study.id);
+                await saveAppState(stateObj);
+                alert("🗑️ Orden de laboratorio eliminada correctamente.");
+                patient.localLabs = pObj.localLabs;
+                renderLocalProcessList();
+              }
+            }
+          });
+        }
       }
     });
   }
@@ -1710,12 +1733,17 @@ function renderLaboratoristaDashboard(container) {
         <td style="padding: 12px 10px; font-size: 0.8rem; color: var(--text-muted);">${new Date(order.date).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' })}</td>
         <td style="padding: 12px 10px;">${studiesBadges}</td>
         <td style="padding: 12px 10px; text-align: center;">${stageBadge}</td>
-        <td style="padding: 12px 10px; text-align: center;">${actionBtn}</td>
+        <td style="padding: 12px 10px; text-align: center; white-space: nowrap;">
+          ${actionBtn}
+          ${isAdminUser() ? `
+            <button class="btn-delete-order" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 4px 6px; font-size: 0.95rem; line-height: 1; vertical-align: middle;" title="Eliminar Orden">🗑️</button>
+          ` : ''}
+        </td>
       `;
 
       // Al hacer clic en la fila se abre el modal de detalles
       row.addEventListener('click', (e) => {
-        if (e.target.closest('.btn-act-order')) return;
+        if (e.target.closest('.btn-act-order') || e.target.closest('.btn-delete-order')) return;
         openOrderDetailsModal(order, order.patientObj);
       });
 
@@ -1724,6 +1752,27 @@ function renderLaboratoristaDashboard(container) {
         e.stopPropagation();
         openOrderDetailsModal(order, order.patientObj);
       };
+
+      if (isAdminUser()) {
+        const delBtn = row.querySelector('.btn-delete-order');
+        if (delBtn) {
+          delBtn.onclick = (e) => {
+            e.stopPropagation();
+            const confirmDel = confirm(`⚠️ ATENCIÓN:\n\n¿Está completamente seguro de que desea eliminar permanentemente esta orden de laboratorio (#${order.id}) del paciente "${order.patientName}"?\n\nEsta acción es irreversible.`);
+            if (confirmDel) {
+              const stateObj = getAppState();
+              const pObj = stateObj.patients.find(p => p.id === order.patientObj.id);
+              if (pObj) {
+                pObj.localLabs = (pObj.localLabs || []).filter(item => item.id !== order.id);
+                saveAppState(stateObj).then(() => {
+                  alert("🗑️ Orden de laboratorio eliminada correctamente.");
+                  renderLaboratoristaDashboard(container);
+                });
+              }
+            }
+          };
+        }
+      }
 
       tableBody.appendChild(row);
     });

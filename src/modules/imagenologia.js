@@ -1,5 +1,5 @@
 // src/modules/imagenologia.js
-import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
+import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
 
 // Lista temporal de estudios de imagenología agregados en la orden externa activa
 let currentOrderImaging = [];
@@ -380,9 +380,14 @@ function renderOrderHistory(patient) {
       <ul style="display: flex; flex-direction: column; gap: 8px; list-style: none;">
         ${imgOrders.map(o => `
           <li class="history-card order-history-card" data-id="${o.id}" style="cursor: pointer;">
-            <div class="history-card-header">
+            <div class="history-card-header" style="position: relative; display: flex; justify-content: space-between; align-items: center;">
               <span>${new Date(o.date).toLocaleDateString()}</span>
-              <span style="font-size: 0.75rem; color: var(--accent-secondary); font-weight: 600;">🖼️ Imagen</span>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 0.75rem; color: var(--accent-secondary); font-weight: 600;">🖼️ Imagen</span>
+                ${isAdminUser() ? `
+                  <button class="btn-delete-img-order" data-id="${o.id}" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 2px; font-size: 0.95rem; line-height: 1;" title="Eliminar Orden">🗑️</button>
+                ` : ''}
+              </div>
             </div>
             <div class="history-card-title">${o.doctorName}</div>
             <div class="history-card-body" style="font-size: 0.75rem; color: var(--text-muted);">
@@ -404,9 +409,32 @@ function renderOrderHistory(patient) {
   `;
 
   container.querySelectorAll('.order-history-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const orderId = card.getAttribute('data-id');
-      const orderSelected = orders.find(o => o.id === orderId);
+    const orderId = card.getAttribute('data-id');
+    const orderSelected = orders.find(o => o.id === orderId);
+
+    if (isAdminUser()) {
+      const delBtn = card.querySelector('.btn-delete-img-order');
+      if (delBtn) {
+        delBtn.onclick = async (e) => {
+          e.stopPropagation();
+          const confirmDel = confirm(`⚠️ ATENCIÓN:\n\n¿Está completamente seguro de que desea eliminar permanentemente esta orden de imagenología del día ${new Date(orderSelected.date).toLocaleDateString()}?\n\nEsta acción es irreversible.`);
+          if (confirmDel) {
+            const stateObj = getAppState();
+            const pObj = stateObj.patients.find(p => p.id === patient.id);
+            if (pObj) {
+              pObj.studyOrders = (pObj.studyOrders || []).filter(item => item.id !== orderId);
+              await saveAppState(stateObj);
+              alert("🗑️ Orden de imagenología eliminada correctamente.");
+              patient.studyOrders = pObj.studyOrders;
+              renderOrderHistory(patient);
+            }
+          }
+        };
+      }
+    }
+
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-delete-img-order')) return;
       if (orderSelected) {
         showOrderPreviewModal(patient, orderSelected);
       }

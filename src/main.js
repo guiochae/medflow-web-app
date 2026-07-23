@@ -64,6 +64,19 @@ export function setActivePatientId(id) {
   activePatientId = id;
 }
 
+export function isAdminUser() {
+  const loggedUser = sessionStorage.getItem('medflow_logged_user');
+  if (!loggedUser) return false;
+  try {
+    const userObj = JSON.parse(loggedUser);
+    const roleLower = String(userObj.role || '').toLowerCase();
+    const nameLower = String(userObj.name || '').toLowerCase();
+    return roleLower.includes('administrador') || nameLower === 'administrador';
+  } catch (e) {
+    return false;
+  }
+}
+
 export function getAppState() {
   const adminUser = {
     id: 'Admin',
