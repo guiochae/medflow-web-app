@@ -349,3 +349,28 @@ export async function purgeAllFirestoreData() {
     return false;
   }
 }
+
+export async function purgeCollectionFromFirestore(collectionName) {
+  try {
+    const multimedicaSnap = await getDocs(collection(db, 'multimedica'));
+    if (!multimedicaSnap.empty) {
+      const batch = writeBatch(db);
+      let deletedCount = 0;
+      multimedicaSnap.docs.forEach(docSnap => {
+        const dId = docSnap.id;
+        const dData = docSnap.data();
+        if (dId !== 'state' && dData._collectionType === collectionName) {
+          batch.delete(docSnap.ref);
+          deletedCount++;
+        }
+      });
+      if (deletedCount > 0) {
+        await batch.commit();
+      }
+    }
+    return true;
+  } catch (err) {
+    console.error(`Error purgando colección ${collectionName} de Firestore:`, err);
+    throw err;
+  }
+}

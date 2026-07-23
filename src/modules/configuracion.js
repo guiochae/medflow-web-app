@@ -1,5 +1,5 @@
 // src/modules/configuracion.js
-import { getAppState, saveAppState, removeFromFirestore, purgeAllDatabases, saveDocumentsBatch } from '../main.js';
+import { getAppState, saveAppState, removeFromFirestore, purgeAllDatabases, saveDocumentsBatch, purgeCollectionFromFirestore } from '../main.js';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 
@@ -395,7 +395,10 @@ export function renderConfiguracion(container) {
           </div>
 
         </div>
-        <div class="modal-footer">
+        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+          <button type="button" class="btn" id="btn-purge-this-catalog" style="background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: none; font-weight: 700; font-size: 0.85rem; padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; display: none;">
+            <span>🗑️</span> Vaciar Catálogo Completo
+          </button>
           <button class="btn btn-secondary" id="btn-close-catalog-modal">Cerrar</button>
         </div>
       </div>
@@ -442,7 +445,7 @@ export function renderConfiguracion(container) {
     container.dataset.configListenersInitialized = 'true';
 
     // 1. Click events
-    container.addEventListener('click', (e) => {
+    container.addEventListener('click', async (e) => {
       // sub-module tab switcher
       const tabBtn = e.target.closest('.tab-btn');
       if (tabBtn && tabBtn.id && tabs[tabBtn.id]) {
@@ -561,6 +564,49 @@ export function renderConfiguracion(container) {
       e.preventDefault();
       const configModal = document.getElementById('config-catalog-modal');
       if (configModal) configModal.style.display = 'none';
+      return;
+    }
+
+    // Purgar catálogo completo
+    const purgeCatalogBtn = e.target.closest('#btn-purge-this-catalog');
+    if (purgeCatalogBtn) {
+      e.preventDefault();
+      if (!activeCatalogType) return;
+      
+      let catalogLabel = '';
+      if (activeCatalogType === 'medications') catalogLabel = 'Farmacia';
+      else if (activeCatalogType === 'laboratoryTests') catalogLabel = 'Laboratorio';
+      else if (activeCatalogType === 'imagingStudies') catalogLabel = 'Imagenología';
+      else return;
+
+      const confirmPurge = confirm(`⚠️ ADVERTENCIA CRÍTICA:\n\n¿Está completamente seguro de que desea eliminar todos los elementos del catálogo de "${catalogLabel}"?\n\nSe borrarán todos los productos/exámenes de esta base de datos en la nube y esta acción no se puede deshacer.`);
+      if (confirmPurge) {
+        const promptConfirm = prompt(`Para confirmar la eliminación completa del catálogo de "${catalogLabel}", escriba "ELIMINAR" a continuación:`);
+        if (promptConfirm === 'ELIMINAR') {
+          try {
+            purgeCatalogBtn.disabled = true;
+            purgeCatalogBtn.textContent = 'Procesando...';
+
+            // Purgar de Firestore
+            await purgeCollectionFromFirestore(activeCatalogType);
+
+            // Purgar localmente
+            const stateObj = getAppState();
+            stateObj[activeCatalogType] = [];
+            await saveAppState(stateObj);
+
+            alert(`🗑️ El catálogo de "${catalogLabel}" ha sido vaciado completamente.`);
+            openCatalogConfig(activeCatalogType);
+          } catch (err) {
+            alert('Error al intentar borrar el catálogo de la nube: ' + err.message);
+          } finally {
+            purgeCatalogBtn.disabled = false;
+            purgeCatalogBtn.innerHTML = '<span>🗑️</span> Vaciar Catálogo Completo';
+          }
+        } else {
+          alert('Acción cancelada. La palabra clave no coincide.');
+        }
+      }
       return;
     }
 
@@ -998,8 +1044,16 @@ function openCatalogConfig(type) {
   if (importFileName) importFileName.textContent = 'Ningún archivo seleccionado';
   if (btnProcessImport) btnProcessImport.style.display = 'none';
 
-  // Mostrar modal
+  // Mostrar modal y ajustar visibilidad del botón de vaciado
   configModal.style.display = 'flex';
+  const purgeBtn = document.getElementById('btn-purge-this-catalog');
+  if (purgeBtn) {
+    if (type === 'consultationTypes') {
+      purgeBtn.style.display = 'none';
+    } else {
+      purgeBtn.style.display = 'inline-block';
+    }
+  }
 
   // Ajustar campos específicos
   if (type === 'medications') {

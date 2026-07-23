@@ -16,11 +16,12 @@ import {
   saveDocumentsBatch,
   removeDocument,
   purgeAllFirestoreData,
+  purgeCollectionFromFirestore,
   writeBatch,
   doc
 } from './firebase.js';
 
-export { saveDocumentsBatch };
+export { saveDocumentsBatch, purgeCollectionFromFirestore };
 
 export async function purgeAllDatabases() {
   localStorage.clear();
