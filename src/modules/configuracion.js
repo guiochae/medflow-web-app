@@ -598,7 +598,19 @@ export function renderConfiguracion(container) {
             alert(`🗑️ El catálogo de "${catalogLabel}" ha sido vaciado completamente.`);
             openCatalogConfig(activeCatalogType);
           } catch (err) {
-            alert('Error al intentar borrar el catálogo de la nube: ' + err.message);
+            let msg = 'Error al intentar borrar el catálogo de la nube: ' + err.message;
+            if (err.message.includes('Quota limit exceeded') || err.message.includes('quota') || err.message.includes('limit exceeded')) {
+              msg = `⚠️ Límite de Cuota de Google Cloud/Firestore Excedido.\n\nEl sistema gratuito superó el límite diario de lecturas. Para solucionarlo definitivamente, se recomienda activar el plan "Blaze" (pago por uso) en la consola de Firebase del proyecto.\n\nMientras tanto, se ha vaciado el catálogo localmente en este navegador para que pueda realizar la nueva importación de inmediato sin bloqueos ni duplicados.`;
+              try {
+                const stateObj = getAppState();
+                stateObj[activeCatalogType] = [];
+                await saveAppState(stateObj);
+                openCatalogConfig(activeCatalogType);
+              } catch (localErr) {
+                console.error(localErr);
+              }
+            }
+            alert(msg);
           } finally {
             purgeCatalogBtn.disabled = false;
             purgeCatalogBtn.innerHTML = '<span>🗑️</span> Vaciar Catálogo Completo';
@@ -1450,7 +1462,11 @@ function processImportedRows(rows) {
         alert(`🎉 Éxito: Se importaron ${count} elementos correctamente al catálogo.`);
       } catch (err) {
         console.error("Error al guardar lote en Firestore:", err);
-        alert("❌ Error al sincronizar los elementos importados con la base de datos en la nube.");
+        let msg = "❌ Error al sincronizar los elementos importados con la base de datos en la nube.";
+        if (err.message && (err.message.includes('Quota limit exceeded') || err.message.includes('quota') || err.message.includes('limit exceeded'))) {
+          msg = "⚠️ Sincronización en la Nube Demorada por Límite de Cuota de Firestore.\n\nLos elementos se importaron correctamente en la base de datos local y puede utilizarlos de inmediato. Se sincronizarán automáticamente con la nube en cuanto la cuota diaria se restablezca (a las 12:00 AM PST) o al activar el plan Blaze.";
+        }
+        alert(msg);
       }
     })();
   } else {

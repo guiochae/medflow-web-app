@@ -12,7 +12,9 @@ import {
   updateDoc, 
   deleteDoc, 
   onSnapshot,
-  writeBatch
+  writeBatch,
+  query,
+  where
 } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 
@@ -352,21 +354,14 @@ export async function purgeAllFirestoreData() {
 
 export async function purgeCollectionFromFirestore(collectionName) {
   try {
-    const multimedicaSnap = await getDocs(collection(db, 'multimedica'));
-    if (!multimedicaSnap.empty) {
+    const q = query(collection(db, 'multimedica'), where('_collectionType', '==', collectionName));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
       const batch = writeBatch(db);
-      let deletedCount = 0;
-      multimedicaSnap.docs.forEach(docSnap => {
-        const dId = docSnap.id;
-        const dData = docSnap.data();
-        if (dId !== 'state' && dData._collectionType === collectionName) {
-          batch.delete(docSnap.ref);
-          deletedCount++;
-        }
+      snap.docs.forEach(docSnap => {
+        batch.delete(docSnap.ref);
       });
-      if (deletedCount > 0) {
-        await batch.commit();
-      }
+      await batch.commit();
     }
     return true;
   } catch (err) {
