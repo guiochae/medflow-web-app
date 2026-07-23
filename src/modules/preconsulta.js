@@ -726,6 +726,14 @@ function renderPatientDetails() {
               <!-- Cargar dinámicamente -->
             </div>
           </div>
+
+          <!-- Órdenes de Imagenología Locales -->
+          <div style="grid-column: 1 / -1; margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 2rem;">
+            <h3 style="color: var(--accent-secondary); margin-bottom: 1rem;">🖼️ Órdenes de Imagenología Locales</h3>
+            <div id="local-img-results-list-preconsulta" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px;">
+              <!-- Cargar dinámicamente -->
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1246,13 +1254,89 @@ function renderStudies(patient) {
           <div style="background: rgba(255,255,255,0.02); padding: 8px; border-radius: 4px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.05);">
             ${paramsHtml}
           </div>
-          <button class="btn btn-secondary btn-small" id="btn-view-local-${l.id}" style="width: 100%;">📄 Ver Reporte Completo</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary btn-small" id="btn-view-local-${l.id}" style="flex: 1;">📄 Reporte</button>
+            <button class="btn btn-danger btn-small" id="btn-del-local-lab-${l.id}" style="padding: 6px 10px; background: var(--accent-danger); border: none; color: #fff; cursor: pointer; border-radius: var(--radius-sm);" title="Eliminar Estudio">🗑️</button>
+          </div>
         `;
 
         localList.appendChild(card);
 
         card.querySelector(`#btn-view-local-${l.id}`).addEventListener('click', () => {
           showLocalLabReportPrintWindow(l, patient);
+        });
+
+        card.querySelector(`#btn-del-local-lab-${l.id}`).addEventListener('click', async () => {
+          const confirmDel = confirm(`⚠️ ADVERTENCIA DE ELIMINACIÓN:\n\n¿Está completamente seguro de que desea eliminar permanentemente este estudio de laboratorio y todos sus resultados?\n\nEsta acción se sincronizará con la nube y no se podrá deshacer.`);
+          if (confirmDel) {
+            const stateObj = getAppState();
+            const pObj = stateObj.patients.find(p => p.id === patient.id);
+            if (pObj) {
+              pObj.localLabs = (pObj.localLabs || []).filter(item => item.id !== l.id);
+              await saveAppState(stateObj);
+              alert("🗑️ Estudio de laboratorio eliminado correctamente.");
+              renderStudies(pObj);
+            }
+          }
+        });
+      });
+    }
+  }
+
+  // Renderizar Órdenes de Imagenología Locales
+  const localImgList = document.getElementById('local-img-results-list-preconsulta');
+  if (localImgList) {
+    localImgList.innerHTML = '';
+    const imgOrders = patient.studyOrders || [];
+    const completedImaging = imgOrders.filter(o => o.studies && o.studies.some(s => s.type === 'imaging'));
+
+    if (completedImaging.length === 0) {
+      localImgList.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 1.5rem; background: rgba(255,255,255,0.01); border-radius: 4px; border: 1px dashed var(--border-color);">Ninguna orden de imagenología local para este paciente.</div>';
+    } else {
+      completedImaging.forEach(o => {
+        const card = document.createElement('div');
+        card.className = 'glass-card';
+        card.style.padding = '15px';
+        card.style.border = '1px solid var(--border-color)';
+        card.style.borderRadius = 'var(--radius-sm)';
+
+        const studiesText = o.studies.filter(s => s.type === 'imaging').map(s => s.name).join(', ');
+
+        card.innerHTML = `
+          <h4 style="color: var(--accent-secondary); font-size: 0.95rem; margin-bottom: 5px; font-family: var(--font-heading);">Estudios de Imagen</h4>
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px;">Fecha: ${new Date(o.date).toLocaleDateString()}</div>
+          <div style="background: rgba(255,255,255,0.02); padding: 8px; border-radius: 4px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.05); font-size: 0.8rem; line-height: 1.4;">
+            <strong>Estudios:</strong> ${studiesText}
+            ${o.generalNotes ? `<div style="margin-top: 6px; border-top: 1px dashed var(--border-color); padding-top: 6px; color: var(--text-muted);"><strong>Notas:</strong> ${o.generalNotes}</div>` : ''}
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary btn-small" id="btn-view-local-img-${o.id}" style="flex: 1;">📄 Vista Previa</button>
+            <button class="btn btn-danger btn-small" id="btn-del-local-img-${o.id}" style="padding: 6px 10px; background: var(--accent-danger); border: none; color: #fff; cursor: pointer; border-radius: var(--radius-sm);" title="Eliminar Orden">🗑️</button>
+          </div>
+        `;
+
+        localImgList.appendChild(card);
+
+        card.querySelector(`#btn-view-local-img-${o.id}`).addEventListener('click', () => {
+          if (window.showOrderPreviewModal) {
+            window.showOrderPreviewModal(patient, o);
+          } else {
+            alert("No se pudo cargar la vista previa. Por favor, intente desde el módulo de Imagenología.");
+          }
+        });
+
+        card.querySelector(`#btn-del-local-img-${o.id}`).addEventListener('click', async () => {
+          const confirmDel = confirm(`⚠️ ADVERTENCIA DE ELIMINACIÓN:\n\n¿Está completamente seguro de que desea eliminar permanentemente esta orden de imagenología?\n\nEsta acción se sincronizará con la nube y no se podrá deshacer.`);
+          if (confirmDel) {
+            const stateObj = getAppState();
+            const pObj = stateObj.patients.find(p => p.id === patient.id);
+            if (pObj) {
+              pObj.studyOrders = (pObj.studyOrders || []).filter(item => item.id !== o.id);
+              await saveAppState(stateObj);
+              alert("🗑️ Orden de imagenología eliminada correctamente.");
+              renderStudies(pObj);
+            }
+          }
         });
       });
     }

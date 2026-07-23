@@ -748,7 +748,8 @@ function renderImgBuilder(patient, doctors) {
   renderExternalStudiesTable();
 }
 
-function showOrderPreviewModal(patient, order) {
+export function showOrderPreviewModal(patient, order) {
+  window.showOrderPreviewModal = showOrderPreviewModal;
   const modal = document.getElementById('prescription-print-modal');
   const previewContainer = document.getElementById('prescription-preview-content');
   const printActionBtn = document.getElementById('btn-print-action');
@@ -839,3 +840,5 @@ function showOrderPreviewModal(patient, order) {
 
   modal.style.display = 'flex';
 }
+
+window.showOrderPreviewModal = showOrderPreviewModal;
