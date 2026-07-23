@@ -11,6 +11,84 @@ function normalizeString(str) {
     .replace(/\s+/g, ' ');
 }
 
+function classifyLabResult(valueStr, normalStr) {
+  if (!valueStr) return { color: '#333333', label: 'Sin Valor' };
+  
+  const cleanVal = String(valueStr).replace(',', '.');
+  const val = parseFloat(cleanVal.replace(/[^\d\.]/g, ''));
+  if (isNaN(val)) {
+    const vStr = String(valueStr).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    if (vStr.includes('negativo') || vStr === 'no reactivo' || vStr === 'normal') {
+      return { color: '#2e7d32', label: 'Óptimo' }; // Verde
+    }
+    if (vStr.includes('positivo') || vStr.includes('reactivo') || vStr.includes('alto') || vStr.includes('alterado')) {
+      return { color: '#d32f2f', label: 'Peligroso' }; // Rojo
+    }
+    return { color: '#333333', label: 'Cualitativo' };
+  }
+
+  const normClean = String(normalStr || '').replace(/\s+/g, ' ');
+  const rangeRegex = /(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)/g;
+  const matches = [...normClean.matchAll(rangeRegex)];
+
+  if (matches.length > 0) {
+    let isWithinAnyRange = false;
+    let isMarginal = false;
+    
+    for (const match of matches) {
+      const min = parseFloat(match[1]);
+      const max = parseFloat(match[2]);
+      
+      if (val >= min && val <= max) {
+        isWithinAnyRange = true;
+        break;
+      }
+      
+      const toleranceMin = min - (min * 0.15);
+      const toleranceMax = max + (max * 0.15);
+      if (val >= toleranceMin && val <= toleranceMax) {
+        isMarginal = true;
+      }
+    }
+    
+    if (isWithinAnyRange) {
+      return { color: '#2e7d32', label: 'Óptimo' }; // Verde
+    }
+    if (isMarginal) {
+      return { color: '#ed6c02', label: 'Regular' }; // Naranja
+    }
+    return { color: '#d32f2f', label: 'Peligroso' }; // Rojo
+  }
+
+  const limitRegex = /(?:hasta|menos de|menos|under|<|<=)\s*(\d+(?:\.\d+)?)/i;
+  const limitMatch = normClean.match(limitRegex);
+  if (limitMatch) {
+    const maxVal = parseFloat(limitMatch[1]);
+    if (val <= maxVal) {
+      return { color: '#2e7d32', label: 'Óptimo' }; // Verde
+    }
+    if (val <= maxVal * 1.15) {
+      return { color: '#ed6c02', label: 'Regular' }; // Naranja
+    }
+    return { color: '#d32f2f', label: 'Peligroso' }; // Rojo
+  }
+
+  const minLimitRegex = /(?:mayor a|mas de|mayor|>|>=)\s*(\d+(?:\.\d+)?)/i;
+  const minLimitMatch = normClean.match(minLimitRegex);
+  if (minLimitMatch) {
+    const minVal = parseFloat(minLimitMatch[1]);
+    if (val >= minVal) {
+      return { color: '#2e7d32', label: 'Óptimo' }; // Verde
+    }
+    if (val >= minVal * 0.85) {
+      return { color: '#ed6c02', label: 'Regular' }; // Naranja
+    }
+    return { color: '#d32f2f', label: 'Peligroso' }; // Rojo
+  }
+
+  return { color: '#2e7d32', label: 'Óptimo' };
+}
+
 // Listas temporales de estudios de laboratorio agregados en la orden externa activa
 let currentOrderLabs = [];
 
@@ -1366,14 +1444,38 @@ export function showLocalLabReportPrintWindow(study, patient) {
   const ageDt = new Date(diffMs);
   const age = Math.abs(ageDt.getUTCFullYear() - 1970);
 
-  const parametersRows = study.parameters.map(p => `
-    <tr style="border-bottom: 1px solid #ddd;">
-      <td style="padding: 10px; font-weight: 600; text-align: left; font-size: 0.9rem; font-family: sans-serif;">${p.name}</td>
-      <td style="padding: 10px; text-align: center; font-weight: bold; color: #1e3a8a; font-size: 0.9rem; font-family: sans-serif;">${p.value || 'N/A'}</td>
-      <td style="padding: 10px; text-align: center; color: #555; font-size: 0.9rem; font-family: sans-serif;">${p.unit || '-'}</td>
-      <td style="padding: 10px; text-align: center; color: #555; font-size: 0.9rem; font-style: italic; font-family: sans-serif;">${p.normal || '-'}</td>
-    </tr>
-  `).join('');
+  const parametersRows = study.parameters.map(p => {
+    const classification = classifyLabResult(p.value, p.normal);
+    let badgeHtml = '';
+    if (p.value) {
+      badgeHtml = `
+        <span style="
+          display: inline-block;
+          padding: 2px 6px;
+          font-size: 0.72rem;
+          font-weight: bold;
+          color: #ffffff;
+          background-color: ${classification.color};
+          border-radius: 4px;
+          margin-left: 8px;
+          vertical-align: middle;
+          text-transform: uppercase;
+          font-family: sans-serif;
+        ">${classification.label}</span>
+      `;
+    }
+
+    return `
+      <tr style="border-bottom: 1px solid #ddd;">
+        <td style="padding: 10px; font-weight: 600; text-align: left; font-size: 0.9rem; font-family: sans-serif;">${p.name}</td>
+        <td style="padding: 10px; text-align: center; font-weight: bold; color: ${classification.color}; font-size: 0.95rem; font-family: sans-serif; white-space: nowrap;">
+          ${p.value || 'N/A'} ${badgeHtml}
+        </td>
+        <td style="padding: 10px; text-align: center; color: #555; font-size: 0.9rem; font-family: sans-serif;">${p.unit || '-'}</td>
+        <td style="padding: 10px; text-align: center; color: #555; font-size: 0.9rem; font-style: italic; font-family: sans-serif;">${p.normal || '-'}</td>
+      </tr>
+    `;
+  }).join('');
 
   printWindow.document.write(`
     <!DOCTYPE html>
