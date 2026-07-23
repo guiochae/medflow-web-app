@@ -183,6 +183,24 @@ export function initRealtimeFirestore(onFirstLoad) {
         if (dId === 'state' || !dData._collectionType) return; // Ignorar el estado de Multimedica original
 
         const type = dData._collectionType;
+
+        if (dId === 'catalog_medications') {
+          meds.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_laboratoryTests') {
+          labs.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_imagingStudies') {
+          imgs.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_consultationTypes') {
+          types.push(...(dData.items || []));
+          return;
+        }
+
         const cleanDoc = { id: dId, ...dData };
         delete cleanDoc._collectionType;
 
@@ -241,6 +259,11 @@ export async function saveDocument(collectionName, docId, data) {
 
 export async function saveDocumentsBatch(collectionName, items) {
   try {
+    const isCatalog = ['medications', 'laboratoryTests', 'imagingStudies', 'consultationTypes'].includes(collectionName);
+    if (isCatalog) {
+      return true; // No-op: handled atomically in saveAppState
+    }
+
     const batch = writeBatch(db);
     items.forEach(item => {
       let targetCollection = 'multimedica';
@@ -267,6 +290,11 @@ export async function saveDocumentsBatch(collectionName, items) {
 
 export async function removeDocument(collectionName, docId) {
   try {
+    const isCatalog = ['medications', 'laboratoryTests', 'imagingStudies', 'consultationTypes'].includes(collectionName);
+    if (isCatalog) {
+      return true; // No-op: handled atomically in saveAppState
+    }
+
     let targetCollection = 'multimedica';
     if (collectionName === 'users') {
       targetCollection = 'multimedica_users';
@@ -354,7 +382,7 @@ export async function purgeAllFirestoreData() {
 
 export async function purgeCollectionFromFirestore(collectionName) {
   try {
-    const q = query(collection(db, 'multimedica'), where('_collectionType', '==', collectionName));
+    const q = query(collection(db, 'multimedica'), where('_collectionType', 'in', [collectionName, 'catalog_' + collectionName]));
     const snap = await getDocs(q);
     if (!snap.empty) {
       const batch = writeBatch(db);
@@ -363,6 +391,17 @@ export async function purgeCollectionFromFirestore(collectionName) {
       });
       await batch.commit();
     }
+    
+    // También intentar borrar el documento con ID catalog_collectionName directamente por si no tiene el campo _collectionType
+    try {
+      const directRef = doc(db, 'multimedica', 'catalog_' + collectionName);
+      const batch2 = writeBatch(db);
+      batch2.delete(directRef);
+      await batch2.commit();
+    } catch (e) {
+      console.warn("Direct delete of catalog doc failed or already deleted:", e);
+    }
+
     return true;
   } catch (err) {
     console.error(`Error purgando colección ${collectionName} de Firestore:`, err);

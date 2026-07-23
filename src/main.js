@@ -202,17 +202,15 @@ export async function saveAppState(state) {
       });
     }
 
-    // 2. Sincronizar Inventario de Farmacia (solo modificados)
+    // 2. Sincronizar Inventario de Farmacia (Catálogo Completo Empaquetado)
     if (state.medications && Array.isArray(state.medications)) {
-      state.medications.forEach(m => {
-        if (m && m.id) {
-          const prevM = lastSyncedState && lastSyncedState.medications && lastSyncedState.medications.find(x => x.id === m.id);
-          const hasChanged = !prevM || JSON.stringify(prevM) !== JSON.stringify(m);
-          if (hasChanged) {
-            addWriteToBatch('medications', m.id, m);
-          }
-        }
-      });
+      const prevM = lastSyncedState && lastSyncedState.medications;
+      const hasChanged = !prevM || JSON.stringify(prevM) !== JSON.stringify(state.medications);
+      if (hasChanged) {
+        const docRef = doc(db, 'multimedica', 'catalog_medications');
+        batch.set(docRef, { _collectionType: 'catalog_medications', items: state.medications });
+        hasWrites = true;
+      }
     }
 
     // 3. Sincronizar Usuarios (solo modificados)
@@ -241,28 +239,33 @@ export async function saveAppState(state) {
       });
     }
 
-    // 5. Sincronizar Catálogos de Laboratorio e Imagenología (solo modificados)
+    // 5. Sincronizar Catálogos de Laboratorio, Imagenología y Consulta (Empaquetados)
     if (state.laboratoryTests && Array.isArray(state.laboratoryTests)) {
-      state.laboratoryTests.forEach(l => {
-        if (l && l.id) {
-          const prevL = lastSyncedState && lastSyncedState.laboratoryTests && lastSyncedState.laboratoryTests.find(x => x.id === l.id);
-          const hasChanged = !prevL || JSON.stringify(prevL) !== JSON.stringify(l);
-          if (hasChanged) {
-            addWriteToBatch('laboratoryTests', l.id, l);
-          }
-        }
-      });
+      const prevL = lastSyncedState && lastSyncedState.laboratoryTests;
+      const hasChanged = !prevL || JSON.stringify(prevL) !== JSON.stringify(state.laboratoryTests);
+      if (hasChanged) {
+        const docRef = doc(db, 'multimedica', 'catalog_laboratoryTests');
+        batch.set(docRef, { _collectionType: 'catalog_laboratoryTests', items: state.laboratoryTests });
+        hasWrites = true;
+      }
     }
     if (state.imagingStudies && Array.isArray(state.imagingStudies)) {
-      state.imagingStudies.forEach(img => {
-        if (img && img.id) {
-          const prevImg = lastSyncedState && lastSyncedState.imagingStudies && lastSyncedState.imagingStudies.find(x => x.id === img.id);
-          const hasChanged = !prevImg || JSON.stringify(prevImg) !== JSON.stringify(img);
-          if (hasChanged) {
-            addWriteToBatch('imagingStudies', img.id, img);
-          }
-        }
-      });
+      const prevImg = lastSyncedState && lastSyncedState.imagingStudies;
+      const hasChanged = !prevImg || JSON.stringify(prevImg) !== JSON.stringify(state.imagingStudies);
+      if (hasChanged) {
+        const docRef = doc(db, 'multimedica', 'catalog_imagingStudies');
+        batch.set(docRef, { _collectionType: 'catalog_imagingStudies', items: state.imagingStudies });
+        hasWrites = true;
+      }
+    }
+    if (state.consultationTypes && Array.isArray(state.consultationTypes)) {
+      const prevTypes = lastSyncedState && lastSyncedState.consultationTypes;
+      const hasChanged = !prevTypes || JSON.stringify(prevTypes) !== JSON.stringify(state.consultationTypes);
+      if (hasChanged) {
+        const docRef = doc(db, 'multimedica', 'catalog_consultationTypes');
+        batch.set(docRef, { _collectionType: 'catalog_consultationTypes', items: state.consultationTypes });
+        hasWrites = true;
+      }
     }
 
     // 6. Sincronizar Info de Clínica (solo modificada)
