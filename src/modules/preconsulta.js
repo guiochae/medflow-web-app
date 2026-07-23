@@ -1,5 +1,5 @@
-// src/modules/preconsulta.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
+import { showLocalLabReportPrintWindow } from './laboratorio.js';
 import logoUrl from '../assets/logo.jpg';
 
 export function renderPreconsulta(container) {
@@ -1344,7 +1344,7 @@ function renderStudies(patient) {
 }
 
 // Ventana de Impresión de Resultados Locales de Laboratorio
-export function showLocalLabReportPrintWindow(study, patient) {
+export function showLocalLabReportPrintWindow_OLD(study, patient) {
   const printWindow = window.open('', '_blank');
   if (!printWindow) {
     alert("Por favor, permite las ventanas emergentes (popups) para poder imprimir los resultados.");
@@ -1825,7 +1825,7 @@ function showClinicalHistoryModal(patient) {
                   <tbody>
                     ${(l.parameters || []).map(p => `
                       <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <td style="padding: 6px; font-weight: 600;">${p.name}</td>
+                        <td style="padding: 6px; font-weight: 600;">${p.name === 'Resultado General' ? (p.studyName || l.name) : p.name}</td>
                         <td style="padding: 6px; color: var(--accent-success); font-weight: bold;">${p.value || 'N/A'}</td>
                         <td style="padding: 6px; color: var(--text-muted);">${p.unit || '-'}</td>
                         <td style="padding: 6px; color: var(--text-muted);">${p.normal || '-'}</td>
