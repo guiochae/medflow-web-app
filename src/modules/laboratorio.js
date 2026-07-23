@@ -897,11 +897,15 @@ function renderLabBuilder(patient, doctors) {
 
       if (study.stage === 'procesar') {
         card.querySelector(`#btn-proc-${study.id}`).addEventListener('click', () => {
-          openResultsModal(study);
+          openResultsModal(study, patient, () => {
+            renderLocalProcessList();
+          });
         });
       } else if (study.stage === 'ingresar_resultados') {
         card.querySelector(`#btn-res-${study.id}`).addEventListener('click', () => {
-          openResultsModal(study);
+          openResultsModal(study, patient, () => {
+            renderLocalProcessList();
+          });
         });
       } else if (study.stage === 'completado') {
         card.querySelector(`#btn-print-local-${study.id}`).addEventListener('click', () => {
@@ -1080,122 +1084,7 @@ function renderLabBuilder(patient, doctors) {
     openChecklist('externo');
   });
 
-  // --- INGRESO DE RESULTADOS EN MODAL TIPO TABLA ---
-  const resultsModal = document.getElementById('results-entry-modal');
-  const resultsTitle = document.getElementById('results-modal-title');
-  const resultsBody = document.getElementById('results-modal-body');
-  const btnCloseResults = document.getElementById('btn-close-results');
-  const btnCancelResults = document.getElementById('btn-cancel-results');
-  const resultsForm = document.getElementById('results-entry-form');
 
-  function openResultsModal(study, customPatient) {
-    if (!resultsModal || !resultsBody) return;
-
-    resultsTitle.textContent = `Ingreso de Resultados: ${study.name}`;
-    
-    const tableRowsHtml = (study.parameters || []).map((param, index) => `
-      <tr style="border-bottom: 1px solid var(--border-color);">
-        <td style="padding: 10px 12px;">
-          <strong style="color: var(--text-primary); font-size: 0.9rem;">${param.name}</strong>
-          ${param.studyName && param.studyName !== param.name ? `<div style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal; margin-top: 2px;">🧪 ${param.studyName}</div>` : ''}
-        </td>
-        <td style="padding: 8px 12px;">
-          <input type="text" name="param-val-${index}" value="${param.value || ''}" required placeholder="Ej. 110 o Negativo" style="
-            width: 100%;
-            padding: 8px 12px;
-            background: var(--bg-card, rgba(255,255,255,0.05));
-            border: 1px solid var(--border-color);
-            color: var(--text-primary);
-            border-radius: var(--radius-sm);
-            font-weight: 700;
-          ">
-        </td>
-        <td style="padding: 8px 12px;">
-          <input type="text" name="param-unit-${index}" value="${param.unit || ''}" placeholder="Ej. ml/min" style="
-            width: 100%;
-            padding: 8px 12px;
-            background: var(--bg-card, rgba(255,255,255,0.05));
-            border: 1px solid var(--border-color);
-            color: var(--text-muted);
-            border-radius: var(--radius-sm);
-          ">
-        </td>
-        <td style="padding: 8px 12px;">
-          <input type="text" name="param-ref-${index}" value="${param.normal || ''}" placeholder="Ej. 88 - 128 ml/min" style="
-            width: 100%;
-            padding: 8px 12px;
-            background: var(--bg-card, rgba(255,255,255,0.05));
-            border: 1px solid var(--border-color);
-            color: var(--text-muted);
-            border-radius: var(--radius-sm);
-          ">
-        </td>
-      </tr>
-    `).join('');
-
-    resultsBody.innerHTML = `
-      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
-        Complete los resultados analíticos para cada uno de los estudios solicitados en esta orden.
-      </p>
-      <div style="overflow-x: auto; margin-bottom: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
-        <table class="results-table-input" style="width: 100%; border-collapse: collapse; text-align: left;">
-          <thead>
-            <tr style="background: rgba(37, 99, 235, 0.12); border-bottom: 2px solid var(--accent-primary);">
-              <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 35%;">Análisis / Parámetro</th>
-              <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 25%;">Resultado Obtenido</th>
-              <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 18%;">Unidades</th>
-              <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 22%;">Valores de Referencia</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tableRowsHtml}
-          </tbody>
-        </table>
-      </div>
-    `;
-
-    resultsModal.style.display = 'flex';
-
-    resultsForm.onsubmit = (e) => {
-      e.preventDefault();
-      
-      const targetPatient = customPatient || patient;
-      const stateObj = getAppState();
-      const pObj = stateObj.patients.find(p => p.id === targetPatient.id);
-      const sObj = pObj.localLabs.find(s => s.id === study.id);
-
-      if (sObj && sObj.parameters) {
-        sObj.parameters.forEach((param, index) => {
-          const valEl = resultsForm.elements[`param-val-${index}`];
-          const unitEl = resultsForm.elements[`param-unit-${index}`];
-          const refEl = resultsForm.elements[`param-ref-${index}`];
-
-          if (valEl) param.value = valEl.value;
-          if (unitEl) param.unit = unitEl.value;
-          if (refEl) param.normal = refEl.value;
-        });
-
-        sObj.stage = 'completado';
-        saveAppState(stateObj);
-        if (patient && patient.id === targetPatient.id) {
-          patient.localLabs = pObj.localLabs;
-        }
-      }
-
-      resultsModal.style.display = 'none';
-      
-      const roleLower = String(stateObj.currentUser && stateObj.currentUser.role || '').toLowerCase();
-      if (roleLower.includes('laboratorista') || roleLower.includes('laboratorio')) {
-        renderLaboratoristaDashboard(document.getElementById('app'));
-      } else {
-        renderLocalProcessList();
-      }
-    };
-  }
-
-  const hideResults = () => { resultsModal.style.display = 'none'; };
-  if (btnCloseResults) btnCloseResults.onclick = hideResults;
-  if (btnCancelResults) btnCancelResults.onclick = hideResults;
 
   // --- TABLA DE ESTUDIOS EXTERNOS ---
   const externalTableBody = document.getElementById('external-studies-table-body');
@@ -1958,4 +1847,128 @@ function openOrderDetailsModal(order, patientObj) {
       }
     };
   }
+}
+
+// --- MODAL GLOBAL DE INGRESO DE RESULTADOS ---
+function openResultsModal(study, customPatient, onSaveCallback) {
+  const resultsModal = document.getElementById('results-entry-modal');
+  const resultsTitle = document.getElementById('results-modal-title');
+  const resultsBody = document.getElementById('results-modal-body');
+  const btnCloseResults = document.getElementById('btn-close-results');
+  const btnCancelResults = document.getElementById('btn-cancel-results');
+  const resultsForm = document.getElementById('results-entry-form');
+
+  if (!resultsModal || !resultsBody) return;
+
+  resultsTitle.textContent = `Ingreso de Resultados: ${study.name}`;
+  
+  const tableRowsHtml = (study.parameters || []).map((param, index) => `
+    <tr style="border-bottom: 1px solid var(--border-color);">
+      <td style="padding: 10px 12px;">
+        <strong style="color: var(--text-primary); font-size: 0.9rem;">${param.name}</strong>
+        ${param.studyName && param.studyName !== param.name ? `<div style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal; margin-top: 2px;">🧪 ${param.studyName}</div>` : ''}
+      </td>
+      <td style="padding: 8px 12px;">
+        <input type="text" name="param-val-${index}" value="${param.value || ''}" required placeholder="Ej. 110 o Negativo" style="
+          width: 100%;
+          padding: 8px 12px;
+          background: var(--bg-card, rgba(255,255,255,0.05));
+          border: 1px solid var(--border-color);
+          color: var(--text-primary);
+          border-radius: var(--radius-sm);
+          font-weight: 700;
+        ">
+      </td>
+      <td style="padding: 8px 12px;">
+        <input type="text" name="param-unit-${index}" value="${param.unit || ''}" placeholder="Ej. ml/min" style="
+          width: 100%;
+          padding: 8px 12px;
+          background: var(--bg-card, rgba(255,255,255,0.05));
+          border: 1px solid var(--border-color);
+          color: var(--text-muted);
+          border-radius: var(--radius-sm);
+        ">
+      </td>
+      <td style="padding: 8px 12px;">
+        <input type="text" name="param-ref-${index}" value="${param.normal || ''}" placeholder="Ej. 88 - 128 ml/min" style="
+          width: 100%;
+          padding: 8px 12px;
+          background: var(--bg-card, rgba(255,255,255,0.05));
+          border: 1px solid var(--border-color);
+          color: var(--text-muted);
+          border-radius: var(--radius-sm);
+        ">
+      </td>
+    </tr>
+  `).join('');
+
+  resultsBody.innerHTML = `
+    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+      Complete los resultados analíticos para cada uno de los estudios solicitados en esta orden.
+    </p>
+    <div style="overflow-x: auto; margin-bottom: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+      <table class="results-table-input" style="width: 100%; border-collapse: collapse; text-align: left;">
+        <thead>
+          <tr style="background: rgba(37, 99, 235, 0.12); border-bottom: 2px solid var(--accent-primary);">
+            <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 35%;">Análisis / Parámetro</th>
+            <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 25%;">Resultado Obtenido</th>
+            <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 18%;">Unidades</th>
+            <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 22%;">Valores de Referencia</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRowsHtml}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  resultsModal.style.display = 'flex';
+
+  resultsForm.onsubmit = (e) => {
+    e.preventDefault();
+    
+    if (!customPatient) {
+      alert("Error: No se pudo identificar el paciente.");
+      return;
+    }
+
+    const stateObj = getAppState();
+    const pObj = stateObj.patients.find(p => p.id === customPatient.id);
+    if (!pObj) {
+      alert("Error: Paciente no encontrado.");
+      return;
+    }
+    const sObj = pObj.localLabs.find(s => s.id === study.id);
+
+    if (sObj && sObj.parameters) {
+      sObj.parameters.forEach((param, index) => {
+        const valEl = resultsForm.elements[`param-val-${index}`];
+        const unitEl = resultsForm.elements[`param-unit-${index}`];
+        const refEl = resultsForm.elements[`param-ref-${index}`];
+
+        if (valEl) param.value = valEl.value;
+        if (unitEl) param.unit = unitEl.value;
+        if (refEl) param.normal = refEl.value;
+      });
+
+      sObj.stage = 'completado';
+      saveAppState(stateObj);
+    }
+
+    resultsModal.style.display = 'none';
+    
+    if (typeof onSaveCallback === 'function') {
+      onSaveCallback();
+    } else {
+      const roleLower = String(stateObj.currentUser && stateObj.currentUser.role || '').toLowerCase();
+      if (roleLower.includes('laboratorista') || roleLower.includes('laboratorio')) {
+        renderLaboratoristaDashboard(document.getElementById('app'));
+      }
+    }
+  };
+
+  const hideResults = () => { resultsModal.style.display = 'none'; };
+  if (btnCloseResults) btnCloseResults.onclick = hideResults;
+  if (btnCancelResults) btnCancelResults.onclick = hideResults;
 }
