@@ -454,7 +454,7 @@ function renderConsultationForm(patient, doctors) {
       <div style="background: rgba(0, 242, 254, 0.04); border: 1px solid rgba(0, 242, 254, 0.15); padding: 12px; border-radius: var(--radius-sm); margin-bottom: 1.5rem; font-size: 0.85rem; display: flex; align-items: center; justify-content: space-between;">
         <div>
           📌 <strong>Signos vitales de preconsulta disponibles:</strong> 
-          T: ${latestVitals.temp}°C | P.A: ${latestVitals.bp_systolic}/${latestVitals.bp_diastolic} mmHg | F.C: ${latestVitals.heart_rate} lpm | SPO2: ${latestVitals.oxygen}% | Peso: ${latestVitals.weight}kg
+          T: ${latestVitals.temp}°C | P.A: ${latestVitals.bp_systolic}/${latestVitals.bp_diastolic} mmHg | F.C: ${latestVitals.heart_rate} lpm | SPO2: ${latestVitals.oxygen}% | Peso: ${latestVitals.weight}kg${latestVitals.glucose !== undefined && latestVitals.glucose !== null ? ` | GLT: ${latestVitals.glucose} mg/dL` : ''}
         </div>
         <div style="font-weight: bold; color: var(--accent-primary);">IMC: ${latestVitals.bmi}</div>
       </div>

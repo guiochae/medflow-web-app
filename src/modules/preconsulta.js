@@ -524,6 +524,10 @@ function renderPatientDetails() {
               <label for="v-height">Talla / Estatura (m)</label>
               <input type="number" step="0.01" id="v-height" required placeholder="Ej. 1.70">
             </div>
+            <div class="form-group">
+              <label for="v-glucose">Glucosa Capilar (GLT) (mg/dL)</label>
+              <input type="number" id="v-glucose" placeholder="Ej. 95">
+            </div>
           </div>
           <div style="display: flex; justify-content: flex-end; margin-top: 1rem;">
             <button type="submit" class="btn btn-primary">Grabar Signos Vitales</button>
@@ -544,6 +548,7 @@ function renderPatientDetails() {
                 <th>Peso</th>
                 <th>Estatura</th>
                 <th>IMC</th>
+                <th>Glucosa (GLT)</th>
               </tr>
             </thead>
             <tbody id="table-vitals-body">
@@ -847,6 +852,8 @@ function renderPatientDetails() {
     const oxygen = parseInt(document.getElementById('v-oxygen').value);
     const weight = parseFloat(document.getElementById('v-weight').value);
     const height = parseFloat(document.getElementById('v-height').value);
+    const glucoseEl = document.getElementById('v-glucose');
+    const glucose = glucoseEl && glucoseEl.value ? parseInt(glucoseEl.value) : null;
     
     // Calcular IMC
     const bmi = parseFloat((weight / (height * height)).toFixed(1));
@@ -861,7 +868,8 @@ function renderPatientDetails() {
       weight,
       height,
       bmi,
-      oxygen
+      oxygen,
+      glucose
     };
 
     const stateObj = getAppState();
@@ -1061,6 +1069,12 @@ function renderVitals(patient) {
       <div class="vital-title">📊 IMC (${bmiDesc})</div>
       <div class="vital-value ${bmiClass}">${latest.bmi}<span class="vital-unit"></span></div>
     </div>
+    ${latest.glucose !== undefined && latest.glucose !== null ? `
+    <div class="vital-card">
+      <div class="vital-title">🍭 Glucosa Capilar (GLT)</div>
+      <div class="vital-value">${latest.glucose}<span class="vital-unit"> mg/dL</span></div>
+    </div>
+    ` : ''}
   `;
 
   // Pre-llenar el formulario con los últimos datos por comodidad
@@ -1072,6 +1086,11 @@ function renderVitals(patient) {
   document.getElementById('v-oxygen').value = latest.oxygen;
   document.getElementById('v-weight').value = latest.weight;
   document.getElementById('v-height').value = latest.height;
+  
+  const glucoseInput = document.getElementById('v-glucose');
+  if (glucoseInput) {
+    glucoseInput.value = (latest.glucose !== undefined && latest.glucose !== null) ? latest.glucose : '';
+  }
 
   // Llenar tabla
   vitals.forEach(v => {
@@ -1087,6 +1106,7 @@ function renderVitals(patient) {
       <td>${v.weight} kg</td>
       <td>${v.height} m</td>
       <td><strong>${v.bmi}</strong></td>
+      <td>${v.glucose !== undefined && v.glucose !== null ? `${v.glucose} mg/dL` : '-'}</td>
     `;
     tableBody.appendChild(row);
   });
@@ -1660,6 +1680,7 @@ function showClinicalHistoryModal(patient) {
               <th>Peso</th>
               <th>Talla</th>
               <th>IMC</th>
+              <th>Glucosa (GLT)</th>
             </tr>
           </thead>
           <tbody>
@@ -1674,6 +1695,7 @@ function showClinicalHistoryModal(patient) {
                 <td>${v.weight || '-'} kg</td>
                 <td>${v.height || '-'} m</td>
                 <td>${v.bmi || '-'}</td>
+                <td>${v.glucose !== undefined && v.glucose !== null ? `${v.glucose} mg/dL` : '-'}</td>
               </tr>
             `).join('')}
           </tbody>
