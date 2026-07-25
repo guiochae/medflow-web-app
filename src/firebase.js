@@ -14,7 +14,8 @@ import {
   onSnapshot,
   writeBatch,
   query,
-  where
+  where,
+  getDocsFromCache
 } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 
@@ -171,6 +172,7 @@ export function initRealtimeFirestore(onFirstLoad) {
     loadedCollections++;
     if (loadedCollections >= totalCollections) {
       firestoreState.isLoaded = true;
+      notifySubscribers();
       if (typeof onFirstLoad === 'function') onFirstLoad(firestoreState);
     }
   }
@@ -192,8 +194,17 @@ export function initRealtimeFirestore(onFirstLoad) {
       }
       notifySubscribers();
       checkFirstLoad();
-    }, (error) => {
+    }, async (error) => {
       console.warn("Firestore fallback (users):", error);
+      try {
+        const cacheSnap = await getDocsFromCache(collection(db, 'multimedica_users'));
+        if (!cacheSnap.empty) {
+          firestoreState.users = cacheSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          notifySubscribers();
+        }
+      } catch (cacheErr) {
+        console.warn("No se pudo leer usuarios del caché nativo:", cacheErr);
+      }
       if (!firestoreState.users || firestoreState.users.length === 0) {
         firestoreState.users = [defaultAdminUser];
       }
@@ -205,8 +216,18 @@ export function initRealtimeFirestore(onFirstLoad) {
       firestoreState.patients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       notifySubscribers();
       checkFirstLoad();
-    }, (error) => {
+    }, async (error) => {
       console.warn("Firestore fallback (patients):", error);
+      try {
+        const cacheSnap = await getDocsFromCache(collection(db, 'multimedica_pacientes'));
+        if (!cacheSnap.empty) {
+          firestoreState.patients = cacheSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          console.log(`Recuperados ${cacheSnap.size} pacientes desde caché nativo.`);
+          notifySubscribers();
+        }
+      } catch (cacheErr) {
+        console.warn("No se pudo leer pacientes del caché nativo:", cacheErr);
+      }
       checkFirstLoad();
     });
 
@@ -264,8 +285,65 @@ export function initRealtimeFirestore(onFirstLoad) {
 
       notifySubscribers();
       checkFirstLoad();
-    }, (error) => {
+    }, async (error) => {
       console.warn("Firestore fallback (multimedica):", error);
+      try {
+        const cacheSnap = await getDocsFromCache(collection(db, 'multimedica'));
+        if (!cacheSnap.empty) {
+          const meds = [];
+          const sales = [];
+          const labs = [];
+          const imgs = [];
+          const types = [];
+          let clinic = null;
+
+          cacheSnap.docs.forEach(docSnap => {
+            const dId = docSnap.id;
+            const dData = docSnap.data();
+            if (dId === 'state' || !dData._collectionType) return;
+
+            const type = dData._collectionType;
+
+            if (dId === 'catalog_medications') {
+              meds.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_laboratoryTests') {
+              labs.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_imagingStudies') {
+              imgs.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_consultationTypes') {
+              types.push(...(dData.items || []));
+              return;
+            }
+
+            const cleanDoc = { id: dId, ...dData };
+            delete cleanDoc._collectionType;
+
+            if (type === 'medications') meds.push(cleanDoc);
+            else if (type === 'pharmacySales') sales.push(cleanDoc);
+            else if (type === 'laboratoryTests') labs.push(cleanDoc);
+            else if (type === 'imagingStudies') imgs.push(cleanDoc);
+            else if (type === 'consultationTypes') types.push(cleanDoc);
+            else if (type === 'clinicInfo') clinic = cleanDoc;
+          });
+
+          firestoreState.medications = meds;
+          firestoreState.pharmacySales = sales;
+          firestoreState.laboratoryTests = labs;
+          firestoreState.imagingStudies = imgs;
+          firestoreState.consultationTypes = types;
+          if (clinic) firestoreState.clinicInfo = clinic;
+
+          notifySubscribers();
+        }
+      } catch (cacheErr) {
+        console.warn("No se pudo leer catálogo del caché nativo:", cacheErr);
+      }
       checkFirstLoad();
     });
 
