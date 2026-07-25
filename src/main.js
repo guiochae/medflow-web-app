@@ -18,7 +18,8 @@ import {
   purgeAllFirestoreData,
   purgeCollectionFromFirestore,
   writeBatch,
-  doc
+  doc,
+  saveStateToLocalCache
 } from './firebase.js';
 
 export { saveDocumentsBatch, purgeCollectionFromFirestore };
@@ -167,7 +168,26 @@ export function resetToOfficialDatabase() {
 export async function saveAppState(state) {
   updateSidebarInfo(state);
 
+  // Sincronizar de inmediato el estado en memoria para reactividad local offline
+  if (state.patients) firestoreState.patients = state.patients;
+  if (state.users) firestoreState.users = state.users;
+  if (state.medications) firestoreState.medications = state.medications;
+  if (state.pharmacySales) firestoreState.pharmacySales = state.pharmacySales;
+  if (state.laboratoryTests) firestoreState.laboratoryTests = state.laboratoryTests;
+  if (state.imagingStudies) firestoreState.imagingStudies = state.imagingStudies;
+  if (state.consultationTypes) firestoreState.consultationTypes = state.consultationTypes;
+  if (state.clinicInfo) firestoreState.clinicInfo = state.clinicInfo;
+
+  // Persistir cambios en caché local inmediatamente por si Firestore falla (ej. cuota excedida)
+  saveStateToLocalCache();
+
   try {
+    // Si lastSyncedState no se ha inicializado, usar el estado actual como punto de partida
+    // para evitar escribir documentos no modificados y proteger la cuota de escritura
+    if (!lastSyncedState) {
+      lastSyncedState = JSON.parse(JSON.stringify(state));
+    }
+
     const batch = writeBatch(db);
     let hasWrites = false;
 

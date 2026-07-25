@@ -125,7 +125,7 @@ function loadStateFromLocalCache() {
   }
 }
 
-function saveStateToLocalCache() {
+export function saveStateToLocalCache() {
   try {
     localStorage.setItem('medflow_firestore_cache', JSON.stringify({
       users: firestoreState.users,
