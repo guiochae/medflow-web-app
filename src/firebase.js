@@ -37,18 +37,14 @@ try {
     localCache: persistentLocalCache({
       tabManager: persistentMultipleTabManager()
     })
-  });
+  }, "default");
   console.log("Firestore con caché persistente inicializado con éxito.");
 } catch (e) {
   console.warn("Fallo al inicializar Firestore con caché persistente, usando getFirestore estándar:", e);
-  dbInstance = getFirestore(app);
+  dbInstance = getFirestore(app, "default");
 }
 
 export const db = dbInstance;
-
-// Forzar base de datos "default" para compatibilidad con lugamed-db
-if (db._databaseId) db._databaseId.database = "default";
-if (db._delegate && db._delegate._databaseId) db._delegate._databaseId.database = "default";
 
 export { 
   collection, 
@@ -102,6 +98,52 @@ export const firestoreState = {
   isLoaded: false
 };
 
+// Funciones de persistencia del estado en el almacenamiento del navegador (localStorage)
+function loadStateFromLocalCache() {
+  try {
+    const cached = localStorage.getItem('medflow_firestore_cache');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed) {
+        if (Array.isArray(parsed.users) && parsed.users.length > 0) firestoreState.users = parsed.users;
+        if (Array.isArray(parsed.patients)) firestoreState.patients = parsed.patients;
+        if (Array.isArray(parsed.medications)) firestoreState.medications = parsed.medications;
+        if (Array.isArray(parsed.pharmacySales)) firestoreState.pharmacySales = parsed.pharmacySales;
+        if (Array.isArray(parsed.laboratoryTests)) firestoreState.laboratoryTests = parsed.laboratoryTests;
+        if (Array.isArray(parsed.imagingStudies)) firestoreState.imagingStudies = parsed.imagingStudies;
+        if (Array.isArray(parsed.consultationTypes)) firestoreState.consultationTypes = parsed.consultationTypes;
+        if (parsed.clinicInfo) firestoreState.clinicInfo = parsed.clinicInfo;
+        
+        // Marcar como cargado inicialmente para no bloquear el flujo si Firestore falla
+        firestoreState.isLoaded = true;
+        console.log("Caché local de Firestore cargado desde localStorage.");
+      }
+    }
+  } catch (e) {
+    console.warn("No se pudo cargar el caché de localStorage:", e);
+  }
+}
+
+function saveStateToLocalCache() {
+  try {
+    localStorage.setItem('medflow_firestore_cache', JSON.stringify({
+      users: firestoreState.users,
+      patients: firestoreState.patients,
+      medications: firestoreState.medications,
+      pharmacySales: firestoreState.pharmacySales,
+      laboratoryTests: firestoreState.laboratoryTests,
+      imagingStudies: firestoreState.imagingStudies,
+      consultationTypes: firestoreState.consultationTypes,
+      clinicInfo: firestoreState.clinicInfo
+    }));
+  } catch (e) {
+    console.warn("No se pudo guardar en localStorage:", e);
+  }
+}
+
+// Cargar estado inicial desde caché local por prevención
+loadStateFromLocalCache();
+
 // Callbacks para notificar cambios a la interfaz cuando la base remota cambie
 const updateSubscribers = [];
 
@@ -112,6 +154,7 @@ export function subscribeToStateUpdates(callback) {
 }
 
 function notifySubscribers() {
+  saveStateToLocalCache();
   updateSubscribers.forEach(cb => {
     try { cb(firestoreState); } catch (err) { console.error(err); }
   });
