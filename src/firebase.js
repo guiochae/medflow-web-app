@@ -18,7 +18,6 @@ import {
   getDocsFromCache
 } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
-import medflowDb from './data/medflow_db.json';
 
 // Configuración de Firebase para Medflow Web App (apuntando a lugamed-db)
 const firebaseConfig = {
@@ -119,29 +118,10 @@ function loadStateFromLocalCache() {
         // Marcar como cargado inicialmente para no bloquear el flujo si Firestore falla
         firestoreState.isLoaded = true;
         console.log("Caché local de Firestore cargado desde localStorage.");
-        return;
       }
     }
-    
-    // Si no hay datos en localStorage (primera carga), sembrar con los datos migrados oficiales de medflowDb
-    if (medflowDb) {
-      if (Array.isArray(medflowDb.users)) firestoreState.users = medflowDb.users;
-      if (Array.isArray(medflowDb.patients)) firestoreState.patients = medflowDb.patients;
-      if (Array.isArray(medflowDb.medications)) firestoreState.medications = medflowDb.medications;
-      if (Array.isArray(medflowDb.pharmacySales)) firestoreState.pharmacySales = medflowDb.pharmacySales;
-      if (Array.isArray(medflowDb.laboratoryTests)) firestoreState.laboratoryTests = medflowDb.laboratoryTests;
-      if (Array.isArray(medflowDb.imagingStudies)) firestoreState.imagingStudies = medflowDb.imagingStudies;
-      if (Array.isArray(medflowDb.consultationTypes)) firestoreState.consultationTypes = medflowDb.consultationTypes;
-      if (medflowDb.clinicInfo) firestoreState.clinicInfo = medflowDb.clinicInfo;
-      
-      firestoreState.isLoaded = true;
-      console.log("Caché local sembrado con datos oficiales desde medflow_db.json.");
-      
-      // Guardar en localStorage inmediatamente para que los cambios futuros tengan persistencia local
-      saveStateToLocalCache();
-    }
   } catch (e) {
-    console.warn("No se pudo cargar el caché de localStorage ni sembrar la base local:", e);
+    console.warn("No se pudo cargar el caché de localStorage:", e);
   }
 }
 
