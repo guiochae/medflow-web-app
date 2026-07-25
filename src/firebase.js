@@ -166,15 +166,26 @@ export function initRealtimeFirestore(onFirstLoad) {
   const auth = getAuth(app);
   let loadedCollections = 0;
   const totalCollections = 3; // multimedica_users, multimedica_pacientes, multimedica
+  let hasFiredFirstLoad = false;
 
   function checkFirstLoad() {
-    if (firestoreState.isLoaded) return;
+    if (hasFiredFirstLoad) return;
     loadedCollections++;
     if (loadedCollections >= totalCollections) {
+      hasFiredFirstLoad = true;
       firestoreState.isLoaded = true;
       notifySubscribers();
       if (typeof onFirstLoad === 'function') onFirstLoad(firestoreState);
     }
+  }
+
+  // Si el caché local ya fue precargado al iniciar, levantar la UI inmediatamente
+  if (firestoreState.isLoaded) {
+    hasFiredFirstLoad = true;
+    setTimeout(() => {
+      notifySubscribers();
+      if (typeof onFirstLoad === 'function') onFirstLoad(firestoreState);
+    }, 0);
   }
 
   signInAnonymously(auth).then(() => {
