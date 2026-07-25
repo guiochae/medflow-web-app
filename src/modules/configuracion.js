@@ -1070,7 +1070,7 @@ function openCatalogConfig(type) {
   // Ajustar campos específicos
   if (type === 'medications') {
     configTitle.textContent = "💊 Gestión de Catálogo de Farmacia";
-    thExtraCol.textContent = "Presentación / Categoría";
+    if (thExtraCol) thExtraCol.textContent = "Presentación / Categoría";
     configSpecificFields.innerHTML = `
       <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom:0;">
         <label for="c-spec-generic">Nombre Genérico</label>
@@ -1116,7 +1116,7 @@ function openCatalogConfig(type) {
     `;
   } else if (type === 'imagingStudies') {
     configTitle.textContent = "🖼️ Catálogo de Imagenología y Precios";
-    thExtraCol.textContent = "Categoría del Estudio";
+    if (thExtraCol) thExtraCol.textContent = "Categoría del Estudio";
     configSpecificFields.innerHTML = `
       <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom:0;">
         <label for="c-spec-category">Categoría (Rayos X, USG, TC, RMN...)</label>
@@ -1125,7 +1125,7 @@ function openCatalogConfig(type) {
     `;
   } else if (type === 'consultationTypes') {
     configTitle.textContent = "🩺 Tarifario de Consultas Médicas";
-    thExtraCol.textContent = "Especialidad / Detalle";
+    if (thExtraCol) thExtraCol.textContent = "Especialidad / Detalle";
     configSpecificFields.innerHTML = `
       <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom:0;">
         <label for="c-spec-specialty">Especialidad</label>
