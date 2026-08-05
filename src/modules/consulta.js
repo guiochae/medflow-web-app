@@ -86,11 +86,10 @@ function renderPatientList(query = '') {
   const currentUser = state.currentUser;
   let basePatients = state.patients || [];
 
-  // Si el usuario es médico, ve únicamente los pacientes que le fueron asignados
-  if (currentUser && (
-    String(currentUser.role || '').toLowerCase() === 'medico' ||
-    String(currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === 'medico'
-  )) {
+  // Si el usuario es médico (incluyendo Medico 1, Medico 2, Medico 3, etc.), ve únicamente los pacientes que le fueron asignados
+  const roleNorm = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const isDoctor = roleNorm.startsWith('medico');
+  if (currentUser && isDoctor) {
     basePatients = basePatients.filter(p => 
       p.assignedDoctorId === currentUser.id || 
       p.assignedDoctorName === currentUser.name
@@ -224,11 +223,10 @@ function selectPatient(patientId) {
   const currentUser = state.currentUser;
   let patient = state.patients.find(p => p.id === patientId);
 
-  // Validar acceso si el usuario es médico
-  if (currentUser && (
-    String(currentUser.role || '').toLowerCase() === 'medico' ||
-    String(currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === 'medico'
-  )) {
+  // Validar acceso si el usuario es médico (incluyendo Medico 1, Medico 2, Medico 3, etc.)
+  const roleNormSel = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const isDoctorSel = roleNormSel.startsWith('medico');
+  if (currentUser && isDoctorSel) {
     if (patient && patient.assignedDoctorId !== currentUser.id && patient.assignedDoctorName !== currentUser.name) {
       patient = null;
     }
