@@ -86,13 +86,14 @@ function renderPatientList(query = '') {
   const currentUser = state.currentUser;
   let basePatients = state.patients || [];
 
-  // Si el usuario es médico, ve los pacientes asignados o referidos por interconsulta
-  if (currentUser && currentUser.role === 'medico') {
+  // Si el usuario es médico, ve únicamente los pacientes que le fueron asignados
+  if (currentUser && (
+    String(currentUser.role || '').toLowerCase() === 'medico' ||
+    String(currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === 'medico'
+  )) {
     basePatients = basePatients.filter(p => 
       p.assignedDoctorId === currentUser.id || 
-      p.assignedDoctorName === currentUser.name ||
-      (p.referredDoctorIds && p.referredDoctorIds.includes(currentUser.id)) ||
-      (p.referredDoctorNames && p.referredDoctorNames.includes(currentUser.name))
+      p.assignedDoctorName === currentUser.name
     );
   }
 
@@ -220,8 +221,19 @@ function selectPatient(patientId) {
   // Actualizar clases seleccionadas en la barra lateral
   const items = document.querySelectorAll('#consult-patient-list .patient-item');
   const state = getAppState();
-  const patient = state.patients.find(p => p.id === patientId);
-  
+  const currentUser = state.currentUser;
+  let patient = state.patients.find(p => p.id === patientId);
+
+  // Validar acceso si el usuario es médico
+  if (currentUser && (
+    String(currentUser.role || '').toLowerCase() === 'medico' ||
+    String(currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === 'medico'
+  )) {
+    if (patient && patient.assignedDoctorId !== currentUser.id && patient.assignedDoctorName !== currentUser.name) {
+      patient = null;
+    }
+  }
+
   // Re-renderizar lista para marcar el seleccionado
   const searchEl = document.getElementById('consult-patient-search');
   renderPatientList(searchEl ? searchEl.value : '');
