@@ -1678,6 +1678,52 @@ function showClinicalHistoryModal(patient) {
 
   // Renders clinical report contents
   try {
+    let encamamientoHtml = '';
+    const hospHistory = (state.encamamiento || []).filter(h => h.patientId === patient.id);
+    if (hospHistory.length === 0) {
+      encamamientoHtml = '<p style="color: var(--text-muted); font-size: 0.9rem;">No se registran hospitalizaciones previas.</p>';
+    } else {
+      encamamientoHtml = `
+        <div class="timeline">
+          \${hospHistory.map(h => {
+            const dateIn = new Date(h.admissionDate).toLocaleString('es-GT');
+            const dateOut = h.dischargeDate ? new Date(h.dischargeDate).toLocaleString('es-GT') : 'En curso';
+            return \`
+            <div class="timeline-item" style="border-left: 2px solid var(--accent-secondary); padding-left: 15px; margin-bottom: 1.5rem;">
+              <div class="timeline-date" style="font-weight: 700; color: var(--accent-secondary);">Ingreso: \${dateIn} | Alta: \${dateOut}</div>
+              <div class="timeline-desc" style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; margin-top: 6px;">
+                <p><strong>Origen:</strong> \${h.origin || 'N/A'} | <strong>Médico Tratante:</strong> \${h.doctorName || 'N/A'}</p>
+                <p><strong>Diagnóstico Ingreso:</strong> \${h.admissionReason || 'N/A'}</p>
+                <p><strong>Familiar Responsable:</strong> \${h.responsibleFamilyName || 'N/A'} (Tel: \${h.responsibleFamilyPhone || 'N/A'})</p>
+                \${h.evolutions && h.evolutions.length > 0 ? \`
+                  <h5 style="margin-top: 10px; color: var(--accent-primary); margin-bottom: 4px;">Evoluciones Médicas:</h5>
+                  <ul style="margin-left: 15px; font-size: 0.85rem; color: var(--text-muted); list-style-type: disc;">
+                    \${h.evolutions.map(ev => \\\`
+                      <li style="margin-bottom: 4px;">
+                        <strong>\\\${new Date(ev.date).toLocaleString()} (\\\${ev.doctorName}):</strong> \\\${ev.note}
+                      </li>
+                    \\\`).join('')}
+                  </ul>
+                \` : ''}
+                \${h.nursingNotes && h.nursingNotes.length > 0 ? \`
+                  <h5 style="margin-top: 10px; color: var(--accent-success); margin-bottom: 4px;">Notas de Enfermería:</h5>
+                  <ul style="margin-left: 15px; font-size: 0.85rem; color: var(--text-muted); list-style-type: disc;">
+                    \${h.nursingNotes.map(nn => \\\`
+                      <li style="margin-bottom: 4px;">
+                        <strong>\\\${new Date(nn.date).toLocaleString()} (\\\${nn.nurseName}):</strong> \\\${nn.note}
+                      </li>
+                    \\\`).join('')}
+                  </ul>
+                \` : ''}
+                <p style="margin-top: 8px; font-weight: 600; color: var(--text-primary);">Estado: <span style="color: \${h.status === 'Activo' ? 'var(--accent-warning)' : 'var(--accent-success)'}">\${h.status}</span></p>
+              </div>
+            </div>
+            \`;
+          }).join('')}
+        </div>
+      `;
+    }
+
     let vitalsHtml = '';
     if (!patient.vitalSigns || patient.vitalSigns.length === 0) {
       vitalsHtml = '<p style="color: var(--text-muted); font-size: 0.9rem;">Sin mediciones de signos vitales registradas.</p>';
@@ -1954,6 +2000,11 @@ function showClinicalHistoryModal(patient) {
       <div class="report-section" style="margin-top: 2rem;">
         <div class="report-section-title">Resultados de Laboratorio Locales (MedFlow Labs)</div>
         ${localLabsHtml}
+      </div>
+
+      <div class="report-section" style="margin-top: 2rem;">
+        <div class="report-section-title">Historial de Encamamiento y Hospitalizaciones</div>
+        ${encamamientoHtml}
       </div>
 
       <div class="report-section" style="margin-top: 2rem;">

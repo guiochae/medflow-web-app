@@ -265,6 +265,24 @@ export function renderConfiguracion(container) {
             <span style="font-size: 2.8rem;">🩺</span>
             <strong style="color: var(--text-primary);">Consulta</strong>
           </button>
+          
+          <button class="btn btn-secondary" id="btn-config-room-rates" style="
+            padding: 2rem 1.5rem; 
+            font-size: 1.1rem; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            gap: 12px; 
+            width: 180px;
+            background: linear-gradient(135deg, rgba(142, 68, 173, 0.15) 0%, rgba(142, 68, 173, 0.05) 100%);
+            border: 1px solid #8e44ad;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.2s;
+          ">
+            <span style="font-size: 2.8rem;">🛏️</span>
+            <strong style="color: var(--text-primary);">Habitaciones</strong>
+          </button>
         </div>
       </div>
 
@@ -472,6 +490,7 @@ export function renderConfiguracion(container) {
     const btnLab = e.target.closest('#btn-config-laboratorio');
     const btnImg = e.target.closest('#btn-config-imagenologia');
     const btnConsulta = e.target.closest('#btn-config-consulta');
+    const btnRoomRates = e.target.closest('#btn-config-room-rates');
 
     if (btnFarmacia) {
       e.preventDefault();
@@ -488,6 +507,10 @@ export function renderConfiguracion(container) {
     } else if (btnConsulta) {
       e.preventDefault();
       openCatalogConfig('consultationTypes');
+      return;
+    } else if (btnRoomRates) {
+      e.preventDefault();
+      openCatalogConfig('roomRates');
       return;
     }
 
@@ -674,6 +697,8 @@ export function renderConfiguracion(container) {
           document.getElementById('c-spec-category').value = itemObj.category || '';
         } else if (activeCatalogType === 'consultationTypes') {
           document.getElementById('c-spec-specialty').value = itemObj.specialty || '';
+        } else if (activeCatalogType === 'roomRates') {
+          document.getElementById('c-spec-description').value = itemObj.description || '';
         }
       }
       return;
@@ -833,7 +858,8 @@ export function renderConfiguracion(container) {
       } else {
         const prefix = activeCatalogType === 'medications' ? 'm-' :
                        activeCatalogType === 'laboratoryTests' ? 'l-' :
-                       activeCatalogType === 'imagingStudies' ? 'i-' : 'c-';
+                       activeCatalogType === 'imagingStudies' ? 'i-' :
+                       activeCatalogType === 'roomRates' ? 'hr-' : 'c-';
         itemObj.id = prefix + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
         appState[activeCatalogType].unshift(itemObj);
       }
@@ -863,6 +889,8 @@ export function renderConfiguracion(container) {
         itemObj.category = document.getElementById('c-spec-category').value;
       } else if (activeCatalogType === 'consultationTypes') {
         itemObj.specialty = document.getElementById('c-spec-specialty').value;
+      } else if (activeCatalogType === 'roomRates') {
+        itemObj.description = document.getElementById('c-spec-description').value;
       }
 
       saveAppState(appState);
@@ -1132,6 +1160,15 @@ function openCatalogConfig(type) {
         <input type="text" id="c-spec-specialty" required placeholder="Ej. Medicina General, Pediatría, Cardiología...">
       </div>
     `;
+  } else if (type === 'roomRates') {
+    configTitle.textContent = "🛌 Catálogo de Habitaciones y Tarifas";
+    if (thExtraCol) thExtraCol.textContent = "Descripción / Tipo";
+    configSpecificFields.innerHTML = `
+      <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom:0;">
+        <label for="c-spec-description">Descripción de Habitación</label>
+        <input type="text" id="c-spec-description" required placeholder="Ej. Habitación Privada, Cama 1, Intensivo...">
+      </div>
+    `;
   }
 
   renderCatalogTable();
@@ -1161,7 +1198,7 @@ function renderCatalogTable() {
       configTableHead.innerHTML = `
         <tr style="border-bottom: 2px solid var(--border-color); color: var(--text-muted); font-size: 0.85rem;">
           <th style="padding: 10px;">Nombre</th>
-          <th id="th-extra-col" style="padding: 10px;">${activeCatalogType === 'medications' ? 'Presentación / Categoría' : (activeCatalogType === 'imagingStudies' ? 'Categoría del Estudio' : 'Especialidad / Detalle')}</th>
+          <th id="th-extra-col" style="padding: 10px;">${activeCatalogType === 'medications' ? 'Presentación / Categoría' : (activeCatalogType === 'imagingStudies' ? 'Categoría del Estudio' : (activeCatalogType === 'roomRates' ? 'Descripción / Tipo' : 'Especialidad / Detalle'))}</th>
           <th style="padding: 10px; text-align: right;">Precio</th>
           <th style="padding: 10px; text-align: center; width: 120px;">Acciones</th>
         </tr>
@@ -1226,6 +1263,9 @@ function renderCatalogTable() {
       } else if (activeCatalogType === 'consultationTypes') {
         nameCellHtml = `<strong>${item.name}</strong>`;
         extraCellHtml = `${item.specialty || 'General'}`;
+      } else if (activeCatalogType === 'roomRates') {
+        nameCellHtml = `<strong>${item.name}</strong>`;
+        extraCellHtml = `${item.description || 'Habitación Hospitalaria'}`;
       }
 
       tr.innerHTML = `

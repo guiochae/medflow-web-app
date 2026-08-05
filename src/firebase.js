@@ -90,6 +90,8 @@ export const firestoreState = {
   laboratoryTests: [],
   imagingStudies: [],
   consultationTypes: [],
+  roomRates: [],
+  encamamiento: [],
   clinicInfo: {
     name: "LUGAMED 2.0 - Clínica Médica y Hospital",
     address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
@@ -113,6 +115,8 @@ function loadStateFromLocalCache() {
         if (Array.isArray(parsed.laboratoryTests)) firestoreState.laboratoryTests = parsed.laboratoryTests;
         if (Array.isArray(parsed.imagingStudies)) firestoreState.imagingStudies = parsed.imagingStudies;
         if (Array.isArray(parsed.consultationTypes)) firestoreState.consultationTypes = parsed.consultationTypes;
+        if (Array.isArray(parsed.roomRates)) firestoreState.roomRates = parsed.roomRates;
+        if (Array.isArray(parsed.encamamiento)) firestoreState.encamamiento = parsed.encamamiento;
         if (parsed.clinicInfo) firestoreState.clinicInfo = parsed.clinicInfo;
         
         // Marcar como cargado inicialmente para no bloquear el flujo si Firestore falla
@@ -135,6 +139,8 @@ export function saveStateToLocalCache() {
       laboratoryTests: firestoreState.laboratoryTests,
       imagingStudies: firestoreState.imagingStudies,
       consultationTypes: firestoreState.consultationTypes,
+      roomRates: firestoreState.roomRates,
+      encamamiento: firestoreState.encamamiento,
       clinicInfo: firestoreState.clinicInfo
     }));
   } catch (e) {
@@ -250,6 +256,8 @@ export function initRealtimeFirestore(onFirstLoad) {
       const labs = [];
       const imgs = [];
       const types = [];
+      const roomRatesList = [];
+      const encamamientosList = [];
       let clinic = null;
 
       snapshot.docs.forEach(docSnap => {
@@ -275,6 +283,10 @@ export function initRealtimeFirestore(onFirstLoad) {
           types.push(...(dData.items || []));
           return;
         }
+        if (dId === 'catalog_roomRates') {
+          roomRatesList.push(...(dData.items || []));
+          return;
+        }
 
         const cleanDoc = { id: dId, ...dData };
         delete cleanDoc._collectionType;
@@ -284,6 +296,8 @@ export function initRealtimeFirestore(onFirstLoad) {
         else if (type === 'laboratoryTests') labs.push(cleanDoc);
         else if (type === 'imagingStudies') imgs.push(cleanDoc);
         else if (type === 'consultationTypes') types.push(cleanDoc);
+        else if (type === 'roomRates') roomRatesList.push(cleanDoc);
+        else if (type === 'encamamiento') encamamientosList.push(cleanDoc);
         else if (type === 'clinicInfo') clinic = cleanDoc;
       });
 
@@ -292,6 +306,8 @@ export function initRealtimeFirestore(onFirstLoad) {
       firestoreState.laboratoryTests = labs;
       firestoreState.imagingStudies = imgs;
       firestoreState.consultationTypes = types;
+      firestoreState.roomRates = roomRatesList;
+      firestoreState.encamamiento = encamamientosList;
       if (clinic) firestoreState.clinicInfo = clinic;
 
       notifySubscribers();
@@ -306,6 +322,8 @@ export function initRealtimeFirestore(onFirstLoad) {
           const labs = [];
           const imgs = [];
           const types = [];
+          const roomRatesList = [];
+          const encamamientosList = [];
           let clinic = null;
 
           cacheSnap.docs.forEach(docSnap => {
@@ -331,6 +349,10 @@ export function initRealtimeFirestore(onFirstLoad) {
               types.push(...(dData.items || []));
               return;
             }
+            if (dId === 'catalog_roomRates') {
+              roomRatesList.push(...(dData.items || []));
+              return;
+            }
 
             const cleanDoc = { id: dId, ...dData };
             delete cleanDoc._collectionType;
@@ -340,6 +362,8 @@ export function initRealtimeFirestore(onFirstLoad) {
             else if (type === 'laboratoryTests') labs.push(cleanDoc);
             else if (type === 'imagingStudies') imgs.push(cleanDoc);
             else if (type === 'consultationTypes') types.push(cleanDoc);
+            else if (type === 'roomRates') roomRatesList.push(cleanDoc);
+            else if (type === 'encamamiento') encamamientosList.push(cleanDoc);
             else if (type === 'clinicInfo') clinic = cleanDoc;
           });
 
@@ -348,6 +372,8 @@ export function initRealtimeFirestore(onFirstLoad) {
           firestoreState.laboratoryTests = labs;
           firestoreState.imagingStudies = imgs;
           firestoreState.consultationTypes = types;
+          firestoreState.roomRates = roomRatesList;
+          firestoreState.encamamiento = encamamientosList;
           if (clinic) firestoreState.clinicInfo = clinic;
 
           notifySubscribers();

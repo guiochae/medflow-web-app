@@ -410,15 +410,26 @@ function renderPendingRecipes() {
 
     // Por defecto asumimos Pagado si no hay cobro registrado (para compatibilidad de datos mock anteriores),
     // pero si hay un cobro pendiente, bloqueamos el despacho.
+    // Los medicamentos de Hospitalización/Encamamiento se despachan sin requerir pago previo.
     let isPaid = true;
-    if (bill) {
+    const isHospitalization = item.recipe.isHospitalization === true;
+    if (isHospitalization) {
+      isPaid = true;
+    } else if (bill) {
       isPaid = (bill.status === 'Pagado');
     }
 
     let statusBadge = '';
     let actionButton = '';
 
-    if (isPaid) {
+    if (isHospitalization) {
+      statusBadge = `<span class="badge" style="background: rgba(33, 150, 243, 0.15); color: #2196f3; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; display: inline-block; margin-top: 5px;">🏥 Encamamiento (Despacho Autorizado)</span>`;
+      actionButton = `
+        <button class="btn btn-success btn-dispense-recipe" data-patient-id="${item.patientId}" data-recipe-id="${item.recipe.id}">
+          <span>📦</span> Despachar Medicamentos
+        </button>
+      `;
+    } else if (isPaid) {
       statusBadge = `<span class="badge" style="background: rgba(76, 175, 80, 0.15); color: #4caf50; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; display: inline-block; margin-top: 5px;">✅ Pago Confirmado (Liquidada en Caja)</span>`;
       actionButton = `
         <button class="btn btn-success btn-dispense-recipe" data-patient-id="${item.patientId}" data-recipe-id="${item.recipe.id}">

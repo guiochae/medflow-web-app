@@ -6,6 +6,7 @@ import { renderLaboratorio } from './modules/laboratorio.js';
 import { renderImagenologia } from './modules/imagenologia.js';
 import { renderConfiguracion } from './modules/configuracion.js';
 import { renderFarmacia } from './modules/farmacia.js';
+import { renderEncamamiento } from './modules/encamamiento.js';
 import logoUrl from './assets/logo.jpg';
 import {
   db,
@@ -144,6 +145,8 @@ export function getAppState() {
     laboratoryTests: [],
     imagingStudies: [],
     consultationTypes: [],
+    roomRates: [],
+    encamamiento: [],
     clinicInfo: {
       name: "LUGAMED 2.0 - Clínica Médica y Hospital",
       address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
@@ -176,6 +179,8 @@ export async function saveAppState(state) {
   if (state.laboratoryTests) firestoreState.laboratoryTests = state.laboratoryTests;
   if (state.imagingStudies) firestoreState.imagingStudies = state.imagingStudies;
   if (state.consultationTypes) firestoreState.consultationTypes = state.consultationTypes;
+  if (state.roomRates) firestoreState.roomRates = state.roomRates;
+  if (state.encamamiento) firestoreState.encamamiento = state.encamamiento;
   if (state.clinicInfo) firestoreState.clinicInfo = state.clinicInfo;
 
   // Persistir cambios en caché local inmediatamente por si Firestore falla (ej. cuota excedida)
@@ -286,6 +291,26 @@ export async function saveAppState(state) {
         batch.set(docRef, { _collectionType: 'catalog_consultationTypes', items: state.consultationTypes });
         hasWrites = true;
       }
+    }
+    if (state.roomRates && Array.isArray(state.roomRates)) {
+      const prevRoom = lastSyncedState && lastSyncedState.roomRates;
+      const hasChanged = !prevRoom || JSON.stringify(prevRoom) !== JSON.stringify(state.roomRates);
+      if (hasChanged) {
+        const docRef = doc(db, 'multimedica', 'catalog_roomRates');
+        batch.set(docRef, { _collectionType: 'catalog_roomRates', items: state.roomRates });
+        hasWrites = true;
+      }
+    }
+    if (state.encamamiento && Array.isArray(state.encamamiento)) {
+      state.encamamiento.forEach(e => {
+        if (e && e.id) {
+          const prevE = lastSyncedState && lastSyncedState.encamamiento && lastSyncedState.encamamiento.find(x => x.id === e.id);
+          const hasChanged = !prevE || JSON.stringify(prevE) !== JSON.stringify(e);
+          if (hasChanged) {
+            addWriteToBatch('encamamiento', e.id, e);
+          }
+        }
+      });
     }
 
     // 6. Sincronizar Info de Clínica (solo modificada)
@@ -422,6 +447,9 @@ export function router(route) {
       break;
     case 'farmacia':
       renderFarmacia(container);
+      break;
+    case 'encamamiento':
+      renderEncamamiento(container);
       break;
     case 'configuracion':
       renderConfiguracion(container);
@@ -686,7 +714,17 @@ function initializeSidebar(loggedUser) {
 
   navItems.forEach(item => {
     const target = item.getAttribute('data-target');
-    const hasAccess = isFullAdmin || userModules.includes(target);
+    let hasAccess = isFullAdmin || userModules.includes(target);
+
+    // Aplicar restricción específica para Encamamiento (Administrador, Médicos, Enfermera)
+    if (target === 'encamamiento') {
+      const roleLower = String(userObj.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      hasAccess = isFullAdmin || 
+                  roleLower === 'administrador' ||
+                  roleLower.startsWith('medico') ||
+                  roleLower.includes('enfermera') ||
+                  roleLower.includes('enfermero');
+    }
 
     if (!hasAccess) {
       item.style.display = 'none';
