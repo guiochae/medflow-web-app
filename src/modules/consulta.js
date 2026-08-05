@@ -731,7 +731,7 @@ function renderConsultationForm(patient, doctors) {
 
     // Crear receta automática si hay tratamientos prescritos en la consulta
     if (activeConsultationState.treatments && activeConsultationState.treatments.length > 0) {
-      const doctorObj = stateObj.users.find(u => u.name === doctor || u.id === doctor || (u.role === 'medico' && u.name.includes(doctor)));
+      const doctorObj = stateObj.users.find(u => u.name === doctor || u.id === doctor || (String(u.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").startsWith('medico') && u.name.includes(doctor)));
       const finalBill = bill || (patientObj.billingHistory && patientObj.billingHistory[0]);
       const billId = finalBill ? finalBill.id : ('FAC-' + Date.now());
 

@@ -125,7 +125,10 @@ function showNewPatientForm() {
   if (!detailArea) return;
 
   const state = getAppState();
-  const doctors = (state.users || []).filter(u => u.role === 'medico');
+  const doctors = (state.users || []).filter(u => {
+    const r = String(u.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return r === 'medico' || r === 'medico 1' || r === 'medico 2' || r === 'medico 3';
+  });
   const currentUser = state.currentUser;
 
   detailArea.innerHTML = `
@@ -277,7 +280,10 @@ function showEditPatientForm(patient) {
   if (!detailArea) return;
 
   const state = getAppState();
-  const doctors = (state.users || []).filter(u => u.role === 'medico');
+  const doctors = (state.users || []).filter(u => {
+    const r = String(u.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return r === 'medico' || r === 'medico 1' || r === 'medico 2' || r === 'medico 3';
+  });
 
   detailArea.innerHTML = `
     <div class="glass-card">

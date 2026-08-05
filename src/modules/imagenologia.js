@@ -36,7 +36,10 @@ export function renderImagenologia(container) {
   const state = getAppState();
   const activePatientId = getActivePatientId();
   const patient = state.patients.find(p => p.id === activePatientId);
-  const doctors = state.users.filter(u => u.role === 'medico');
+  const doctors = state.users.filter(u => {
+    const r = String(u.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return r === 'medico' || r === 'medico 1' || r === 'medico 2' || r === 'medico 3';
+  });
 
   container.innerHTML = `
     <!-- Banner de Paciente en la Parte Superior -->
@@ -100,12 +103,12 @@ function renderPatientList(query = '') {
   const currentUser = state.currentUser;
   let basePatients = state.patients || [];
 
-  if (currentUser && currentUser.role === 'medico') {
+  const roleNorm = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const isDoctor = roleNorm.startsWith('medico');
+  if (currentUser && isDoctor) {
     basePatients = basePatients.filter(p => 
       p.assignedDoctorId === currentUser.id || 
-      p.assignedDoctorName === currentUser.name ||
-      (p.referredDoctorIds && p.referredDoctorIds.includes(currentUser.id)) ||
-      (p.referredDoctorNames && p.referredDoctorNames.includes(currentUser.name))
+      p.assignedDoctorName === currentUser.name
     );
   }
 
@@ -144,8 +147,22 @@ function renderPatientList(query = '') {
 
 function selectPatient(patientId) {
   const state = getAppState();
-  const patient = state.patients.find(p => p.id === patientId);
-  const doctors = state.users.filter(u => u.role === 'medico');
+  const currentUser = state.currentUser;
+  let patient = state.patients.find(p => p.id === patientId);
+
+  // Validar acceso si el usuario es médico (incluyendo Medico 1, Medico 2, Medico 3, etc.)
+  const roleNormSel = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const isDoctorSel = roleNormSel.startsWith('medico');
+  if (currentUser && isDoctorSel) {
+    if (patient && patient.assignedDoctorId !== currentUser.id && patient.assignedDoctorName !== currentUser.name) {
+      patient = null;
+    }
+  }
+
+  const doctors = state.users.filter(u => {
+    const r = String(u.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return r === 'medico' || r === 'medico 1' || r === 'medico 2' || r === 'medico 3';
+  });
 
   setActivePatientId(patientId);
   
