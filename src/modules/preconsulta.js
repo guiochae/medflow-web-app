@@ -73,13 +73,13 @@ function renderPatientList(query = '') {
   const currentUser = state.currentUser;
   let basePatients = state.patients || [];
 
-  // Si el usuario es médico, ve los pacientes asignados o referidos por interconsulta
-  if (currentUser && currentUser.role === 'medico') {
+  // Si el usuario es médico (incluyendo Medico 1, Medico 2, Medico 3, etc.), ve únicamente los pacientes que le fueron asignados
+  const roleNorm = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const isDoctor = roleNorm.startsWith('medico');
+  if (currentUser && isDoctor) {
     basePatients = basePatients.filter(p => 
       p.assignedDoctorId === currentUser.id || 
-      p.assignedDoctorName === currentUser.name ||
-      (p.referredDoctorIds && p.referredDoctorIds.includes(currentUser.id)) ||
-      (p.referredDoctorNames && p.referredDoctorNames.includes(currentUser.name))
+      p.assignedDoctorName === currentUser.name
     );
   }
 
@@ -421,8 +421,18 @@ function renderPatientDetails() {
   const detailArea = document.getElementById('patient-detail-area');
   if (!detailArea) return;
 
+  const currentUser = state.currentUser;
   const activeId = getActivePatientId();
-  const patient = state.patients.find(p => p.id === activeId);
+  let patient = state.patients.find(p => p.id === activeId);
+
+  // Validar acceso si el usuario es médico (incluyendo Medico 1, Medico 2, Medico 3, etc.)
+  const roleNormSel = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const isDoctorSel = roleNormSel.startsWith('medico');
+  if (currentUser && isDoctorSel) {
+    if (patient && patient.assignedDoctorId !== currentUser.id && patient.assignedDoctorName !== currentUser.name) {
+      patient = null;
+    }
+  }
 
   if (!patient) {
     detailArea.innerHTML = `
@@ -778,7 +788,6 @@ function renderPatientDetails() {
   `;
 
   // Bind Tabs
-  const currentUser = state.currentUser;
   const canBilling = isUserBillingAuthorized(currentUser);
 
   const tabBillingBtn = document.getElementById('tab-billing');
