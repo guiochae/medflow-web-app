@@ -355,9 +355,10 @@ export function renderConfiguracion(container) {
               <input type="hidden" id="config-item-id">
               
               <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-                <div class="form-group" style="flex: 2; min-width: 200px;">
+                <div class="form-group" style="flex: 2; min-width: 200px; position: relative;">
                   <label for="config-item-name" id="lbl-item-name">Nombre</label>
-                  <input type="text" id="config-item-name" required placeholder="Ej. Acetaminofén, Hemograma, Rx Tórax...">
+                  <input type="text" id="config-item-name" required placeholder="Ej. Acetaminofén, Hemograma, Rx Tórax..." autocomplete="off">
+                  <div id="config-item-autocomplete-list" style="position: absolute; top: 100%; left: 0; right: 0; z-index: 1200; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-sm); max-height: 200px; overflow-y: auto; display: none; box-shadow: var(--shadow-lg); margin-top: 4px; backdrop-filter: blur(10px);"></div>
                 </div>
                 <div class="form-group" style="flex: 1; min-width: 120px;">
                   <label for="config-item-price" id="lbl-item-price">Precio (Q)</label>
@@ -965,6 +966,21 @@ export function renderConfiguracion(container) {
       };
       reader.readAsDataURL(file);
       return;
+    }
+  });
+
+  // 4. Input events for Autocomplete list
+  container.addEventListener('input', (e) => {
+    if (e.target && e.target.id === 'config-item-name') {
+      handleCatalogNameInput(e.target);
+    }
+  });
+
+  // Close autocomplete list when clicking outside
+  document.addEventListener('click', (e) => {
+    const list = document.getElementById('config-item-autocomplete-list');
+    if (list && !e.target.closest('#config-item-name') && !e.target.closest('#config-item-autocomplete-list')) {
+      list.style.display = 'none';
     }
   });
 }
@@ -1922,4 +1938,103 @@ function importDatabaseExcel(file, callback) {
     }
   };
   reader.readAsArrayBuffer(file);
+}
+
+function handleCatalogNameInput(inputEl) {
+  const query = inputEl.value.trim().toLowerCase();
+  const listEl = document.getElementById('config-item-autocomplete-list');
+  if (!listEl) return;
+
+  if (!query || !activeCatalogType) {
+    listEl.style.display = 'none';
+    return;
+  }
+
+  const stateObj = getAppState();
+  const items = stateObj[activeCatalogType] || [];
+  
+  // Filtrar los elementos del catálogo activo que coincidan por nombre o por nombre genérico (si es medicamento)
+  const filtered = items.filter(item => {
+    const nameMatch = (item.name || '').toLowerCase().includes(query);
+    const genericMatch = (item.generic || '').toLowerCase().includes(query);
+    return nameMatch || genericMatch;
+  });
+
+  if (filtered.length === 0) {
+    listEl.style.display = 'none';
+    return;
+  }
+
+  if (!document.getElementById('catalog-autocomplete-styles')) {
+    const style = document.createElement('style');
+    style.id = 'catalog-autocomplete-styles';
+    style.textContent = `
+      .autocomplete-item {
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 0.88rem;
+        color: var(--text-primary);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        transition: background 0.2s ease;
+      }
+      .autocomplete-item:last-child {
+        border-bottom: none;
+      }
+      .autocomplete-item:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--accent-primary);
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  // Generar HTML de opciones
+  listEl.innerHTML = filtered.map(item => {
+    const extraLabel = item.generic ? ` (${item.generic})` : '';
+    return `
+      <div class="autocomplete-item" data-id="${item.id}">
+        <strong>${item.name}</strong>${extraLabel} - Q${item.price}
+      </div>
+    `;
+  }).join('');
+  
+  listEl.style.display = 'block';
+
+  // Configurar clicks en los items
+  listEl.querySelectorAll('.autocomplete-item').forEach(itemBtn => {
+    itemBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = itemBtn.getAttribute('data-id');
+      const selectedItem = items.find(x => x.id === id);
+      if (selectedItem) {
+        // Rellenar todos los campos del formulario con la información del elemento seleccionado
+        document.getElementById('config-item-id').value = selectedItem.id;
+        document.getElementById('config-item-name').value = selectedItem.name;
+        document.getElementById('config-item-price').value = selectedItem.price;
+        document.getElementById('config-form-title').textContent = "Modificar Item";
+
+        if (activeCatalogType === 'medications') {
+          document.getElementById('c-spec-generic').value = selectedItem.generic || '';
+          document.getElementById('c-spec-presentation').value = selectedItem.presentation || '';
+          document.getElementById('c-spec-category').value = selectedItem.category || '';
+          document.getElementById('c-spec-stock').value = selectedItem.stock !== undefined ? selectedItem.stock : 100;
+          document.getElementById('c-spec-lote').value = selectedItem.lote || '';
+          document.getElementById('c-spec-vencimiento').value = selectedItem.vencimiento || '';
+        } else if (activeCatalogType === 'laboratoryTests') {
+          document.getElementById('c-spec-category').value = selectedItem.category || '';
+          const unitEl = document.getElementById('c-spec-unit');
+          const refEl = document.getElementById('c-spec-reference');
+          if (unitEl) unitEl.value = selectedItem.unit || selectedItem.units || '';
+          if (refEl) refEl.value = selectedItem.reference || selectedItem.referenceInterval || selectedItem.normal || '';
+        } else if (activeCatalogType === 'imagingStudies') {
+          document.getElementById('c-spec-category').value = selectedItem.category || '';
+        } else if (activeCatalogType === 'consultationTypes') {
+          document.getElementById('c-spec-specialty').value = selectedItem.specialty || '';
+        } else if (activeCatalogType === 'roomRates') {
+          document.getElementById('c-spec-description').value = selectedItem.description || '';
+        }
+      }
+      listEl.style.display = 'none';
+    });
+  });
 }
