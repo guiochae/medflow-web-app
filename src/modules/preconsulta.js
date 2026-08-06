@@ -2936,6 +2936,41 @@ export function renderPartogramaUI(patient) {
   const records = partogram.records || [];
   const analysisResult = analyzePartogramData(records);
 
+  // Generar filas de la tabla de manera limpia
+  let tableRowsHtml = '';
+  if (records.length === 0) {
+    tableRowsHtml = `
+      <tr>
+        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">
+          No hay lecturas registradas en esta sesión. Ingrese una lectura para graficar.
+        </td>
+      </tr>
+    `;
+  } else {
+    tableRowsHtml = records.map((rec, index) => {
+      const formattedDate = new Date(rec.time).toLocaleString('es-GT', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const sys = rec.maternalVitals?.sys || '-';
+      const dia = rec.maternalVitals?.dia || '-';
+      const temp = rec.maternalVitals?.temp ? `${rec.maternalVitals.temp}°C` : '-';
+      const bp = (sys !== '-' || dia !== '-') ? `${sys}/${dia}` : '-';
+
+      return `
+        <tr style="border-bottom: 1px solid var(--border-color);">
+          <td style="padding: 8px; font-weight: 600;">${formattedDate}</td>
+          <td style="padding: 8px; text-align: center; font-weight: bold; color: var(--accent-primary);">${rec.dilation} cm</td>
+          <td style="padding: 8px; text-align: center; font-weight: bold; color: var(--accent-secondary);">${rec.descent > 0 ? `+${rec.descent}` : rec.descent}</td>
+          <td style="padding: 8px; text-align: center; color: ${rec.fcf < 110 || rec.fcf > 160 ? '#ef4444' : 'inherit'}; font-weight: ${rec.fcf < 110 || rec.fcf > 160 ? '700' : 'normal'};">${rec.fcf} lpm</td>
+          <td style="padding: 8px; text-align: center;">${rec.contractionsFreq} en 10 min (${rec.contractionsDuration}s)</td>
+          <td style="padding: 8px; text-align: center;">${rec.liquido}</td>
+          <td style="padding: 8px; text-align: center; font-size: 0.8rem; color: var(--text-muted);">${bp} mmHg | ${temp}</td>
+          <td style="padding: 8px; text-align: center;">
+            <button class="btn btn-secondary btn-small btn-delete-part-record" data-index="${index}" style="padding: 2px 6px; color: #ff5252;">&times; Eliminar</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
   container.innerHTML = `
     <div style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; width: 100%;">
       <!-- Izquierda: Gráfica y Diagnóstico -->
@@ -2943,7 +2978,7 @@ export function renderPartogramaUI(patient) {
         <div class="glass-card" style="padding: 1.25rem; height: 420px; position: relative;">
           <h4 style="margin: 0 0 10px 0; color: var(--accent-primary); font-size: 1.1rem; display: flex; justify-content: space-between; align-items: center;">
             <span>Gráfica de Dilatación Cervical y Descenso Fetal</span>
-            <span style="font-size: 0.75rem; color: var(--text-muted);">Inicio: \${new Date(partogram.startDate).toLocaleString()}</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Inicio: ${new Date(partogram.startDate).toLocaleString()}</span>
           </h4>
           <div style="position: absolute; inset: 45px 15px 15px 15px;">
             <canvas id="partograma-canvas"></canvas>
@@ -2951,16 +2986,16 @@ export function renderPartogramaUI(patient) {
         </div>
 
         <!-- Panel de Alertas y Diagnóstico -->
-        <div class="glass-card" style="padding: 1.25rem; border-top: 4px solid \${analysisResult.colorHex};">
+        <div class="glass-card" style="padding: 1.25rem; border-top: 4px solid ${analysisResult.colorHex};">
           <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-            <span style="font-size: 1.5rem;">\${analysisResult.icon}</span>
+            <span style="font-size: 1.5rem;">${analysisResult.icon}</span>
             <div>
-              <h4 style="margin: 0; color: var(--text-primary); font-size: 1rem;">Estado del Parto: <span style="color: \${analysisResult.colorHex};">\${analysisResult.statusText}</span></h4>
+              <h4 style="margin: 0; color: var(--text-primary); font-size: 1rem;">Estado del Parto: <span style="color: ${analysisResult.colorHex};">${analysisResult.statusText}</span></h4>
               <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: var(--text-muted);">Recomendación oficial del sistema sugerida</p>
             </div>
           </div>
           <div style="font-size: 0.88rem; color: var(--text-primary); line-height: 1.4; background: rgba(0,0,0,0.1); padding: 10px; border-radius: 4px; border: 1px solid var(--border-color);">
-            \${analysisResult.recommendation}
+            ${analysisResult.recommendation}
           </div>
         </div>
       </div>
@@ -3063,34 +3098,7 @@ export function renderPartogramaUI(patient) {
             </tr>
           </thead>
           <tbody>
-            \${records.length === 0 ? \`
-              <tr>
-                <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">
-                  No hay lecturas registradas en esta sesión. Ingrese una lectura para graficar.
-                </td>
-              </tr>
-            \` : records.map((rec, index) => {
-              const formattedDate = new Date(rec.time).toLocaleString('es-GT', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-              const sys = rec.maternalVitals?.sys || '-';
-              const dia = rec.maternalVitals?.dia || '-';
-              const temp = rec.maternalVitals?.temp ? \\\`\\\${rec.maternalVitals.temp}°C\\\` : '-';
-              const bp = (sys !== '-' || dia !== '-') ? \\\`\\\${sys}/\\\${dia}\\\` : '-';
-
-              return \\\`
-                <tr style="border-bottom: 1px solid var(--border-color);">
-                  <td style="padding: 8px; font-weight: 600;">\\\${formattedDate}</td>
-                  <td style="padding: 8px; text-align: center; font-weight: bold; color: var(--accent-primary);">\\\${rec.dilation} cm</td>
-                  <td style="padding: 8px; text-align: center; font-weight: bold; color: var(--accent-secondary);">\\\${rec.descent > 0 ? \\\`+\\\${rec.descent}\\\` : rec.descent}</td>
-                  <td style="padding: 8px; text-align: center; color: \\\${rec.fcf < 110 || rec.fcf > 160 ? '#ef4444' : 'inherit'}; font-weight: \\\${rec.fcf < 110 || rec.fcf > 160 ? '700' : 'normal'};">\\\${rec.fcf} lpm</td>
-                  <td style="padding: 8px; text-align: center;">\\\${rec.contractionsFreq} en 10 min (\\\${rec.contractionsDuration}s)</td>
-                  <td style="padding: 8px; text-align: center;">\\\${rec.liquido}</td>
-                  <td style="padding: 8px; text-align: center; font-size: 0.8rem; color: var(--text-muted);">\\\${bp} mmHg | \\\${temp}</td>
-                  <td style="padding: 8px; text-align: center;">
-                    <button class="btn btn-secondary btn-small btn-delete-part-record" data-index="\\\${index}" style="padding: 2px 6px; color: #ff5252;">&times; Eliminar</button>
-                  </td>
-                </tr>
-              \\\`;
-            }).join('')}
+            ${tableRowsHtml}
           </tbody>
         </table>
       </div>
