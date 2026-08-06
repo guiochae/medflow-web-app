@@ -511,17 +511,32 @@ function renderConsultationForm(patient, doctors) {
         </div>
 
         <div class="form-group">
-          <label for="c-reason">Motivo de la Consulta</label>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label for="c-reason" style="margin-bottom: 0;">Motivo de la Consulta</label>
+            <button type="button" class="btn-dictate" data-target="c-reason" title="Dictado por voz" style="background: none; border: none; font-size: 0.95rem; cursor: pointer; padding: 2px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; color: var(--text-muted); transition: all 0.2s;">
+              <span class="mic-icon">🎙️</span> <span class="dictate-status" style="font-size: 0.75rem; font-weight: bold;">Dictar</span>
+            </button>
+          </div>
           <textarea id="c-reason" required placeholder="Ej. Paciente refiere dolor de garganta y fiebre de 2 días de evolución..." style="min-height: 80px;"></textarea>
         </div>
 
         <div class="form-group">
-          <label for="c-symptoms">Síntomas / Examen Físico</label>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label for="c-symptoms" style="margin-bottom: 0;">Síntomas / Examen Físico</label>
+            <button type="button" class="btn-dictate" data-target="c-symptoms" title="Dictado por voz" style="background: none; border: none; font-size: 0.95rem; cursor: pointer; padding: 2px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; color: var(--text-muted); transition: all 0.2s;">
+              <span class="mic-icon">🎙️</span> <span class="dictate-status" style="font-size: 0.75rem; font-weight: bold;">Dictar</span>
+            </button>
+          </div>
           <textarea id="c-symptoms" required placeholder="Ej. Faringe congestiva con placas purulentas, ganglios submandibulares inflamados..." style="min-height: 100px;"></textarea>
         </div>
 
         <div class="form-group" style="margin-top: 1.25rem;">
-          <label for="c-clinical-diagnosis" style="font-weight: 700; color: var(--accent-primary);">Diagnóstico Clínico del Médico</label>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label for="c-clinical-diagnosis" style="margin-bottom: 0; font-weight: 700; color: var(--accent-primary);">Diagnóstico Clínico del Médico</label>
+            <button type="button" class="btn-dictate" data-target="c-clinical-diagnosis" title="Dictado por voz" style="background: none; border: none; font-size: 0.95rem; cursor: pointer; padding: 2px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; color: var(--text-muted); transition: all 0.2s;">
+              <span class="mic-icon">🎙️</span> <span class="dictate-status" style="font-size: 0.75rem; font-weight: bold; color: var(--accent-primary);">Dictar</span>
+            </button>
+          </div>
           <textarea id="c-clinical-diagnosis" required placeholder="Escriba el Diagnóstico Clínico del médico (Ej. Amigdalitis Aguda Bacteriana, Síndrome Febril, HTA no controlada...)" style="min-height: 90px; border: 1px solid var(--accent-primary); border-radius: var(--radius-sm);"></textarea>
         </div>
 
@@ -595,6 +610,9 @@ function renderConsultationForm(patient, doctors) {
 
   reasonInput.addEventListener('input', handleInputTrigger);
   symptomsInput.addEventListener('input', handleInputTrigger);
+
+  // Inicializar dictado por micrófono
+  initializeVoiceDictation();
 
   // Botón Cancelar
   document.getElementById('btn-reset-consult').addEventListener('click', () => {
@@ -1213,4 +1231,107 @@ function updateAssistantActionButtons() {
     btn.addEventListener('click', () => transferToRecetario());
     container.appendChild(btn);
   }
+}
+
+function initializeVoiceDictation() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    console.warn("Speech Recognition API not supported in this browser.");
+    document.querySelectorAll('.btn-dictate').forEach(btn => {
+      btn.style.opacity = '0.5';
+      btn.title = "Dictado no soportado en este navegador (use Chrome/Edge)";
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        alert("El dictado por voz no está soportado en este navegador. Le recomendamos utilizar Google Chrome o Microsoft Edge.");
+      });
+    });
+    return;
+  }
+
+  if (!document.getElementById('dictate-styles')) {
+    const style = document.createElement('style');
+    style.id = 'dictate-styles';
+    style.textContent = `
+      @keyframes pulse-mic {
+        0% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.2); opacity: 0.6; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      .btn-dictate:hover {
+        background: rgba(255, 255, 255, 0.08) !important;
+        color: var(--accent-primary) !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  document.querySelectorAll('.btn-dictate').forEach(btn => {
+    const targetId = btn.getAttribute('data-target');
+    const textarea = document.getElementById(targetId);
+    if (!textarea) return;
+
+    let recognition = null;
+    let isListening = false;
+
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+
+      if (isListening) {
+        if (recognition) recognition.stop();
+        return;
+      }
+
+      // Inicializar reconocimiento
+      recognition = new SpeechRecognition();
+      recognition.lang = 'es-GT';
+      recognition.continuous = false; // Parar al terminar la frase
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        isListening = true;
+        btn.style.color = '#ef4444';
+        const mic = btn.querySelector('.mic-icon');
+        if (mic) mic.style.animation = 'pulse-mic 1.2s infinite';
+        const status = btn.querySelector('.dictate-status');
+        if (status) status.textContent = 'Escuchando...';
+        btn.style.background = 'rgba(239, 68, 68, 0.1)';
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[event.results.length - 1][0].transcript;
+        const currentVal = textarea.value.trim();
+        textarea.value = currentVal ? `${currentVal} ${transcript}` : transcript;
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech Recognition Error:", event.error);
+        stopListening();
+        if (event.error === 'not-allowed') {
+          alert("Acceso denegado al micrófono. Permita el uso del micrófono en la configuración del navegador para usar el dictado.");
+        }
+      };
+
+      recognition.onend = () => {
+        stopListening();
+      };
+
+      function stopListening() {
+        isListening = false;
+        btn.style.color = 'var(--text-muted)';
+        const mic = btn.querySelector('.mic-icon');
+        if (mic) mic.style.animation = 'none';
+        const status = btn.querySelector('.dictate-status');
+        if (status) {
+          status.textContent = 'Dictar';
+          if (targetId === 'c-clinical-diagnosis') {
+            status.style.color = 'var(--accent-primary)';
+          }
+        }
+        btn.style.background = 'none';
+      }
+
+      recognition.start();
+    });
+  });
 }
