@@ -451,6 +451,16 @@ function renderPatientDetails() {
   const diffMs = Date.now() - dob.getTime();
   const ageDt = new Date(diffMs);
   const age = Math.abs(ageDt.getUTCFullYear() - 1970);
+  const isFemale = String(patient.gender || '').toLowerCase().startsWith('f');
+  const partogramaTabBtnHtml = isFemale ? '<button class="tab-btn" id="tab-partograma">📈 Partograma</button>' : '';
+  const partogramaTabPaneHtml = isFemale ? `
+  <!-- Pestaña Partograma -->
+  <div id="pane-partograma" class="tab-pane">
+    <div id="partograma-container-root">
+      <!-- Renderizado dinámicamente mediante renderPartogramaUI -->
+    </div>
+  </div>
+  ` : '';
 
   detailArea.innerHTML = `
     <!-- Ficha de Encabezado -->
@@ -490,7 +500,7 @@ function renderPatientDetails() {
       <button class="tab-btn active" id="tab-vitals">Signos Vitales</button>
       <button class="tab-btn" id="tab-appointments">Agendar Citas</button>
       <button class="tab-btn" id="tab-studies">Laboratorios e Imagenología</button>
-      <button class="tab-btn" id="tab-partograma">📈 Partograma</button>
+      \${partogramaTabBtnHtml}
       <button class="tab-btn" id="tab-billing">Facturación</button>
     </div>
 
@@ -787,12 +797,7 @@ function renderPatientDetails() {
         </div>
       </div>
 
-      <!-- Pestaña Partograma -->
-      <div id="pane-partograma" class="tab-pane">
-        <div id="partograma-container-root">
-          <!-- Renderizado dinámicamente mediante renderPartogramaUI -->
-        </div>
-      </div>
+      \${partogramaTabPaneHtml}
     </div>
   `;
 
