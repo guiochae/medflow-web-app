@@ -500,7 +500,7 @@ function renderPatientDetails() {
       <button class="tab-btn active" id="tab-vitals">Signos Vitales</button>
       <button class="tab-btn" id="tab-appointments">Agendar Citas</button>
       <button class="tab-btn" id="tab-studies">Laboratorios e Imagenología</button>
-      \${partogramaTabBtnHtml}
+      ${partogramaTabBtnHtml}
       <button class="tab-btn" id="tab-billing">Facturación</button>
     </div>
 
@@ -797,7 +797,7 @@ function renderPatientDetails() {
         </div>
       </div>
 
-      \${partogramaTabPaneHtml}
+      ${partogramaTabPaneHtml}
     </div>
   `;
 
