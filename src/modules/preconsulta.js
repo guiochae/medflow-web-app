@@ -1,5 +1,6 @@
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
 import { showLocalLabReportPrintWindow } from './laboratorio.js';
+import { initPartogramaChart } from './partogramaChart.js';
 import logoUrl from '../assets/logo.jpg';
 
 export function renderPreconsulta(container) {
@@ -489,6 +490,7 @@ function renderPatientDetails() {
       <button class="tab-btn active" id="tab-vitals">Signos Vitales</button>
       <button class="tab-btn" id="tab-appointments">Agendar Citas</button>
       <button class="tab-btn" id="tab-studies">Laboratorios e Imagenología</button>
+      <button class="tab-btn" id="tab-partograma">📈 Partograma</button>
       <button class="tab-btn" id="tab-billing">Facturación</button>
     </div>
 
@@ -784,6 +786,13 @@ function renderPatientDetails() {
           </table>
         </div>
       </div>
+
+      <!-- Pestaña Partograma -->
+      <div id="pane-partograma" class="tab-pane">
+        <div id="partograma-container-root">
+          <!-- Renderizado dinámicamente mediante renderPartogramaUI -->
+        </div>
+      </div>
     </div>
   `;
 
@@ -803,6 +812,7 @@ function renderPatientDetails() {
     'tab-vitals': 'pane-vitals',
     'tab-appointments': 'pane-appointments',
     'tab-studies': 'pane-studies',
+    'tab-partograma': 'pane-partograma',
     'tab-billing': 'pane-billing'
   };
 
@@ -819,6 +829,10 @@ function renderPatientDetails() {
       e.target.classList.add('active');
       const paneEl = document.getElementById(tabs[tabId]);
       if (paneEl) paneEl.classList.add('active');
+
+      if (tabId === 'tab-partograma') {
+        renderPartogramaUI(patient);
+      }
     });
   });
 
@@ -1724,6 +1738,63 @@ function showClinicalHistoryModal(patient) {
       `;
     }
 
+    let partogramHtml = '';
+    const partogramHistory = patient.partogramHistory || [];
+    const activePartogram = patient.partogram;
+    
+    if (!activePartogram && partogramHistory.length === 0) {
+      partogramHtml = '<p style="color: var(--text-muted); font-size: 0.9rem;">Sin registros de partograma.</p>';
+    } else {
+      let activePartHtml = '';
+      if (activePartogram) {
+        let activeRecordsListHtml = '';
+        if (activePartogram.records && activePartogram.records.length > 0) {
+          activeRecordsListHtml = '<ul style="margin-left: 15px; margin-top: 6px; font-size: 0.85rem; list-style-type: disc;">';
+          activePartogram.records.forEach(r => {
+            const tText = new Date(r.time).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' });
+            activeRecordsListHtml += '<li><strong>' + tText + ':</strong> Dilatación: ' + r.dilation + ' cm, Estación: ' + r.descent + ', FCF: ' + r.fcf + ' lpm, Contracciones: ' + r.contractionsFreq + '/10 min (' + r.contractionsDuration + 's).</li>';
+          });
+          activeRecordsListHtml += '</ul>';
+        }
+
+        activePartHtml = `
+          <div style="background: rgba(2, 132, 199, 0.05); border: 1.5px solid var(--accent-primary); padding: 10px; border-radius: 6px; margin-bottom: 1rem;">
+            <span style="font-weight: 700; color: var(--accent-primary);">🔴 SESIÓN DE PARTOGRAMA ACTIVO (En Trabajo de Parto)</span>
+            <p style="margin: 4px 0 0 0;"><strong>Inicio:</strong> ${new Date(activePartogram.startDate).toLocaleString()} | <strong>Lecturas:</strong> ${activePartogram.records ? activePartogram.records.length : 0}</p>
+            ${activeRecordsListHtml}
+          </div>
+        `;
+      }
+
+      let historyPartHtml = '';
+      partogramHistory.forEach((h, idx) => {
+        let hRecordsListHtml = '';
+        if (h.records && h.records.length > 0) {
+          hRecordsListHtml = '<ul style="margin-left: 15px; margin-top: 6px; font-size: 0.85rem; list-style-type: disc; color: var(--text-muted);">';
+          h.records.forEach(r => {
+            const tText = new Date(r.time).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' });
+            hRecordsListHtml += '<li><strong>' + tText + ':</strong> Dilatación: ' + r.dilation + ' cm, Estación: ' + r.descent + ', FCF: ' + r.fcf + ' lpm.</li>';
+          });
+          hRecordsListHtml += '</ul>';
+        }
+
+        historyPartHtml += `
+          <div style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; margin-bottom: 0.8rem;">
+            <strong>Sesión Archivada #${partogramHistory.length - idx}</strong>
+            <p style="margin: 4px 0 0 0;"><strong>Fecha de Inicio:</strong> ${new Date(h.startDate).toLocaleString()}</p>
+            ${hRecordsListHtml}
+          </div>
+        `;
+      });
+
+      partogramHtml = `
+        <div style="font-size: 0.9rem; color: var(--text-muted);">
+          ${activePartHtml}
+          ${historyPartHtml}
+        </div>
+      `;
+    }
+
     let vitalsHtml = '';
     if (!patient.vitalSigns || patient.vitalSigns.length === 0) {
       vitalsHtml = '<p style="color: var(--text-muted); font-size: 0.9rem;">Sin mediciones de signos vitales registradas.</p>';
@@ -2005,6 +2076,11 @@ function showClinicalHistoryModal(patient) {
       <div class="report-section" style="margin-top: 2rem;">
         <div class="report-section-title">Historial de Encamamiento y Hospitalizaciones</div>
         ${encamamientoHtml}
+      </div>
+
+      <div class="report-section" style="margin-top: 2rem;">
+        <div class="report-section-title">Análisis y Registros de Partograma (Obstetricia)</div>
+        ${partogramHtml}
       </div>
 
       <div class="report-section" style="margin-top: 2rem;">
@@ -2814,4 +2890,414 @@ function printBillingVoucher(patient, bill) {
     </html>
   `);
   printWindow.document.close();
+}
+
+// ==========================================
+// SECCIÓN DE PARTOGRAMA EN TIEMPO REAL
+// ==========================================
+
+export function renderPartogramaUI(patient) {
+  const container = document.getElementById('partograma-container-root');
+  if (!container) return;
+
+  const state = getAppState();
+  const patientObj = state.patients.find(p => p.id === patient.id);
+
+  if (!patientObj) return;
+
+  // Si no hay sesión de partograma activa
+  if (!patientObj.partogram) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 3rem 1.5rem; background: rgba(255,255,255,0.01); border: 1px dashed var(--border-color); border-radius: 8px;">
+        <span style="font-size: 3rem;">📈</span>
+        <h3 style="margin-top: 1rem; color: var(--text-primary);">Análisis de Partograma (Curva de Dilatación y Descenso)</h3>
+        <p style="color: var(--text-muted); max-width: 500px; margin: 0.5rem auto 1.5rem auto; line-height: 1.5;">
+          El partograma permite registrar en tiempo real la dilatación cervical y el descenso de la presentación fetal respecto al tiempo para prevenir partos prolongados y distocias.
+        </p>
+        <button class="btn btn-success" id="btn-start-partograma" style="padding: 10px 20px; font-weight: 700;">
+          🚀 Iniciar Registro de Partograma (Activar Trabajo de Parto)
+        </button>
+      </div>
+    `;
+
+    document.getElementById('btn-start-partograma').addEventListener('click', () => {
+      patientObj.partogram = {
+        startDate: new Date().toISOString(),
+        status: 'Activo',
+        records: []
+      };
+      saveAppState(state);
+      renderPartogramaUI(patientObj);
+    });
+    return;
+  }
+
+  const partogram = patientObj.partogram;
+  const records = partogram.records || [];
+  const analysisResult = analyzePartogramData(records);
+
+  container.innerHTML = `
+    <div style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; width: 100%;">
+      <!-- Izquierda: Gráfica y Diagnóstico -->
+      <div style="flex: 2; min-width: 300px; display: flex; flex-direction: column; gap: 1rem;">
+        <div class="glass-card" style="padding: 1.25rem; height: 420px; position: relative;">
+          <h4 style="margin: 0 0 10px 0; color: var(--accent-primary); font-size: 1.1rem; display: flex; justify-content: space-between; align-items: center;">
+            <span>Gráfica de Dilatación Cervical y Descenso Fetal</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Inicio: \${new Date(partogram.startDate).toLocaleString()}</span>
+          </h4>
+          <div style="position: absolute; inset: 45px 15px 15px 15px;">
+            <canvas id="partograma-canvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Panel de Alertas y Diagnóstico -->
+        <div class="glass-card" style="padding: 1.25rem; border-top: 4px solid \${analysisResult.colorHex};">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+            <span style="font-size: 1.5rem;">\${analysisResult.icon}</span>
+            <div>
+              <h4 style="margin: 0; color: var(--text-primary); font-size: 1rem;">Estado del Parto: <span style="color: \${analysisResult.colorHex};">\${analysisResult.statusText}</span></h4>
+              <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: var(--text-muted);">Recomendación oficial del sistema sugerida</p>
+            </div>
+          </div>
+          <div style="font-size: 0.88rem; color: var(--text-primary); line-height: 1.4; background: rgba(0,0,0,0.1); padding: 10px; border-radius: 4px; border: 1px solid var(--border-color);">
+            \${analysisResult.recommendation}
+          </div>
+        </div>
+      </div>
+
+      <!-- Derecha: Formulario de Actualización Rápida -->
+      <div style="flex: 1.1; min-width: 280px; display: flex; flex-direction: column; gap: 1rem;">
+        <div class="glass-card" style="padding: 1.25rem;">
+          <h4 style="margin-bottom: 10px; color: var(--accent-secondary); font-size: 1rem;">Registrar Lectura</h4>
+          
+          <form id="partograma-record-form" style="display: flex; flex-direction: column; gap: 10px; font-size: 0.85rem;">
+            <div class="form-group">
+              <label>Hora del Registro</label>
+              <input type="datetime-local" id="part-time" required style="width: 100%; padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-card); color: var(--text-primary);">
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div class="form-group">
+                <label>Dilatación Cervical (0 - 10 cm)</label>
+                <input type="number" id="part-dilation" required min="0" max="10" step="0.5" placeholder="cm" style="width: 100%; padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-card); color: var(--text-primary);">
+              </div>
+              <div class="form-group">
+                <label>Estación/Descenso Fetal</label>
+                <select id="part-descent" required style="width: 100%; padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-card); color: var(--text-primary);">
+                  <option value="-4">-4 (Plano I Hodge / Alta)</option>
+                  <option value="-3">-3 (Plano I Hodge)</option>
+                  <option value="-2">-2 (Plano II Hodge)</option>
+                  <option value="-1">-1 (Plano II Hodge)</option>
+                  <option value="0" selected>0 (Plano III Hodge / Estación 0)</option>
+                  <option value="1">+1 (Plano III Hodge)</option>
+                  <option value="2">+2 (Plano IV Hodge)</option>
+                  <option value="3">+3 (Plano IV Hodge)</option>
+                  <option value="4">+4 (Coronando / Salida)</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div class="form-group">
+                <label>FCF (Frec. Cardíaca Fetal)</label>
+                <input type="number" id="part-fcf" required placeholder="LPM (ej. 140)" style="width: 100%; padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-card); color: var(--text-primary);">
+              </div>
+              <div class="form-group">
+                <label>Contracciones (en 10 min)</label>
+                <input type="number" id="part-contr-freq" required placeholder="Frecuencia (ej. 3)" style="width: 100%; padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-card); color: var(--text-primary);">
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div class="form-group">
+                <label>Duración Contracciones (seg)</label>
+                <input type="number" id="part-contr-dur" required placeholder="segundos (ej. 40)" style="width: 100%; padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-card); color: var(--text-primary);">
+              </div>
+              <div class="form-group">
+                <label>Líquido Amniótico</label>
+                <select id="part-liquido" required style="width: 100%; padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-card); color: var(--text-primary);">
+                  <option value="Claro">Claro</option>
+                  <option value="Meconial">Meconial</option>
+                  <option value="Sanguinolento">Sanguinolento</option>
+                  <option value="Membranas Integras">Membranas Íntegras (Sin líquido)</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="border-top: 1px dashed var(--border-color); padding-top: 6px; margin-top: 4px;">
+              <span style="font-weight: 700; color: var(--text-muted); font-size: 0.75rem;">Signos Maternos (Opcional)</span>
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 4px;">
+                <input type="number" step="0.1" id="part-m-temp" placeholder="T(°C)" style="width: 100%; padding: 4px; font-size: 0.8rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-card); color: var(--text-primary);">
+                <input type="number" id="part-m-sys" placeholder="P.A. Sis" style="width: 100%; padding: 4px; font-size: 0.8rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-card); color: var(--text-primary);">
+                <input type="number" id="part-m-dia" placeholder="P.A. Dia" style="width: 100%; padding: 4px; font-size: 0.8rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-card); color: var(--text-primary);">
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%; padding: 8px; margin-top: 5px; font-weight: 700;">💾 Grabar Lectura en Tiempo Real</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Historial y Acciones -->
+    <div class="glass-card" style="padding: 1.25rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+        <h4 style="margin: 0; color: var(--text-primary); font-size: 1rem;">Cronología del Registro</h4>
+        <button class="btn btn-secondary btn-small" id="btn-reset-partograma" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.25);">
+          🗑️ Finalizar / Archivar Sesión Actual
+        </button>
+      </div>
+
+      <div style="overflow-x: auto; font-size: 0.85rem;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="border-bottom: 2px solid var(--border-color); color: var(--text-muted);">
+              <th style="padding: 8px; text-align: left;">Fecha/Hora</th>
+              <th style="padding: 8px; text-align: center;">Dilatación</th>
+              <th style="padding: 8px; text-align: center;">Estación Fetal</th>
+              <th style="padding: 8px; text-align: center;">FCF (LPM)</th>
+              <th style="padding: 8px; text-align: center;">Contracciones</th>
+              <th style="padding: 8px; text-align: center;">Líquido Amniótico</th>
+              <th style="padding: 8px; text-align: center;">Signos Maternos</th>
+              <th style="padding: 8px; text-align: center; width: 80px;">Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            \${records.length === 0 ? \`
+              <tr>
+                <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                  No hay lecturas registradas en esta sesión. Ingrese una lectura para graficar.
+                </td>
+              </tr>
+            \` : records.map((rec, index) => {
+              const formattedDate = new Date(rec.time).toLocaleString('es-GT', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+              const sys = rec.maternalVitals?.sys || '-';
+              const dia = rec.maternalVitals?.dia || '-';
+              const temp = rec.maternalVitals?.temp ? \\\`\\\${rec.maternalVitals.temp}°C\\\` : '-';
+              const bp = (sys !== '-' || dia !== '-') ? \\\`\\\${sys}/\\\${dia}\\\` : '-';
+
+              return \\\`
+                <tr style="border-bottom: 1px solid var(--border-color);">
+                  <td style="padding: 8px; font-weight: 600;">\\\${formattedDate}</td>
+                  <td style="padding: 8px; text-align: center; font-weight: bold; color: var(--accent-primary);">\\\${rec.dilation} cm</td>
+                  <td style="padding: 8px; text-align: center; font-weight: bold; color: var(--accent-secondary);">\\\${rec.descent > 0 ? \\\`+\\\${rec.descent}\\\` : rec.descent}</td>
+                  <td style="padding: 8px; text-align: center; color: \\\${rec.fcf < 110 || rec.fcf > 160 ? '#ef4444' : 'inherit'}; font-weight: \\\${rec.fcf < 110 || rec.fcf > 160 ? '700' : 'normal'};">\\\${rec.fcf} lpm</td>
+                  <td style="padding: 8px; text-align: center;">\\\${rec.contractionsFreq} en 10 min (\\\${rec.contractionsDuration}s)</td>
+                  <td style="padding: 8px; text-align: center;">\\\${rec.liquido}</td>
+                  <td style="padding: 8px; text-align: center; font-size: 0.8rem; color: var(--text-muted);">\\\${bp} mmHg | \\\${temp}</td>
+                  <td style="padding: 8px; text-align: center;">
+                    <button class="btn btn-secondary btn-small btn-delete-part-record" data-index="\\\${index}" style="padding: 2px 6px; color: #ff5252;">&times; Eliminar</button>
+                  </td>
+                </tr>
+              \\\`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // Pre-rellenar fecha/hora
+  const formatLocalISO = (date) => {
+    const tzoffset = date.getTimezoneOffset() * 60000;
+    return (new Date(date.getTime() - tzoffset)).toISOString().slice(0, 16);
+  };
+  document.getElementById('part-time').value = formatLocalISO(new Date());
+
+  // Renderizar la gráfica Chart.js
+  const canvasEl = document.getElementById('partograma-canvas');
+  if (canvasEl) {
+    initPartogramaChart(canvasEl, records);
+  }
+
+  // Enviar formulario
+  document.getElementById('partograma-record-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const timeVal = new Date(document.getElementById('part-time').value).toISOString();
+    const dilationVal = parseFloat(document.getElementById('part-dilation').value);
+    const descentVal = parseInt(document.getElementById('part-descent').value);
+    const fcfVal = parseInt(document.getElementById('part-fcf').value);
+    const contrFreqVal = parseInt(document.getElementById('part-contr-freq').value);
+    const contrDurVal = parseInt(document.getElementById('part-contr-dur').value);
+    const liquidoVal = document.getElementById('part-liquido').value;
+
+    const mTemp = document.getElementById('part-m-temp').value ? parseFloat(document.getElementById('part-m-temp').value) : null;
+    const mSys = document.getElementById('part-m-sys').value ? parseInt(document.getElementById('part-m-sys').value) : null;
+    const mDia = document.getElementById('part-m-dia').value ? parseInt(document.getElementById('part-m-dia').value) : null;
+
+    const newRec = {
+      time: timeVal,
+      dilation: dilationVal,
+      descent: descentVal,
+      fcf: fcfVal,
+      contractionsFreq: contrFreqVal,
+      contractionsDuration: contrDurVal,
+      liquido: liquidoVal,
+      maternalVitals: { temp: mTemp, sys: mSys, dia: mDia },
+      recordedBy: state.currentUser?.name || 'Clínico'
+    };
+
+    partogram.records.push(newRec);
+    partogram.records.sort((a, b) => new Date(a.time) - new Date(b.time));
+
+    saveAppState(state);
+    alert("Lectura del partograma registrada exitosamente.");
+    renderPartogramaUI(patientObj);
+  });
+
+  // Eliminar puntos
+  container.querySelectorAll('.btn-delete-part-record').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const index = parseInt(e.target.getAttribute('data-index'));
+      if (confirm("¿Está seguro de que desea eliminar este punto de registro?")) {
+        partogram.records.splice(index, 1);
+        saveAppState(state);
+        renderPartogramaUI(patientObj);
+      }
+    });
+  });
+
+  // Resetear sesión
+  document.getElementById('btn-reset-partograma').addEventListener('click', () => {
+    if (confirm("¿Desea finalizar y archivar la sesión actual?")) {
+      patientObj.partogramHistory = patientObj.partogramHistory || [];
+      patientObj.partogramHistory.push(JSON.parse(JSON.stringify(partogram)));
+      patientObj.partogram = null;
+      saveAppState(state);
+      renderPartogramaUI(patientObj);
+    }
+  });
+}
+
+function analyzePartogramData(records) {
+  if (records.length === 0) {
+    return {
+      statusText: "Sin lecturas",
+      colorHex: "var(--border-color)",
+      icon: "⚪",
+      recommendation: "Ingrese el primer registro del partograma para iniciar el análisis automático y generar sugerencias clínicas."
+    };
+  }
+
+  const sorted = [...records].sort((a, b) => new Date(a.time) - new Date(b.time));
+  const latest = sorted[sorted.length - 1];
+
+  let isFetalDistress = false;
+  let hasBradycardia = false;
+  let hasTachycardia = false;
+
+  sorted.forEach(r => {
+    if (r.fcf < 110) hasBradycardia = true;
+    if (r.fcf > 160) hasTachycardia = true;
+  });
+
+  if (hasBradycardia || hasTachycardia) {
+    isFetalDistress = true;
+  }
+
+  const activeIndex = sorted.findIndex(r => r.dilation >= 4);
+
+  let isRightOfAlert = false;
+  let isRightOfAction = false;
+  let isArrest = false;
+
+  if (activeIndex !== -1) {
+    const activeStart = sorted[activeIndex];
+    const startTime = new Date(activeStart.time).getTime();
+
+    for (let i = activeIndex; i < sorted.length; i++) {
+      const current = sorted[i];
+      const elapsedHrs = (new Date(current.time).getTime() - startTime) / (1000 * 60 * 60);
+
+      const alertDilationLimit = activeStart.dilation + elapsedHrs * 1.0;
+      
+      if (current.dilation < alertDilationLimit && current.dilation < 10) {
+        isRightOfAlert = true;
+      }
+
+      if (elapsedHrs >= 4) {
+        const actionDilationLimit = activeStart.dilation + (elapsedHrs - 4) * 1.0;
+        if (current.dilation < actionDilationLimit && current.dilation < 10) {
+          isRightOfAction = true;
+        }
+      }
+    }
+
+    if (sorted.length >= 2) {
+      for (let i = activeIndex; i < sorted.length - 1; i++) {
+        const first = sorted[i];
+        const second = sorted[sorted.length - 1];
+        const elapsed = (new Date(second.time).getTime() - new Date(first.time).getTime()) / (1000 * 60 * 60);
+        if (elapsed >= 2.0 && second.dilation === first.dilation && second.dilation < 10) {
+          isArrest = true;
+        }
+      }
+    }
+  }
+
+  if (isFetalDistress) {
+    return {
+      statusText: "🚨 RIESGO FETAL: FCF ALTERADA",
+      colorHex: "#ef4444",
+      icon: "🚨",
+      recommendation: `<strong>Frecuencia Cardíaca Fetal Crítica:</strong> Se detectaron valores anormales (bradicardia <110 o taquicardia >160 bpm).<br>
+        • Coloque a la madre en decúbito lateral izquierdo y administre oxígeno suplementario.<br>
+        • Verifique el estado del líquido amniótico (presencia de meconio).<br>
+        • Prepare para resolución quirúrgica inmediata o reevaluación obstétrica de emergencia.`
+    };
+  }
+
+  if (isRightOfAction) {
+    return {
+      statusText: "🛑 CRÍTICO: LÍNEA DE ACCIÓN CRUZADA",
+      colorHex: "#ef4444",
+      icon: "🛑",
+      recommendation: `<strong>Dilatación por debajo de la Línea de Acción (OMS):</strong> Progreso severamente retrasado.<br>
+        • Se requiere intervención activa: amniotomía, infusión de oxitocina o reevaluación para cesárea si hay desproporción cefalopélvica (DCP).<br>
+        • Monitoree la dinámica uterina y los signos vitales maternos cada 30 minutos.`
+    };
+  }
+
+  if (isArrest) {
+    return {
+      statusText: "⚠️ ALERTA: ARRESTO DE DILATACIÓN CERVICAL",
+      colorHex: "#f59e0b",
+      icon: "⚠️",
+      recommendation: `<strong>Arresto de Dilatación Activa:</strong> Sin progreso en el cuello uterino durante 2 o más horas.<br>
+        • Evalúe la fuerza y frecuencia de las contracciones (dinámica uterina).<br>
+        • Descarte DCP (desproporción cefalopélvica) o mala presentación fetal.<br>
+        • Considere conducción con oxitocina.`
+    };
+  }
+
+  if (isRightOfAlert) {
+    return {
+      statusText: "⚠️ ADVERTENCIA: LÍNEA DE ALERTA CRUZADA",
+      colorHex: "#f59e0b",
+      icon: "⚠️",
+      recommendation: `<strong>Dilatación por debajo de la Línea de Alerta (OMS):</strong> Progreso más lento de lo normal (menor a 1 cm/hora).<br>
+        • Transfiera a un centro con capacidad quirúrgica si se encuentra en atención primaria.<br>
+        • Revise la hidratación, vaciamiento vesical de la madre y brinde apoyo emocional constante.`
+    };
+  }
+
+  if (latest.dilation < 4) {
+    return {
+      statusText: "🟢 FASE LATENTE",
+      colorHex: "#10b981",
+      icon: "🟢",
+      recommendation: `<strong>Trabajo de parto en fase latente (dilatación < 4 cm):</strong><br>
+        • Monitoreo expectante de contracciones y bienestar fetal cada 1-2 horas.<br>
+        • Fomente la deambulación libre y la ingesta de líquidos claros.`
+    };
+  }
+
+  return {
+    statusText: "🟢 EVOLUCIÓN NORMAL (FASE ACTIVA)",
+    colorHex: "#10b981",
+    icon: "🟢",
+    recommendation: `<strong>Fase Activa con Progreso Adecuado:</strong> Dilatación progresa a >= 1 cm/hora en la línea de alerta.<br>
+      • Mantenga el monitoreo rutinario según protocolo (FCF cada 30 min, dilatación cada 4 horas).<br>
+      • Fomente el libre posicionamiento y la comodidad materna.`
+  };
 }
