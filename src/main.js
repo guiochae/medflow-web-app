@@ -706,8 +706,13 @@ function initializeSidebar(loggedUser) {
   }
 
   // Configurar menú de navegación con filtrado de permisos por usuario
-  const userModules = userObj.modules || ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion'];
-  const isFullAdmin = userObj.role === 'administrador' || userObj.role === 'Administrador' || userObj.role === 'medico_1' || userObj.role === 'Médico 1' || userObj.name === 'Administrador';
+  const userModules = userObj.modules || ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'encamamiento', 'configuracion'];
+  const roleLower = String(userObj.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const isFullAdmin = roleLower.includes('administrador') || 
+                      roleLower.includes('admin') || 
+                      roleLower === 'medico_1' || 
+                      roleLower === 'medico 1' || 
+                      String(userObj.name || '').toLowerCase().includes('administrador');
 
   const navItems = document.querySelectorAll('.nav-item');
   let firstAllowedRoute = null;
@@ -718,9 +723,9 @@ function initializeSidebar(loggedUser) {
 
     // Aplicar restricción específica para Encamamiento (Administrador, Médicos, Enfermera)
     if (target === 'encamamiento') {
-      const roleLower = String(userObj.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       hasAccess = isFullAdmin || 
-                  roleLower === 'administrador' ||
+                  roleLower.includes('administrador') ||
+                  roleLower.includes('admin') ||
                   roleLower.startsWith('medico') ||
                   roleLower.includes('enfermera') ||
                   roleLower.includes('enfermero');

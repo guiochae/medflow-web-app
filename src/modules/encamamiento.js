@@ -15,7 +15,8 @@ export function renderEncamamiento(container) {
 
   // 1. Validar Control de Acceso (RBAC)
   const roleLower = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const isAuthorized = roleLower === 'administrador' ||
+  const isAuthorized = roleLower.includes('administrador') ||
+                       roleLower.includes('admin') ||
                        roleLower.startsWith('medico') ||
                        roleLower.includes('enfermera') ||
                        roleLower.includes('enfermero');
