@@ -226,6 +226,7 @@ function renderHospitalizationDashboard() {
             <span><strong>Edad:</strong> ${age} años</span>
             <span><strong>Habitación:</strong> ${activeHosp.roomName || 'General'}</span>
             <span><strong>Ingreso:</strong> ${new Date(activeHosp.admissionDate).toLocaleString('es-GT')}</span>
+            <span><strong>🥦 Dieta:</strong> <strong style="color: var(--accent-primary);">${activeHosp.dietType || 'No especificada'}</strong></span>
           </div>
         </div>
         <div style="display: flex; gap: 8px;">
@@ -274,39 +275,60 @@ function renderActiveTabContent(activeHosp, patient) {
     // Pestaña Evolución Médica
     contentArea.innerHTML = `
       <div style="display: grid; grid-template-columns: 1.3fr 1fr; gap: 1.5rem; flex-wrap: wrap;">
-        <!-- Formulario para agregar evolución -->
-        <div class="glass-card" style="padding: 1.25rem;">
-          <h3 style="margin-bottom: 10px; color: var(--accent-primary);">Añadir Evolución Médica</h3>
-          <form id="hosp-evolution-form" style="display: flex; flex-direction: column; gap: 12px;">
-            <div class="form-group">
-              <label>Médico que registra</label>
-              <select id="hosp-evo-doctor" required style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
-                <!-- Se llena con médicos -->
-              </select>
+        <!-- Columna Izquierda: Órdenes de Ingreso y Formulario de Evolución -->
+        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+          
+          <!-- Card de Órdenes e Indicaciones de Ingreso -->
+          <div class="glass-card" style="padding: 1.25rem; border-left: 4px solid var(--accent-secondary);">
+            <h3 style="margin-bottom: 8px; color: var(--accent-secondary); font-family: var(--font-heading); font-size: 1.1rem;">📋 Órdenes Médicas y Dieta al Ingreso</h3>
+            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; color: var(--text-primary);">
+              <div><strong>🥦 Dieta Actual:</strong> <span style="color: var(--accent-primary); font-weight: bold; font-size: 0.9rem;">${activeHosp.dietType || 'No especificada'}</span></div>
+              <div><strong>🩺 Diagnóstico de Ingreso:</strong> <span style="color: var(--text-muted);">${activeHosp.admissionReason}</span></div>
+              <div style="margin-top: 6px; background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); padding: 10px; border-radius: var(--radius-sm);">
+                <strong>📋 Órdenes Iniciales:</strong>
+                <p style="white-space: pre-wrap; font-family: monospace; font-size: 0.82rem; margin: 4px 0 0 0; color: var(--text-muted); line-height: 1.4;">${activeHosp.admissionOrders || 'Ninguna registrada'}</p>
+              </div>
             </div>
-            <div class="form-group">
-              <label>Nota de Evolución Médica</label>
-              <textarea id="hosp-evo-note" required rows="4" placeholder="Escriba el seguimiento clínico, evolución y estado general del paciente..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical;"></textarea>
-            </div>
-            
-            <div style="border-top: 1px dashed var(--border-color); padding-top: 10px; margin-top: 5px;">
-              <h4 style="color: var(--accent-secondary); margin-bottom: 8px; font-size: 0.95rem;">Órdenes Médicas Integradas</h4>
+          </div>
+
+          <!-- Formulario para agregar evolución -->
+          <div class="glass-card" style="padding: 1.25rem;">
+            <h3 style="margin-bottom: 10px; color: var(--accent-primary);">Añadir Evolución Médica</h3>
+            <form id="hosp-evolution-form" style="display: flex; flex-direction: column; gap: 12px;">
+              <div class="form-group">
+                <label>Médico que registra</label>
+                <select id="hosp-evo-doctor" required style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+                  <!-- Se llena con médicos -->
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Nota de Evolución Médica</label>
+                <textarea id="hosp-evo-note" required rows="4" placeholder="Escriba el seguimiento clínico, evolución y estado general del paciente..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical;"></textarea>
+              </div>
+              <div class="form-group">
+                <label>Actualizar Tipo de Dieta (Opcional)</label>
+                <input type="text" id="hosp-evo-diet" value="${activeHosp.dietType || ''}" placeholder="Ej. Dieta líquida, blanda, NPO..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+              </div>
               
-              <!-- Tabs internas para órdenes -->
-              <div style="display: flex; gap: 5px; margin-bottom: 10px;">
-                <button type="button" class="btn btn-secondary btn-small" id="btn-ord-meds" style="padding: 4px 8px; font-size: 0.75rem;">💊 Recetar Medicamentos</button>
-                <button type="button" class="btn btn-secondary btn-small" id="btn-ord-labs" style="padding: 4px 8px; font-size: 0.75rem;">🔬 Exámenes de Laboratorio</button>
-                <button type="button" class="btn btn-secondary btn-small" id="btn-ord-imgs" style="padding: 4px 8px; font-size: 0.75rem;">🖼️ Estudios de Imagen</button>
+              <div style="border-top: 1px dashed var(--border-color); padding-top: 10px; margin-top: 5px;">
+                <h4 style="color: var(--accent-secondary); margin-bottom: 8px; font-size: 0.95rem;">Órdenes Médicas Integradas</h4>
+                
+                <!-- Tabs internas para órdenes -->
+                <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                  <button type="button" class="btn btn-secondary btn-small" id="btn-ord-meds" style="padding: 4px 8px; font-size: 0.75rem;">💊 Recetar Medicamentos</button>
+                  <button type="button" class="btn btn-secondary btn-small" id="btn-ord-labs" style="padding: 4px 8px; font-size: 0.75rem;">🔬 Exámenes de Laboratorio</button>
+                  <button type="button" class="btn btn-secondary btn-small" id="btn-ord-imgs" style="padding: 4px 8px; font-size: 0.75rem;">🖼️ Estudios de Imagen</button>
+                </div>
+
+                <!-- Lista de órdenes cargadas a esta evolución -->
+                <div id="hosp-temp-orders-list" style="margin-bottom: 10px; font-size: 0.85rem; background: rgba(255,255,255,0.02); padding: 8px; border-radius: 4px; border: 1px dashed var(--border-color);">
+                  Ninguna orden integrada agregada para esta evolución.
+                </div>
               </div>
 
-              <!-- Lista de órdenes cargadas a esta evolución -->
-              <div id="hosp-temp-orders-list" style="margin-bottom: 10px; font-size: 0.85rem; background: rgba(255,255,255,0.02); padding: 8px; border-radius: 4px; border: 1px dashed var(--border-color);">
-                Ninguna orden integrada agregada para esta evolución.
-              </div>
-            </div>
-
-            <button type="submit" class="btn btn-success" style="width: 100%; padding: 10px;">💾 Guardar Nota de Evolución</button>
-          </form>
+              <button type="submit" class="btn btn-success" style="width: 100%; padding: 10px;">💾 Guardar Nota de Evolución</button>
+            </form>
+          </div>
         </div>
 
         <!-- Historial de evoluciones -->
@@ -340,6 +362,11 @@ function renderActiveTabContent(activeHosp, patient) {
       const docId = document.getElementById('hosp-evo-doctor').value;
       const docObj = state.users.find(u => u.id === docId);
       const noteVal = document.getElementById('hosp-evo-note').value;
+      const dietVal = document.getElementById('hosp-evo-diet').value.trim();
+
+      if (dietVal) {
+        activeHosp.dietType = dietVal;
+      }
 
       const evolutionRecord = {
         id: 'evo-' + Date.now(),
@@ -347,6 +374,7 @@ function renderActiveTabContent(activeHosp, patient) {
         doctorName: docObj.name,
         doctorId: docObj.id,
         note: noteVal,
+        dietType: dietVal || activeHosp.dietType || '',
         medications: [...tempMeds],
         laboratoryTests: [...tempLabs],
         imagingStudies: [...tempImgs]
@@ -755,11 +783,20 @@ function renderAdmissionForm(targetPatientId = null) {
             <label>Teléfono de Familiar Responsable</label>
             <input type="tel" id="adm-fam-phone" required placeholder="Ej. 5555-1234" style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
           </div>
+          <div class="form-group">
+            <label>Tipo de Dieta</label>
+            <input type="text" id="adm-diet-type" required placeholder="Ej. Dieta blanda, Dieta líquida, NPO..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+          </div>
         </div>
 
         <div class="form-group">
           <label>Diagnóstico o razón de ingreso</label>
-          <textarea id="adm-reason" required rows="3" placeholder="Detalle los síntomas, examen físico inicial y sospecha de diagnóstico..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical;"></textarea>
+          <textarea id="adm-reason" required rows="2" placeholder="Detalle los síntomas, examen físico inicial y sospecha de diagnóstico..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical;"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Órdenes Médicas al Ingreso (Infusiones, Medicamentos, Laboratorios, Indicaciones Especiales)</label>
+          <textarea id="adm-orders" required rows="4" placeholder="Indique:\n1. Infusiones / Soluciones\n2. Medicamentos y dosis\n3. Laboratorios y estudios\n4. Indicaciones especiales (Curva de temperatura y P.A. cada 4 horas, canalización vía periférica, plan educacional, cuidados del paciente...)" style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical; font-family: monospace; font-size: 0.85rem;"></textarea>
         </div>
 
         <!-- Sección de Signos Vitales -->
@@ -865,6 +902,8 @@ function renderAdmissionForm(targetPatientId = null) {
     const famName = document.getElementById('adm-fam-name').value;
     const famPhone = document.getElementById('adm-fam-phone').value;
     const reason = document.getElementById('adm-reason').value;
+    const dietType = document.getElementById('adm-diet-type').value.trim();
+    const admissionOrders = document.getElementById('adm-orders').value.trim();
 
     // Tomar signos vitales al ingreso
     const t = parseFloat(document.getElementById('adm-vit-temp').value);
@@ -907,6 +946,8 @@ function renderAdmissionForm(targetPatientId = null) {
       responsibleFamilyName: famName,
       responsibleFamilyPhone: famPhone,
       admissionReason: reason,
+      dietType: dietType,
+      admissionOrders: admissionOrders,
       admissionDate: new Date().toISOString(),
       dischargeDate: null,
       status: 'Activo',
@@ -1299,6 +1340,12 @@ function renderEvolutionsHistory(activeHosp) {
         <div style="font-size: 0.72rem; color: var(--accent-primary); font-weight: bold; margin-bottom: 4px;">📅 ${formattedDate} | Dr. ${e.doctorName}</div>
         <p style="font-size: 0.85rem; color: var(--text-muted); white-space: pre-wrap; line-height: 1.4; margin: 0 0 8px 0;">${e.note}</p>
         
+        ${e.dietType ? `
+          <div style="font-size: 0.75rem; background: rgba(0, 242, 254, 0.04); border: 1px solid rgba(0, 242, 254, 0.15); padding: 5px 8px; border-radius: 4px; margin-bottom: 6px; color: var(--accent-primary); display: inline-block;">
+            🥦 Dieta indicada: <strong>${e.dietType}</strong>
+          </div>
+        ` : ''}
+
         <!-- Detalles de recetas/laboratorio ordenados -->
         ${e.medications && e.medications.length > 0 ? `
           <div style="font-size: 0.75rem; background: rgba(0,0,0,0.1); padding: 6px; border-radius: 4px; margin-top: 4px;">
@@ -1508,6 +1555,11 @@ function printHospitalizationRecord(hosp, patient) {
           <div><strong>Médico Tratante:</strong> ${hosp.doctorName}</div>
           <div><strong>Familiar Responsable:</strong> ${hosp.responsibleFamilyName} (${hosp.responsibleFamilyPhone})</div>
           <div style="grid-column: 1/-1;"><strong>Diagnóstico de Ingreso:</strong> ${hosp.admissionReason}</div>
+          <div style="grid-column: 1/-1;"><strong>Tipo de Dieta al Ingreso / Actual:</strong> <span style="font-weight: bold; color: #1e3a8a;">${hosp.dietType || 'No especificada'}</span></div>
+          <div style="grid-column: 1/-1; background: #f9fafb; border: 1px solid #e5e7eb; padding: 10px; border-radius: 4px; margin-top: 5px;">
+            <strong>📋 Órdenes Médicas al Ingreso:</strong>
+            <p style="white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; margin: 4px 0 0 0; color: #4b5563; line-height: 1.4;">${hosp.admissionOrders || 'Ninguna registrada'}</p>
+          </div>
         </div>
 
         <div class="section-title">Signos Vitales al Ingreso</div>
