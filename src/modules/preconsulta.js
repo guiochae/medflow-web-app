@@ -12,10 +12,16 @@ function isCurrentUserAdmin() {
     const userObj = JSON.parse(loggedUser);
     const roleLower = String(userObj.role || '').toLowerCase();
     const nameLower = String(userObj.name || '').toLowerCase();
-    const isAdmin = (roleLower.includes('administrador') && !roleLower.includes('medico') && !roleLower.includes('médico')) || 
-                    nameLower === 'administrador' ||
-                    roleLower === 'administrador';
-    console.log("[isCurrentUserAdmin] Debug:", { role: userObj.role, name: userObj.name, isAdmin });
+    
+    // Es admin si su rol contiene 'admin' o 'administrador' y NO contiene 'medico'/'médico', 
+    // o si el nombre del usuario contiene 'admin' o 'administrador'
+    const isAdmin = ((roleLower.includes('administrador') || roleLower.includes('admin')) && 
+                     !roleLower.includes('medico') && 
+                     !roleLower.includes('médico')) ||
+                    nameLower.includes('administrador') || 
+                    nameLower.includes('admin');
+    
+    console.log("[isCurrentUserAdmin] Debug details:", { role: userObj.role, name: userObj.name, isAdmin });
     return isAdmin;
   } catch (e) {
     console.error("[isCurrentUserAdmin] Error parsing logged user:", e);
