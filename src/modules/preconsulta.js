@@ -1,6 +1,20 @@
-import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
+import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
 import { showLocalLabReportPrintWindow } from './laboratorio.js';
 import { initPartogramaChart } from './partogramaChart.js';
+
+function isCurrentUserAdmin() {
+  const loggedUser = sessionStorage.getItem('medflow_logged_user');
+  if (!loggedUser) return false;
+  try {
+    const userObj = JSON.parse(loggedUser);
+    const roleLower = String(userObj.role || '').toLowerCase();
+    const nameLower = String(userObj.name || '').toLowerCase();
+    return (roleLower.includes('administrador') && !roleLower.includes('medico') && !roleLower.includes('médico')) || 
+           nameLower === 'administrador';
+  } catch (e) {
+    return false;
+  }
+}
 import logoUrl from '../assets/logo.jpg';
 
 export function renderPreconsulta(container) {
@@ -483,7 +497,7 @@ function renderPatientDetails() {
           <button class="btn btn-secondary" id="btn-edit-patient">
             <span>✏️</span> Editar Paciente
           </button>
-          ${isAdminUser() ? `
+          ${isCurrentUserAdmin() ? `
             <button class="btn" id="btn-delete-patient" style="background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: none; font-weight: 600;">
               <span>🗑️</span> Eliminar Paciente
             </button>

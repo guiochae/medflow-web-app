@@ -1,6 +1,20 @@
 // src/modules/consulta.js
-import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
+import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
 import { searchDiagnosticSuggestions } from '../data/cie10.js';
+
+function isCurrentUserAdmin() {
+  const loggedUser = sessionStorage.getItem('medflow_logged_user');
+  if (!loggedUser) return false;
+  try {
+    const userObj = JSON.parse(loggedUser);
+    const roleLower = String(userObj.role || '').toLowerCase();
+    const nameLower = String(userObj.name || '').toLowerCase();
+    return (roleLower.includes('administrador') && !roleLower.includes('medico') && !roleLower.includes('médico')) || 
+           nameLower === 'administrador';
+  } catch (e) {
+    return false;
+  }
+}
 
 // Estado temporal de la consulta activa (diagnósticos, estudios y tratamientos aceptados)
 let activeConsultationState = {
@@ -309,7 +323,7 @@ function renderConsultationHistory(patient) {
         <span>${dateFormatted}</span>
         <div style="display: flex; align-items: center; gap: 8px;">
           <span>${c.specialty || 'General'}</span>
-          ${isAdminUser() ? `
+          ${isCurrentUserAdmin() ? `
             <button class="btn-delete-consultation" data-id="${c.id}" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 2px; font-size: 0.95rem; line-height: 1;" title="Eliminar Consulta">🗑️</button>
           ` : ''}
         </div>
