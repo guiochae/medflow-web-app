@@ -287,6 +287,14 @@ function renderActiveTabContent(activeHosp, patient) {
               <div style="margin-top: 6px; background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); padding: 10px; border-radius: var(--radius-sm);">
                 <strong>📋 Órdenes Iniciales:</strong>
                 <p style="white-space: pre-wrap; font-family: monospace; font-size: 0.82rem; margin: 4px 0 0 0; color: var(--text-muted); line-height: 1.4;">${activeHosp.admissionOrders || 'Ninguna registrada'}</p>
+                ${activeHosp.specialIndications && activeHosp.specialIndications.length > 0 ? `
+                  <div style="margin-top: 8px; border-top: 1px dashed var(--border-color); padding-top: 8px;">
+                    <strong>📢 Indicaciones Especiales:</strong>
+                    <ul style="margin: 4px 0 0 0; padding-left: 15px; font-size: 0.8rem; color: var(--accent-primary);">
+                      ${activeHosp.specialIndications.map(ind => `<li>✅ ${ind}</li>`).join('')}
+                    </ul>
+                  </div>
+                ` : ''}
               </div>
             </div>
           </div>
@@ -795,8 +803,30 @@ function renderAdmissionForm(targetPatientId = null) {
         </div>
 
         <div class="form-group">
-          <label>Órdenes Médicas al Ingreso (Infusiones, Medicamentos, Laboratorios, Indicaciones Especiales)</label>
-          <textarea id="adm-orders" required rows="4" placeholder="Indique:\n1. Infusiones / Soluciones\n2. Medicamentos y dosis\n3. Laboratorios y estudios\n4. Indicaciones especiales (Curva de temperatura y P.A. cada 4 horas, canalización vía periférica, plan educacional, cuidados del paciente...)" style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical; font-family: monospace; font-size: 0.85rem;"></textarea>
+          <label>Órdenes Médicas al Ingreso (Infusiones, Medicamentos, Laboratorios)</label>
+          <textarea id="adm-orders" required rows="4" placeholder="Indique:\n1. Infusiones / Soluciones\n2. Medicamentos y dosis\n3. Laboratorios y estudios" style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical; font-family: monospace; font-size: 0.85rem;"></textarea>
+        </div>
+
+        <!-- Sección de Indicaciones Especiales -->
+        <div style="border-top: 1px dashed var(--border-color); padding-top: 10px; margin-top: 5px; margin-bottom: 5px;">
+          <h4 style="color: var(--accent-secondary); margin-bottom: 8px; font-size: 0.95rem;">Indicaciones Especiales</h4>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; text-transform: none; color: var(--text-primary);">
+              <input type="checkbox" class="adm-special-ind" value="Plan Educacional"> Plan Educacional
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; text-transform: none; color: var(--text-primary);">
+              <input type="checkbox" class="adm-special-ind" value="Curva de temperatura y P.A. cada 4 horas"> Curva de temperatura y P.A. cada 4 horas
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; text-transform: none; color: var(--text-primary);">
+              <input type="checkbox" class="adm-special-ind" value="Canalización vía periférica"> Canalización vía periférica
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; text-transform: none; color: var(--text-primary);">
+              <input type="checkbox" class="adm-special-ind" value="Cuidados del Paciente"> Cuidados del Paciente
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; text-transform: none; color: var(--text-primary);">
+              <input type="checkbox" class="adm-special-ind" value="Reportar Cambios Stat"> Reportar Cambios Stat
+            </label>
+          </div>
         </div>
 
         <!-- Sección de Signos Vitales -->
@@ -904,6 +934,7 @@ function renderAdmissionForm(targetPatientId = null) {
     const reason = document.getElementById('adm-reason').value;
     const dietType = document.getElementById('adm-diet-type').value.trim();
     const admissionOrders = document.getElementById('adm-orders').value.trim();
+    const specialIndications = Array.from(document.querySelectorAll('.adm-special-ind:checked')).map(cb => cb.value);
 
     // Tomar signos vitales al ingreso
     const t = parseFloat(document.getElementById('adm-vit-temp').value);
@@ -948,6 +979,7 @@ function renderAdmissionForm(targetPatientId = null) {
       admissionReason: reason,
       dietType: dietType,
       admissionOrders: admissionOrders,
+      specialIndications: specialIndications,
       admissionDate: new Date().toISOString(),
       dischargeDate: null,
       status: 'Activo',
@@ -1559,6 +1591,14 @@ function printHospitalizationRecord(hosp, patient) {
           <div style="grid-column: 1/-1; background: #f9fafb; border: 1px solid #e5e7eb; padding: 10px; border-radius: 4px; margin-top: 5px;">
             <strong>📋 Órdenes Médicas al Ingreso:</strong>
             <p style="white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; margin: 4px 0 0 0; color: #4b5563; line-height: 1.4;">${hosp.admissionOrders || 'Ninguna registrada'}</p>
+            ${hosp.specialIndications && hosp.specialIndications.length > 0 ? `
+              <div style="border-top: 1px dashed #e5e7eb; padding-top: 8px; margin-top: 8px;">
+                <strong>📢 Indicaciones Especiales:</strong>
+                <ul style="margin: 4px 0 0 0; padding-left: 18px; font-size: 0.8rem; color: #1e3a8a; list-style-type: disc;">
+                  ${hosp.specialIndications.map(ind => `<li>${ind}</li>`).join('')}
+                </ul>
+              </div>
+            ` : ''}
           </div>
         </div>
 
