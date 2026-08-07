@@ -39,6 +39,90 @@ function searchMedications(query) {
 // Lista temporal de medicamentos agregados a la receta en curso
 let currentPrescriptionMedicines = [];
 
+function getBMICategory(bmi) {
+  const val = parseFloat(bmi);
+  if (isNaN(val)) return '';
+  if (val < 18.5) return 'Bajo peso';
+  if (val < 25) return 'Peso normal';
+  if (val < 30) return 'Sobrepeso';
+  return 'Obesidad';
+}
+
+function getPatientVitalsHeaderHtml(patient) {
+  if (!patient) return '';
+  const latestVitals = patient.vitalSigns && patient.vitalSigns.length > 0 ? patient.vitalSigns[0] : null;
+  const ageDt = patient.birthDate ? new Date(patient.birthDate) : null;
+  let ageText = 'N/D';
+  if (ageDt) {
+    const ageDiffMs = Date.now() - ageDt.getTime();
+    const ageDate = new Date(ageDiffMs);
+    ageText = `${Math.abs(ageDate.getUTCFullYear() - 1970)} años`;
+  }
+  
+  let vitalsGridHtml = `
+    <div style="grid-column: 1 / -1; color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 0.5rem;">
+      ⚠️ No se han registrado signos vitales ni datos antropométricos para este paciente en Preconsulta.
+    </div>
+  `;
+  
+  if (latestVitals) {
+    vitalsGridHtml = `
+      <div style="background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.15); padding: 8px 12px; border-radius: var(--radius-sm); text-align: center;">
+        <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Presión Arterial</div>
+        <div style="font-size: 1.1rem; font-weight: bold; color: var(--accent-primary); margin-top: 2px;">💓 ${latestVitals.bp_systolic}/${latestVitals.bp_diastolic} <span style="font-size: 0.7rem; font-weight: normal; color: var(--text-muted);">mmHg</span></div>
+      </div>
+      <div style="background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.15); padding: 8px 12px; border-radius: var(--radius-sm); text-align: center;">
+        <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Temperatura</div>
+        <div style="font-size: 1.1rem; font-weight: bold; color: var(--accent-primary); margin-top: 2px;">🌡️ ${latestVitals.temp} <span style="font-size: 0.7rem; font-weight: normal; color: var(--text-muted);">°C</span></div>
+      </div>
+      <div style="background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.15); padding: 8px 12px; border-radius: var(--radius-sm); text-align: center;">
+        <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Frec. Cardíaca</div>
+        <div style="font-size: 1.1rem; font-weight: bold; color: var(--accent-primary); margin-top: 2px;">🫀 ${latestVitals.heart_rate} <span style="font-size: 0.7rem; font-weight: normal; color: var(--text-muted);">lpm</span></div>
+      </div>
+      <div style="background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.15); padding: 8px 12px; border-radius: var(--radius-sm); text-align: center;">
+        <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Saturación O₂</div>
+        <div style="font-size: 1.1rem; font-weight: bold; color: var(--accent-primary); margin-top: 2px;">💨 ${latestVitals.oxygen} <span style="font-size: 0.7rem; font-weight: normal; color: var(--text-muted);">%</span></div>
+      </div>
+      <div style="background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.15); padding: 8px 12px; border-radius: var(--radius-sm); text-align: center; font-size: 0.85rem;">
+        <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Antropometría</div>
+        <div style="margin-top: 2px; line-height: 1.2;">
+          ⚖️ Peso: <strong>${latestVitals.weight} kg</strong><br>
+          📏 Talla: <strong>${latestVitals.height} m</strong>
+        </div>
+      </div>
+      <div style="background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.15); padding: 8px 12px; border-radius: var(--radius-sm); text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+        <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">IMC</div>
+        <div style="font-size: 1.1rem; font-weight: bold; color: var(--accent-primary); margin-top: 2px;">📊 ${latestVitals.bmi}</div>
+        <div style="font-size: 0.7rem; color: var(--accent-secondary); font-weight: 600;">${getBMICategory(latestVitals.bmi)}</div>
+      </div>
+      ${latestVitals.glucose !== undefined && latestVitals.glucose !== null && latestVitals.glucose !== '' ? `
+        <div style="grid-column: span 2; background: rgba(168, 85, 247, 0.05); border: 1px solid rgba(168, 85, 247, 0.15); padding: 8px 12px; border-radius: var(--radius-sm); text-align: center; display: flex; align-items: center; justify-content: center; gap: 8px;">
+          <span style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">Glucosa Capilar:</span>
+          <span style="font-size: 1.1rem; font-weight: bold; color: #a855f7;">🩸 ${latestVitals.glucose} <span style="font-size: 0.75rem; font-weight: normal; color: var(--text-muted);">mg/dL</span></span>
+        </div>
+      ` : ''}
+    `;
+  }
+
+  return `
+    <div class="glass-card" style="margin-bottom: 1.5rem; padding: 12px 16px; border-left: 4px solid var(--accent-primary);">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 8px; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.3rem; line-height: 1;">👤</span>
+          <span style="font-family: var(--font-heading); font-size: 1.1rem; font-weight: 700; color: var(--text-primary);">${patient.name}</span>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">| Edad: ${ageText} | Sexo: ${String(patient.gender || '').toUpperCase().startsWith('F') ? 'FEMENINO' : 'MASCULINO'}</span>
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-muted);">
+          ID Exp: <strong style="color: var(--accent-secondary); font-family: monospace;">${patient.id}</strong>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px;">
+        ${vitalsGridHtml}
+      </div>
+    </div>
+  `;
+}
+
 export function renderRecetario(container) {
   const state = getAppState();
   const activePatientId = getActivePatientId();
@@ -469,7 +553,10 @@ function renderRecipeBuilder(patient, doctors) {
     sessionStorage.removeItem('medflow_prescription_indications_draft');
   }
 
+  const vitalsHeaderHtml = getPatientVitalsHeaderHtml(patient);
+
   container.innerHTML = `
+    ${vitalsHeaderHtml}
     <div class="glass-card">
       <h2 style="font-family: var(--font-heading); margin-bottom: 1.5rem; color: var(--accent-primary);">Emitir Nueva Receta</h2>
       
@@ -515,6 +602,8 @@ function renderRecipeBuilder(patient, doctors) {
                 <option value="Crema/Pomada">Crema/Pomada</option>
                 <option value="Gotas">Gotas</option>
                 <option value="Inhalador">Inhalador</option>
+                <option value="Sobre">Sobre</option>
+                <option value="Frasco">Frasco</option>
               </select>
             </div>
             <div class="form-group">
