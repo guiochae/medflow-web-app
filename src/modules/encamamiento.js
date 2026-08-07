@@ -314,8 +314,18 @@ function renderActiveTabContent(activeHosp, patient) {
                 <textarea id="hosp-evo-note" required rows="4" placeholder="Escriba el seguimiento clínico, evolución y estado general del paciente..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical;"></textarea>
               </div>
               <div class="form-group">
-                <label>Actualizar Tipo de Dieta (Opcional)</label>
-                <input type="text" id="hosp-evo-diet" value="${activeHosp.dietType || ''}" placeholder="Ej. Dieta líquida, blanda, NPO..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+                <label>Actualizar Tipo de Dieta</label>
+                <select id="hosp-evo-diet" required style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+                  <option value="Dieta Libre / Normal" ${activeHosp.dietType === 'Dieta Libre / Normal' ? 'selected' : ''}>Dieta Libre / Normal</option>
+                  <option value="Dieta Blanda" ${activeHosp.dietType === 'Dieta Blanda' ? 'selected' : ''}>Dieta Blanda</option>
+                  <option value="Dieta Líquida Clara" ${activeHosp.dietType === 'Dieta Líquida Clara' ? 'selected' : ''}>Dieta Líquida Clara</option>
+                  <option value="Dieta Líquida Completa" ${activeHosp.dietType === 'Dieta Líquida Completa' ? 'selected' : ''}>Dieta Líquida Completa</option>
+                  <option value="Dieta Hiposódica" ${activeHosp.dietType === 'Dieta Hiposódica' ? 'selected' : ''}>Dieta Hiposódica</option>
+                  <option value="Dieta Diabética" ${activeHosp.dietType === 'Dieta Diabética' ? 'selected' : ''}>Dieta Diabética</option>
+                  <option value="Dieta Blanda Química" ${activeHosp.dietType === 'Dieta Blanda Química' ? 'selected' : ''}>Dieta Blanda Química</option>
+                  <option value="NPO (Nada por boca)" ${activeHosp.dietType === 'NPO (Nada por boca)' ? 'selected' : ''}>NPO (Nada por boca)</option>
+                  <option value="Dieta Especial" ${activeHosp.dietType === 'Dieta Especial' ? 'selected' : ''}>Dieta Especial</option>
+                </select>
               </div>
               
               <div style="border-top: 1px dashed var(--border-color); padding-top: 10px; margin-top: 5px;">
@@ -778,7 +788,7 @@ function renderAdmissionForm(targetPatientId = null) {
             </select>
           </div>
           <div class="form-group">
-            <label>Tipo de Habitación / Tarifa Hospitalaria</label>
+            <label>Tipo de Habitación</label>
             <select id="adm-room" required style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
               <!-- Se inyectan tarifas -->
             </select>
@@ -793,7 +803,17 @@ function renderAdmissionForm(targetPatientId = null) {
           </div>
           <div class="form-group">
             <label>Tipo de Dieta</label>
-            <input type="text" id="adm-diet-type" required placeholder="Ej. Dieta blanda, Dieta líquida, NPO..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+            <select id="adm-diet-type" required style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+              <option value="Dieta Libre / Normal">Dieta Libre / Normal</option>
+              <option value="Dieta Blanda">Dieta Blanda</option>
+              <option value="Dieta Líquida Clara">Dieta Líquida Clara</option>
+              <option value="Dieta Líquida Completa">Dieta Líquida Completa</option>
+              <option value="Dieta Hiposódica">Dieta Hiposódica</option>
+              <option value="Dieta Diabética">Dieta Diabética</option>
+              <option value="Dieta Blanda Química">Dieta Blanda Química</option>
+              <option value="NPO (Nada por boca)">NPO (Nada por boca)</option>
+              <option value="Dieta Especial">Dieta Especial</option>
+            </select>
           </div>
         </div>
 
@@ -802,29 +822,44 @@ function renderAdmissionForm(targetPatientId = null) {
           <textarea id="adm-reason" required rows="2" placeholder="Detalle los síntomas, examen físico inicial y sospecha de diagnóstico..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical;"></textarea>
         </div>
 
-        <div class="form-group">
-          <label>Órdenes Médicas al Ingreso (Infusiones, Medicamentos, Laboratorios)</label>
-          <textarea id="adm-orders" required rows="4" placeholder="Indique:\n1. Infusiones / Soluciones\n2. Medicamentos y dosis\n3. Laboratorios y estudios" style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical; font-family: monospace; font-size: 0.85rem;"></textarea>
+        <!-- Sección de Órdenes Médicas Segmentadas -->
+        <div style="border-top: 1px dashed var(--border-color); padding-top: 10px; margin-top: 5px; display: flex; flex-direction: column; gap: 12px;">
+          <h4 style="color: var(--accent-secondary); margin-bottom: 0px; font-size: 0.95rem;">Órdenes Médicas al Ingreso</h4>
+          
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px;">1. Infusiones / Soluciones</label>
+            <textarea id="adm-orders-infusions" placeholder="Escriba las indicaciones de soluciones intravenosas, goteo, etc..." rows="2" style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical; font-size: 0.85rem;"></textarea>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px;">2. Medicamentos</label>
+            <textarea id="adm-orders-meds" placeholder="Escriba los medicamentos, dosis, vía de administración y frecuencia..." rows="2" style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical; font-size: 0.85rem;"></textarea>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px;">3. Laboratorios y Estudios</label>
+            <textarea id="adm-orders-labs" placeholder="Escriba los exámenes de laboratorio y estudios diagnósticos solicitados..." rows="2" style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical; font-size: 0.85rem;"></textarea>
+          </div>
         </div>
 
         <!-- Sección de Indicaciones Especiales -->
         <div style="border-top: 1px dashed var(--border-color); padding-top: 10px; margin-top: 5px; margin-bottom: 5px;">
           <h4 style="color: var(--accent-secondary); margin-bottom: 8px; font-size: 0.95rem;">Indicaciones Especiales</h4>
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px;">
-            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; text-transform: none; color: var(--text-primary);">
-              <input type="checkbox" class="adm-special-ind" value="Plan Educacional"> Plan Educacional
+          <div style="display: flex; flex-direction: column; gap: 8px; padding-left: 5px;">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; text-transform: none; color: var(--text-primary); font-size: 0.88rem;">
+              <input type="checkbox" class="adm-special-ind" value="Plan Educacional" style="width: 16px; height: 16px; margin: 0; cursor: pointer;"> Plan Educacional
             </label>
-            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; text-transform: none; color: var(--text-primary);">
-              <input type="checkbox" class="adm-special-ind" value="Curva de temperatura y P.A. cada 4 horas"> Curva de temperatura y P.A. cada 4 horas
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; text-transform: none; color: var(--text-primary); font-size: 0.88rem;">
+              <input type="checkbox" class="adm-special-ind" value="Curva de temperatura y P.A. cada 4 horas" style="width: 16px; height: 16px; margin: 0; cursor: pointer;"> Curva de temperatura y P.A. cada 4 horas
             </label>
-            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; text-transform: none; color: var(--text-primary);">
-              <input type="checkbox" class="adm-special-ind" value="Canalización vía periférica"> Canalización vía periférica
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; text-transform: none; color: var(--text-primary); font-size: 0.88rem;">
+              <input type="checkbox" class="adm-special-ind" value="Canalización vía periférica" style="width: 16px; height: 16px; margin: 0; cursor: pointer;"> Canalización vía periférica
             </label>
-            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; text-transform: none; color: var(--text-primary);">
-              <input type="checkbox" class="adm-special-ind" value="Cuidados del Paciente"> Cuidados del Paciente
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; text-transform: none; color: var(--text-primary); font-size: 0.88rem;">
+              <input type="checkbox" class="adm-special-ind" value="Cuidados del Paciente" style="width: 16px; height: 16px; margin: 0; cursor: pointer;"> Cuidados del Paciente
             </label>
-            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; text-transform: none; color: var(--text-primary);">
-              <input type="checkbox" class="adm-special-ind" value="Reportar Cambios Stat"> Reportar Cambios Stat
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; text-transform: none; color: var(--text-primary); font-size: 0.88rem;">
+              <input type="checkbox" class="adm-special-ind" value="Reportar Cambios Stat" style="width: 16px; height: 16px; margin: 0; cursor: pointer;"> Reportar Cambios Stat
             </label>
           </div>
         </div>
@@ -900,9 +935,9 @@ function renderAdmissionForm(targetPatientId = null) {
   const rates = state.roomRates || [];
   if (roomSelect) {
     if (rates.length === 0) {
-      roomSelect.innerHTML = '<option value="default" data-price="150">Cama Hospitalaria General (Q150.00/día)</option>';
+      roomSelect.innerHTML = '<option value="default" data-price="0">Cama Hospitalaria General</option>';
     } else {
-      roomSelect.innerHTML = rates.map(r => `<option value="${r.id}" data-price="${r.price}">${r.name} (Q${parseFloat(r.price).toFixed(2)}/día)</option>`).join('');
+      roomSelect.innerHTML = rates.map(r => `<option value="${r.id}" data-price="0">${r.name}</option>`).join('');
     }
   }
 
@@ -933,7 +968,12 @@ function renderAdmissionForm(targetPatientId = null) {
     const famPhone = document.getElementById('adm-fam-phone').value;
     const reason = document.getElementById('adm-reason').value;
     const dietType = document.getElementById('adm-diet-type').value.trim();
-    const admissionOrders = document.getElementById('adm-orders').value.trim();
+    
+    const infusionsVal = document.getElementById('adm-orders-infusions').value.trim();
+    const medsVal = document.getElementById('adm-orders-meds').value.trim();
+    const labsVal = document.getElementById('adm-orders-labs').value.trim();
+    
+    const admissionOrders = `💉 Infusiones/Soluciones:\n${infusionsVal || 'Ninguna'}\n\n💊 Medicamentos:\n${medsVal || 'Ninguno'}\n\n🔬 Laboratorios/Estudios:\n${labsVal || 'Ninguno'}`;
     const specialIndications = Array.from(document.querySelectorAll('.adm-special-ind:checked')).map(cb => cb.value);
 
     // Tomar signos vitales al ingreso
@@ -1463,9 +1503,7 @@ function renderVitalsHistoryTable(patient) {
 
 // 9. Funciones de ayuda matemática y búsquedas
 function getRoomRatePrice(rateId, state) {
-  if (rateId === 'default') return 150.00;
-  const rate = (state.roomRates || []).find(r => r.id === rateId);
-  return rate ? parseFloat(rate.price) : 150.00;
+  return 0.00;
 }
 
 // 10. Función para impresión de la Hoja de Hospitalización (Expediente Clínico de Encamamiento)
