@@ -812,7 +812,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (isValidSession) {
         updateSidebarInfo(updatedState);
-        router(currentRoute);
+        
+        // Evitar re-renderizar la vista si el usuario está interactuando o escribiendo en un formulario
+        const activeEl = document.activeElement;
+        const isTyping = activeEl && (
+          activeEl.tagName === 'INPUT' || 
+          activeEl.tagName === 'TEXTAREA' || 
+          activeEl.tagName === 'SELECT'
+        );
+        
+        // O si hay algún modal abierto en pantalla
+        const isModalOpen = Array.from(document.querySelectorAll('.modal-overlay')).some(m => m.style.display === 'flex');
+        
+        // O si algún input de formulario tiene foco o datos
+        const hasActiveFormInput = Array.from(document.querySelectorAll('form input, form textarea, form select')).some(el => {
+          if (el.id === 'search-patient' || el.id === 'part-time') return false; 
+          return el === activeEl || (el.value !== '' && el.type !== 'submit' && el.type !== 'button' && el.type !== 'hidden' && el.value !== '100');
+        });
+
+        if (isTyping || isModalOpen || hasActiveFormInput) {
+          console.log("[StateUpdate] Usuario está editando. Se pospone la re-renderización automática.");
+        } else {
+          router(currentRoute);
+        }
       } else {
         if (appContainer) appContainer.style.display = 'none';
         if (loginContainer) {
