@@ -4,14 +4,21 @@ import { searchDiagnosticSuggestions } from '../data/cie10.js';
 
 function isCurrentUserAdmin() {
   const loggedUser = sessionStorage.getItem('medflow_logged_user');
-  if (!loggedUser) return false;
+  if (!loggedUser) {
+    console.warn("[isCurrentUserAdmin] No user logged in sessionStorage.");
+    return false;
+  }
   try {
     const userObj = JSON.parse(loggedUser);
     const roleLower = String(userObj.role || '').toLowerCase();
     const nameLower = String(userObj.name || '').toLowerCase();
-    return (roleLower.includes('administrador') && !roleLower.includes('medico') && !roleLower.includes('médico')) || 
-           nameLower === 'administrador';
+    const isAdmin = (roleLower.includes('administrador') && !roleLower.includes('medico') && !roleLower.includes('médico')) || 
+                    nameLower === 'administrador' ||
+                    roleLower === 'administrador';
+    console.log("[isCurrentUserAdmin] Debug:", { role: userObj.role, name: userObj.name, isAdmin });
+    return isAdmin;
   } catch (e) {
+    console.error("[isCurrentUserAdmin] Error parsing logged user:", e);
     return false;
   }
 }
