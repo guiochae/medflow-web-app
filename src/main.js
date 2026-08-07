@@ -74,7 +74,9 @@ export function isAdminUser() {
     const userObj = JSON.parse(loggedUser);
     const roleLower = String(userObj.role || '').toLowerCase();
     const nameLower = String(userObj.name || '').toLowerCase();
-    return roleLower.includes('administrador') || nameLower === 'administrador';
+    // Únicamente rol de Administrador, no médicos con atribuciones de administrador
+    return (roleLower.includes('administrador') && !roleLower.includes('medico') && !roleLower.includes('médico')) || 
+           nameLower === 'administrador';
   } catch (e) {
     return false;
   }
