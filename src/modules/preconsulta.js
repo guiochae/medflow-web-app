@@ -1731,40 +1731,56 @@ function showClinicalHistoryModal(patient) {
     } else {
       encamamientoHtml = `
         <div class="timeline">
-          \${hospHistory.map(h => {
+          ${hospHistory.map(h => {
             const dateIn = new Date(h.admissionDate).toLocaleString('es-GT');
             const dateOut = h.dischargeDate ? new Date(h.dischargeDate).toLocaleString('es-GT') : 'En curso';
-            return \`
+            return `
             <div class="timeline-item" style="border-left: 2px solid var(--accent-secondary); padding-left: 15px; margin-bottom: 1.5rem;">
-              <div class="timeline-date" style="font-weight: 700; color: var(--accent-secondary);">Ingreso: \${dateIn} | Alta: \${dateOut}</div>
+              <div class="timeline-date" style="font-weight: 700; color: var(--accent-secondary);">Ingreso: ${dateIn} | Alta: ${dateOut}</div>
               <div class="timeline-desc" style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; margin-top: 6px;">
-                <p><strong>Origen:</strong> \${h.origin || 'N/A'} | <strong>Médico Tratante:</strong> \${h.doctorName || 'N/A'}</p>
-                <p><strong>Diagnóstico Ingreso:</strong> \${h.admissionReason || 'N/A'}</p>
-                <p><strong>Familiar Responsable:</strong> \${h.responsibleFamilyName || 'N/A'} (Tel: \${h.responsibleFamilyPhone || 'N/A'})</p>
-                \${h.evolutions && h.evolutions.length > 0 ? \`
+                <p><strong>Origen:</strong> ${h.origin || 'N/A'} | <strong>Médico Tratante:</strong> ${h.doctorName || 'N/A'}</p>
+                <p><strong>Dieta:</strong> ${h.dietType || 'No especificada'}</p>
+                <p><strong>Diagnóstico Ingreso:</strong> ${h.admissionReason || 'N/A'}</p>
+                <p><strong>Familiar Responsable:</strong> ${h.responsibleFamilyName || 'N/A'} (Tel: ${h.responsibleFamilyPhone || 'N/A'})</p>
+                
+                ${h.admissionOrders ? `
+                  <div style="background: rgba(255,255,255,0.02); border: 1px dashed var(--border-color); padding: 8px; border-radius: 4px; margin-top: 8px; font-family: monospace; font-size: 0.82rem;">
+                    <strong>📋 Órdenes Médicas Iniciales:</strong>
+                    <p style="white-space: pre-wrap; margin: 4px 0 0 0; color: var(--text-muted); line-height: 1.4;">${h.admissionOrders}</p>
+                  </div>
+                ` : ''}
+
+                ${h.specialIndications && h.specialIndications.length > 0 ? `
+                  <div style="margin-top: 8px; font-size: 0.82rem;">
+                    <strong>📢 Indicaciones Especiales:</strong> ${h.specialIndications.join(', ')}
+                  </div>
+                ` : ''}
+
+                ${h.evolutions && h.evolutions.length > 0 ? `
                   <h5 style="margin-top: 10px; color: var(--accent-primary); margin-bottom: 4px;">Evoluciones Médicas:</h5>
                   <ul style="margin-left: 15px; font-size: 0.85rem; color: var(--text-muted); list-style-type: disc;">
-                    \${h.evolutions.map(ev => \\\`
+                    ${h.evolutions.map(ev => `
                       <li style="margin-bottom: 4px;">
-                        <strong>\\\${new Date(ev.date).toLocaleString()} (\\\${ev.doctorName}):</strong> \\\${ev.note}
+                        <strong>${new Date(ev.date).toLocaleString()} (${ev.doctorName}):</strong> ${ev.note}
+                        ${ev.dietType ? `<br><span style="color:var(--accent-primary); font-size:0.8rem;">🥦 Dieta: ${ev.dietType}</span>` : ''}
                       </li>
-                    \\\`).join('')}
+                    `).join('')}
                   </ul>
-                \` : ''}
-                \${h.nursingNotes && h.nursingNotes.length > 0 ? \`
+                ` : ''}
+                ${h.nursingNotes && h.nursingNotes.length > 0 ? `
                   <h5 style="margin-top: 10px; color: var(--accent-success); margin-bottom: 4px;">Notas de Enfermería:</h5>
                   <ul style="margin-left: 15px; font-size: 0.85rem; color: var(--text-muted); list-style-type: disc;">
-                    \${h.nursingNotes.map(nn => \\\`
+                    ${h.nursingNotes.map(nn => `
                       <li style="margin-bottom: 4px;">
-                        <strong>\\\${new Date(nn.date).toLocaleString()} (\\\${nn.nurseName}):</strong> \\\${nn.note}
+                        <strong>${new Date(nn.date).toLocaleString()} (${nn.nurseName}):</strong> ${nn.note}
                       </li>
-                    \\\`).join('')}
+                    `).join('')}
                   </ul>
-                \` : ''}
-                <p style="margin-top: 8px; font-weight: 600; color: var(--text-primary);">Estado: <span style="color: \${h.status === 'Activo' ? 'var(--accent-warning)' : 'var(--accent-success)'}">\${h.status}</span></p>
+                ` : ''}
+                <p style="margin-top: 8px; font-weight: 600; color: var(--text-primary);">Estado: <span style="color: ${h.status === 'Activo' ? 'var(--accent-warning)' : 'var(--accent-success)'}">${h.status}</span></p>
               </div>
             </div>
-            \`;
+            `;
           }).join('')}
         </div>
       `;
