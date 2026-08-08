@@ -146,7 +146,7 @@ export function renderQuirofano(container) {
           
           <div class="form-group">
             <label>Paciente</label>
-            <input type="text" id="q-sched-patient-name" readonly style="background: rgba(255,255,255,0.05); font-weight: bold; cursor: not-allowed;">
+            <input type="text" id="q-sched-patient-name" readonly style="background: rgba(255,255,255,0.05); font-weight: bold; cursor: not-allowed; color: var(--text-primary);">
           </div>
 
           <div style="border-top: 1px dashed var(--border-color); padding-top: 8px;">
@@ -233,7 +233,7 @@ export function renderQuirofano(container) {
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group">
               <label>Paciente</label>
-              <input type="text" id="q-post-patient-name" readonly style="background: rgba(255,255,255,0.05); font-weight: bold; cursor: not-allowed;">
+              <input type="text" id="q-post-patient-name" readonly style="background: rgba(255,255,255,0.05); font-weight: bold; cursor: not-allowed; color: var(--text-primary);">
             </div>
             <div class="form-group">
               <label>Estado de Salida del Paciente</label>
