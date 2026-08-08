@@ -157,6 +157,7 @@ export function renderQuirofano(container) {
                 <select id="q-sched-surgeon" required style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
                   <!-- Inyectado por JS -->
                 </select>
+                <input type="text" id="q-sched-external-name" placeholder="Nombre del Cirujano Externo" style="display: none; width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
                 <label style="display: flex; align-items: center; gap: 6px; margin-top: 5px; font-size: 0.78rem; text-transform: none; color: var(--text-muted); cursor: pointer;">
                   <input type="checkbox" id="q-sched-is-external-surgeon"> ¿Es cirujano externo?
                 </label>
@@ -559,6 +560,11 @@ export function renderQuirofano(container) {
     document.getElementById('q-sched-colegiado').value = '';
     document.getElementById('q-sched-colegiado').required = false;
     document.getElementById('q-sched-surgeon').disabled = false;
+    document.getElementById('q-sched-surgeon').style.display = 'block';
+    document.getElementById('q-sched-surgeon').required = true;
+    document.getElementById('q-sched-external-name').value = '';
+    document.getElementById('q-sched-external-name').style.display = 'none';
+    document.getElementById('q-sched-external-name').required = false;
     document.getElementById('q-sched-anesthesiologist').value = '';
     document.getElementById('q-sched-circulating').value = '';
     document.getElementById('q-sched-scrub').value = '';
@@ -577,15 +583,22 @@ export function renderQuirofano(container) {
       const colegiadoGroup = document.getElementById('q-group-colegiado');
       const colegiadoInput = document.getElementById('q-sched-colegiado');
       const surgeonSelect = document.getElementById('q-sched-surgeon');
+      const externalNameInput = document.getElementById('q-sched-external-name');
       
       if (e.target.checked) {
         colegiadoGroup.style.display = 'block';
         colegiadoInput.required = true;
-        surgeonSelect.disabled = true;
+        surgeonSelect.style.display = 'none';
+        surgeonSelect.required = false;
+        externalNameInput.style.display = 'block';
+        externalNameInput.required = true;
       } else {
         colegiadoGroup.style.display = 'none';
         colegiadoInput.required = false;
-        surgeonSelect.disabled = false;
+        surgeonSelect.style.display = 'block';
+        surgeonSelect.required = true;
+        externalNameInput.style.display = 'none';
+        externalNameInput.required = false;
       }
     });
   }
@@ -646,7 +659,7 @@ export function renderQuirofano(container) {
       let colegiado = '';
       if (isExternalSurg) {
         colegiado = document.getElementById('q-sched-colegiado').value.trim();
-        surgeonName = prompt("Ingrese el nombre completo del Cirujano Externo:") || "Cirujano Externo";
+        surgeonName = document.getElementById('q-sched-external-name').value.trim() || "Cirujano Externo";
       } else {
         surgeonName = document.getElementById('q-sched-surgeon').value;
       }
