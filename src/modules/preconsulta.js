@@ -1843,6 +1843,35 @@ function showClinicalHistoryModal(patient) {
       `;
     }
 
+    let surgeriesHtml = '';
+    const patientSurgeries = (state.surgeries || []).filter(s => s.patientId === patient.id);
+    if (patientSurgeries.length === 0) {
+      surgeriesHtml = '<p style="color: var(--text-muted); font-size: 0.9rem;">No se registran intervenciones quirúrgicas previas.</p>';
+    } else {
+      surgeriesHtml = `
+        <div class="timeline">
+          \${patientSurgeries.map(s => {
+            const dateStr = new Date(s.completedAt || s.createdAt).toLocaleString('es-GT');
+            return \`
+            <div class="timeline-item" style="border-left: 2px solid var(--accent-primary); padding-left: 15px; margin-bottom: 1.5rem;">
+              <div class="timeline-date" style="font-weight: 700; color: var(--accent-primary); display: flex; justify-content: space-between; align-items: center;">
+                <span>📅 \${dateStr} - \${s.procedureName}</span>
+                <button type="button" class="btn btn-secondary btn-small btn-print-history-surg" data-surg-id="\${s.id}" style="padding: 2px 8px; font-size: 0.75rem; border: 1px solid var(--accent-primary); color: var(--accent-primary);">🖨️ Reporte</button>
+              </div>
+              <div class="timeline-desc" style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; margin-top: 6px;">
+                <p><strong>Cirujano Principal:</strong> \${s.surgeon.name} \${s.surgeon.colegiadoNumber ? \`(Col. \${s.surgeon.colegiadoNumber})\` : (s.surgeon.isExternal ? '(Externo)' : '(Staff)')}</p>
+                <p><strong>Equipo:</strong> Anestesiólogo: \${s.anesthesiologist} | Circulante: \${s.circulatingNurse} | Instrumentista: \${s.scrubNurse}</p>
+                <p><strong>Sala:</strong> \${s.operatingRoom} | <strong>Duración:</strong> \${s.estimatedDuration}</p>
+                <p><strong>Estado Salida:</strong> <span style="font-weight: bold; color: var(--accent-success);">\${s.postOpStatus || 'N/A'}</span></p>
+                \${s.totalCost ? \`<p style="color: var(--accent-success); font-weight: bold; margin-top: 4px;">Costo Cirugía: Q\${parseFloat(s.totalCost).toFixed(2)}</p>\` : ''}
+              </div>
+            </div>
+            \`;
+          }).join('')}
+        </div>
+      `;
+    }
+
     let vitalsHtml = '';
     if (!patient.vitalSigns || patient.vitalSigns.length === 0) {
       vitalsHtml = '<p style="color: var(--text-muted); font-size: 0.9rem;">Sin mediciones de signos vitales registradas.</p>';
@@ -2127,6 +2156,11 @@ function showClinicalHistoryModal(patient) {
       </div>
 
       <div class="report-section" style="margin-top: 2rem;">
+        <div class="report-section-title">Historial de Procedimientos Quirúrgicos (Quirófano)</div>
+        ${surgeriesHtml}
+      </div>
+
+      <div class="report-section" style="margin-top: 2rem;">
         <div class="report-section-title">Análisis y Registros de Partograma (Obstetricia)</div>
         ${partogramHtml}
       </div>
@@ -2141,6 +2175,17 @@ function showClinicalHistoryModal(patient) {
         ${filesHtml}
       </div>
     `;
+
+    body.querySelectorAll('.btn-print-history-surg').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const surgId = btn.getAttribute('data-surg-id');
+        const foundSurg = (state.surgeries || []).find(s => s.id === surgId);
+        if (foundSurg) {
+          printSurgicalRecordInHistory(foundSurg, patient, state);
+        }
+      });
+    });
   } catch (err) {
     console.error("Error al renderizar historial clínico:", err);
     body.innerHTML = `
@@ -3356,4 +3401,175 @@ function analyzePartogramData(records) {
       • Mantenga el monitoreo rutinario según protocolo (FCF cada 30 min, dilatación cada 4 horas).<br>
       • Fomente el libre posicionamiento y la comodidad materna.`
   };
+}
+
+function printSurgicalRecordInHistory(surg, patient, stateObj) {
+  const clinicInfo = stateObj.clinicInfo || { name: 'HOSPITAL MULTIMÉDICA', phone: '2200-0000', address: 'Guatemala' };
+  const dob = patient.birthdate ? new Date(patient.birthdate) : null;
+  let ageText = 'N/D';
+  if (dob) {
+    const ageDiff = Date.now() - dob.getTime();
+    const ageDate = new Date(ageDiff);
+    ageText = `${Math.abs(ageDate.getUTCFullYear() - 1970)} años`;
+  }
+
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>Reporte Post-Operatorio - ${surg.id}</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            color: #333;
+            padding: 20px;
+            line-height: 1.5;
+          }
+          .header {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 2px solid #1e3a8a;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+          }
+          .title {
+            font-size: 1.4rem;
+            font-weight: bold;
+            color: #1e3a8a;
+          }
+          .grid-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+          }
+          .section-title {
+            font-size: 1.1rem;
+            font-weight: bold;
+            background: #f3f4f6;
+            color: #1e3a8a;
+            padding: 5px 10px;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            border-left: 4px solid #1e3a8a;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            font-size: 0.85rem;
+          }
+          th, td {
+            border: 1px solid #e5e7eb;
+            padding: 8px;
+            text-align: left;
+          }
+          th {
+            background: #f9fafb;
+            font-weight: bold;
+          }
+          .signatures-block {
+            margin-top: 50px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+          }
+          .signature-line {
+            border-top: 1px solid #000;
+            width: 220px;
+            text-align: center;
+            padding-top: 5px;
+            margin-top: 30px;
+          }
+          @media print {
+            .no-print { display: none; }
+            body { padding: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="no-print" style="margin-bottom: 20px;">
+          <button onclick="window.print();" style="padding: 10px 20px; background: #1e3a8a; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">🖨️ Imprimir Reporte</button>
+          <button onclick="window.close();" style="padding: 10px 20px; background: #f3f4f6; color: #333; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; margin-left: 10px;">Cerrar</button>
+        </div>
+
+        <div class="header">
+          <div>
+            <div class="title">\${clinicInfo.name}</div>
+            <span style="font-size: 0.8rem; color: #666;">Dirección: \${clinicInfo.address} | Tel: \${clinicInfo.phone}</span>
+          </div>
+          <div style="text-align: right;">
+            <strong style="font-size: 1.1rem; color: #1e3a8a;">REGISTRO QUIRÚRGICO POST-OPERATORIO</strong><br>
+            <strong>ID Cirugía:</strong> \${surg.id}<br>
+            <strong>Fecha:</strong> \${new Date(surg.completedAt || surg.createdAt).toLocaleDateString('es-GT')}
+          </div>
+        </div>
+
+        <div class="section-title">Información del Paciente</div>
+        <div class="grid-info">
+          <div><strong>Nombre:</strong> \${surg.patientName}</div>
+          <div><strong>DPI / Pasaporte:</strong> \${patient.dpi || 'N/A'}</div>
+          <div><strong>Edad:</strong> \${ageText}</div>
+          <div><strong>Género:</strong> \${patient.gender || 'N/A'}</div>
+        </div>
+
+        <div class="section-title">Detalles del Procedimiento</div>
+        <div class="grid-info">
+          <div><strong>Procedimiento Quirúrgico:</strong> \${surg.procedureName}</div>
+          <div><strong>Sala de Operaciones:</strong> \${surg.operatingRoom}</div>
+          <div><strong>Fecha/Hora de Inicio:</strong> \${new Date(surg.createdAt).toLocaleString('es-GT')}</div>
+          <div><strong>Fecha/Hora de Cierre:</strong> \${surg.completedAt ? new Date(surg.completedAt).toLocaleString('es-GT') : 'N/A'}</div>
+          <div><strong>Estado Post-Operatorio:</strong> <span style="font-weight:bold;">\${surg.postOpStatus || 'Estable'}</span></div>
+          <div><strong>Costo Total Asignado:</strong> Q\${surg.totalCost ? parseFloat(surg.totalCost).toFixed(2) : '0.00'}</div>
+        </div>
+
+        <div class="section-title">Equipo Quirúrgico</div>
+        <div class="grid-info">
+          <div><strong>Cirujano Principal:</strong> \${surg.surgeon.name} \${surg.surgeon.colegiadoNumber ? \`(Col. \${surg.surgeon.colegiadoNumber})\` : ''}</div>
+          <div><strong>Anestesiólogo/a:</strong> \${surg.anesthesiologist}</div>
+          <div><strong>Enfermero/a Circulante:</strong> \${surg.circulatingNurse}</div>
+          <div><strong>Enfermero/a Instrumentista:</strong> \${surg.scrubNurse}</div>
+        </div>
+
+        <div class="section-title">Desglose de Insumos y Medicamentos Utilizados</div>
+        \${surg.medicalSuppliesUsed && surg.medicalSuppliesUsed.length > 0 ? \`
+          <table>
+            <thead>
+              <tr>
+                <th>Insumo Médico / Fármaco</th>
+                <th style="text-align: center;">Cantidad</th>
+                <th style="text-align: right;">Precio Unitario</th>
+                <th style="text-align: right;">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              \${surg.medicalSuppliesUsed.map(i => \`
+                <tr>
+                  <td>\${i.name}</td>
+                  <td style="text-align: center;">\${i.quantity}</td>
+                  <td style="text-align: right;">Q\${parseFloat(i.unitPrice).toFixed(2)}</td>
+                  <td style="text-align: right; font-weight: bold;">Q\${(i.quantity * i.unitPrice).toFixed(2)}</td>
+                </tr>
+              \`).join('')}
+            </tbody>
+          </table>
+        \` : '<p style="font-size:0.85rem; color:#666;">No se registraron insumos de sala detallados en este reporte.</p>'}
+
+        <div class="signatures-block">
+          <div class="signature-line">
+            Firma del Cirujano Principal<br>
+            Col. \${surg.surgeon.colegiadoNumber || '_________________'}
+          </div>
+          <div class="signature-line">
+            Firma del Anestesiólogo/a
+          </div>
+          <div class="signature-line">
+            Firma Supervisor de Quirófano
+          </div>
+        </div>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
 }

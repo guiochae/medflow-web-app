@@ -7,6 +7,7 @@ import { renderImagenologia } from './modules/imagenologia.js';
 import { renderConfiguracion } from './modules/configuracion.js';
 import { renderFarmacia } from './modules/farmacia.js';
 import { renderEncamamiento } from './modules/encamamiento.js';
+import { renderQuirofano } from './modules/quirofano.js';
 import logoUrl from './assets/logo.jpg';
 import {
   db,
@@ -33,7 +34,7 @@ export async function purgeAllDatabases() {
     name: 'Administrador Maestro',
     role: 'Administrador',
     password: hashPassword('Glol5414'),
-    modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
+    modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'encamamiento', 'quirofano', 'configuracion']
   };
   sessionStorage.setItem('medflow_logged_user', JSON.stringify(adminUser));
   return true;
@@ -88,7 +89,7 @@ export function getAppState() {
     name: 'Administrador Maestro',
     role: 'Administrador',
     password: hashPassword('Glol5414'),
-    modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
+    modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'encamamiento', 'quirofano', 'configuracion']
   };
 
   if (firestoreState.isLoaded) {
@@ -107,6 +108,16 @@ export function getAppState() {
       } else {
         seenIds.add(u.id);
       }
+
+      // Auto-inyección del módulo Quirófano para roles autorizados
+      const rLower = String(u.role || '').toLowerCase();
+      if (rLower.includes('admin') || rLower.includes('medico') || rLower.includes('médico') || rLower.includes('enfermero') || rLower.includes('enfermera')) {
+        u.modules = u.modules || [];
+        if (!u.modules.includes('quirofano')) {
+          u.modules.push('quirofano');
+        }
+      }
+
       cleanedUsers.push(u);
     });
     firestoreState.users = cleanedUsers;
@@ -133,7 +144,20 @@ export function getAppState() {
 
     const loggedUser = sessionStorage.getItem('medflow_logged_user');
     if (loggedUser) {
-      firestoreState.currentUser = JSON.parse(loggedUser);
+      try {
+        const parsed = JSON.parse(loggedUser);
+        const rLower = String(parsed.role || '').toLowerCase();
+        if (rLower.includes('admin') || rLower.includes('medico') || rLower.includes('médico') || rLower.includes('enfermero') || rLower.includes('enfermera')) {
+          parsed.modules = parsed.modules || [];
+          if (!parsed.modules.includes('quirofano')) {
+            parsed.modules.push('quirofano');
+            sessionStorage.setItem('medflow_logged_user', JSON.stringify(parsed));
+          }
+        }
+        firestoreState.currentUser = parsed;
+      } catch (e) {
+        firestoreState.currentUser = JSON.parse(loggedUser);
+      }
     }
     return firestoreState;
   }
@@ -453,6 +477,9 @@ export function router(route) {
     case 'encamamiento':
       renderEncamamiento(container);
       break;
+    case 'quirofano':
+      renderQuirofano(container);
+      break;
     case 'configuracion':
       renderConfiguracion(container);
       break;
@@ -708,7 +735,7 @@ function initializeSidebar(loggedUser) {
   }
 
   // Configurar menú de navegación con filtrado de permisos por usuario
-  const userModules = userObj.modules || ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'encamamiento', 'configuracion'];
+  const userModules = userObj.modules || ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'encamamiento', 'quirofano', 'configuracion'];
   const roleLower = String(userObj.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const isFullAdmin = roleLower.includes('administrador') || 
                       roleLower.includes('admin') || 
@@ -731,6 +758,18 @@ function initializeSidebar(loggedUser) {
                   roleLower.startsWith('medico') ||
                   roleLower.includes('enfermera') ||
                   roleLower.includes('enfermero');
+    }
+
+    // Aplicar restricción específica para Quirófano (Administrador, Médicos, Enfermeros)
+    if (target === 'quirofano') {
+      hasAccess = isFullAdmin || 
+                  roleLower.includes('administrador') ||
+                  roleLower.includes('admin') ||
+                  roleLower.includes('medico') ||
+                  roleLower.includes('médico') ||
+                  roleLower.includes('enfermera') ||
+                  roleLower.includes('enfermero') ||
+                  userModules.includes('quirofano');
     }
 
     if (!hasAccess) {

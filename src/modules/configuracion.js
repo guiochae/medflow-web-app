@@ -152,6 +152,9 @@ export function renderConfiguracion(container) {
                     <input type="checkbox" class="u-module-cb" value="encamamiento" checked> 🛌 Encamamiento
                   </label>
                   <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; text-transform: none; color: var(--text-primary);">
+                    <input type="checkbox" class="u-module-cb" value="quirofano" checked> 🏥 Quirófano
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; text-transform: none; color: var(--text-primary);">
                     <input type="checkbox" class="u-module-cb" value="configuracion" checked> ⚙️ Configuración
                   </label>
                 </div>
@@ -560,7 +563,7 @@ export function renderConfiguracion(container) {
       if (document.getElementById('u-phone')) document.getElementById('u-phone').value = user.phone || '';
       if (document.getElementById('u-password')) document.getElementById('u-password').value = user.password || 'Glol5414';
 
-      const userMods = user.modules || ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'encamamiento', 'configuracion'];
+      const userMods = user.modules || ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'encamamiento', 'quirofano', 'configuracion'];
       document.querySelectorAll('.u-module-cb').forEach(cb => {
         cb.checked = userMods.includes(cb.value);
       });
