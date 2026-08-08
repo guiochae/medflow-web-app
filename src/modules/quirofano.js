@@ -193,6 +193,16 @@ export function renderQuirofano(container) {
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px;">
               <div class="form-group">
+                <label>Fecha de Intervención</label>
+                <input type="date" id="q-sched-date" required style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+              </div>
+              <div class="form-group">
+                <label>Hora de Intervención</label>
+                <input type="time" id="q-sched-time" required style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+              </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px;">
+              <div class="form-group">
                 <label>Sala Quirúrgica</label>
                 <select id="q-sched-room" required style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
                   <option value="Quirófano Único">Quirófano Único</option>
@@ -462,7 +472,9 @@ export function renderQuirofano(container) {
         card.style.borderLeft = `4px solid var(--accent-primary)`;
       }
 
-      const formattedDate = new Date(s.createdAt).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' });
+      const formattedDate = s.scheduledDate && s.scheduledTime 
+        ? `${new Date(s.scheduledDate + 'T' + s.scheduledTime).toLocaleDateString('es-GT')} ${s.scheduledTime}`
+        : new Date(s.createdAt).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' });
 
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 5px;">
@@ -582,6 +594,12 @@ export function renderQuirofano(container) {
     document.getElementById('q-sched-scrub').value = '';
     document.getElementById('q-sched-procedure-search').value = '';
 
+    // Pre-poblar fecha y hora
+    const today = new Date().toISOString().split('T')[0];
+    const nowTime = new Date().toTimeString().split(' ')[0].substring(0, 5); // HH:MM format
+    document.getElementById('q-sched-date').value = today;
+    document.getElementById('q-sched-time').value = nowTime;
+
     schedModal.style.display = 'flex';
   }
 
@@ -682,6 +700,8 @@ export function renderQuirofano(container) {
       const procedure = document.getElementById('q-sched-procedure-search').value.trim();
       const room = document.getElementById('q-sched-room').value;
       const duration = document.getElementById('q-sched-duration').value;
+      const date = document.getElementById('q-sched-date').value;
+      const time = document.getElementById('q-sched-time').value;
 
       const newSurgery = {
         id: 'surg-' + Date.now(),
@@ -699,6 +719,8 @@ export function renderQuirofano(container) {
         procedureName: procedure,
         operatingRoom: room,
         estimatedDuration: duration,
+        scheduledDate: date,
+        scheduledTime: time,
         status: 'scheduled',
         medicalSuppliesUsed: [],
         totalCost: 0,
