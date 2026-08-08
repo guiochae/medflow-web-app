@@ -341,10 +341,22 @@ export function renderQuirofano(container) {
               <label>Teléfono</label>
               <input type="tel" id="q-ext-phone" required placeholder="Ej. 5555-1234">
             </div>
-          </div>
           <div class="form-group">
             <label>Dirección</label>
             <input type="text" id="q-ext-address" required placeholder="Ej. Calle Principal 1-23 Zona 10">
+          </div>
+          <div style="border-top: 1px dashed var(--border-color); padding-top: 8px; margin-bottom: 8px;">
+            <h5 style="color: var(--accent-secondary); margin-bottom: 6px; font-size: 0.9rem; text-transform: none;">Familiar o Responsable</h5>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 0.8rem; color: var(--text-muted);">Nombre del Responsable</label>
+                <input type="text" id="q-ext-responsible-name" required placeholder="Ej. Carlos de León">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 0.8rem; color: var(--text-muted);">Teléfono del Responsable</label>
+                <input type="tel" id="q-ext-responsible-phone" required placeholder="Ej. 4444-1234">
+              </div>
+            </div>
           </div>
           <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px;">
             <button type="button" class="btn btn-secondary" id="btn-cancel-external">Cancelar</button>
@@ -870,6 +882,8 @@ export function renderQuirofano(container) {
     document.getElementById('q-ext-dpi').value = '';
     document.getElementById('q-ext-phone').value = '';
     document.getElementById('q-ext-address').value = '';
+    document.getElementById('q-ext-responsible-name').value = '';
+    document.getElementById('q-ext-responsible-phone').value = '';
     extModal.style.display = 'flex';
   });
 
@@ -887,6 +901,8 @@ export function renderQuirofano(container) {
       let dpi = document.getElementById('q-ext-dpi').value.trim();
       const phone = document.getElementById('q-ext-phone').value.trim();
       const address = document.getElementById('q-ext-address').value.trim();
+      const responsibleName = document.getElementById('q-ext-responsible-name').value.trim();
+      const responsiblePhone = document.getElementById('q-ext-responsible-phone').value.trim();
 
       const dob = new Date(birthdate);
       const ageMs = Date.now() - dob.getTime();
@@ -909,6 +925,8 @@ export function renderQuirofano(container) {
         assignedDoctorName: state.users[0]?.name || 'Administrador Maestro',
         telephone: phone,
         address,
+        responsibleFamilyName: responsibleName,
+        responsibleFamilyPhone: responsiblePhone,
         email: 'Paciente Externo Quirófano',
         vitalSigns: [],
         consultations: [],
