@@ -1,5 +1,6 @@
 // src/modules/imagenologia.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
+import { showPastConsultationDetail } from './consulta.js';
 
 // Lista temporal de estudios de imagenología agregados en la orden externa activa
 let currentOrderImaging = [];
@@ -375,95 +376,13 @@ function renderConsultationHistory(patient) {
     `;
 
     li.addEventListener('click', () => {
-      showPastConsultationDetail(c);
+      showPastConsultationDetail(c, patient, (updatedPatient) => {
+        renderConsultationHistory(updatedPatient);
+      });
     });
 
     container.appendChild(li);
   });
-}
-
-function showPastConsultationDetail(consultation) {
-  const modal = document.getElementById('clinical-history-modal');
-  const title = document.getElementById('history-modal-patient-name');
-  const body = document.getElementById('history-modal-body');
-  
-  if (!modal || !title || !body) return;
-
-  let dateFormatted = consultation.date || 'Reciente';
-  try {
-    if (consultation.date && !isNaN(new Date(consultation.date).getTime())) {
-      dateFormatted = new Date(consultation.date).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' });
-    }
-  } catch(e){}
-
-  const feeText = (consultation.fee !== undefined && consultation.fee !== null) ? `Q${parseFloat(consultation.fee).toFixed(2)}` : 'Q150.00';
-  const doctorText = consultation.doctor || 'Médico Tratante';
-  const specialtyText = consultation.specialty || 'Medicina General';
-  const reasonText = consultation.reason || 'Sin motivo especificado';
-  const symptomsText = consultation.symptoms || 'Evaluación médica de rutina y control general.';
-
-  let diagListHtml = '';
-  if (consultation.diagnosisCodes && Array.isArray(consultation.diagnosisCodes) && consultation.diagnosisCodes.length > 0) {
-    diagListHtml = consultation.diagnosisCodes.map((code, idx) => {
-      const name = (consultation.diagnosisNames && consultation.diagnosisNames[idx]) ? consultation.diagnosisNames[idx] : 'Diagnóstico Clínico';
-      return `<li style="margin-bottom: 4px;"><span class="suggestion-code" style="background: rgba(0, 242, 254, 0.15); color: var(--accent-primary); padding: 2px 6px; border-radius: 4px; font-weight: bold; font-family: monospace;">${code}</span> - ${name}</li>`;
-    }).join('');
-  } else if (consultation.diagnosis) {
-    diagListHtml = `<li style="margin-bottom: 4px;"><span class="suggestion-code" style="background: rgba(0, 242, 254, 0.15); color: var(--accent-primary); padding: 2px 6px; border-radius: 4px; font-weight: bold; font-family: monospace;">Z00.0</span> - ${consultation.diagnosis}</li>`;
-  } else {
-    diagListHtml = `<li style="margin-bottom: 4px;"><span class="suggestion-code" style="background: rgba(0, 242, 254, 0.15); color: var(--accent-primary); padding: 2px 6px; border-radius: 4px; font-weight: bold; font-family: monospace;">Z00.0</span> - Examen médico de rutina</li>`;
-  }
-
-  const labsList = (consultation.acceptedStudies && consultation.acceptedStudies.labs) ? consultation.acceptedStudies.labs : [];
-  const imgList = (consultation.acceptedStudies && consultation.acceptedStudies.imaging) ? consultation.acceptedStudies.imaging : [];
-  const medList = consultation.acceptedMedications || [];
-  const indList = consultation.acceptedIndications || [];
-
-  const hasAux = labsList.length > 0 || imgList.length > 0 || medList.length > 0 || indList.length > 0;
-
-  title.textContent = `📋 Detalle de Consulta Registrada - ${dateFormatted}`;
-  
-  body.innerHTML = `
-    <div class="report-section" style="margin-bottom: 1rem;">
-      <div class="report-section-title" style="font-weight: bold; color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Información General de la Consulta</div>
-      <div class="report-grid-patient" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color);">
-        <div class="report-item"><span style="font-size: 0.75rem; color: var(--text-muted); display: block;">Fecha / Hora</span><strong>${dateFormatted}</strong></div>
-        <div class="report-item"><span style="font-size: 0.75rem; color: var(--text-muted); display: block;">Especialidad</span><strong>${specialtyText}</strong></div>
-        <div class="report-item"><span style="font-size: 0.75rem; color: var(--text-muted); display: block;">Médico Evaluador</span><strong>${doctorText}</strong></div>
-        <div class="report-item"><span style="font-size: 0.75rem; color: var(--text-muted); display: block;">Honorario / Cobro</span><strong style="color: var(--accent-success);">${feeText}</strong></div>
-      </div>
-    </div>
-
-    <div class="report-section" style="margin-bottom: 1rem;">
-      <div class="report-section-title" style="font-weight: bold; color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Evaluación Clínica</div>
-      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; font-size: 0.9rem; line-height: 1.5;">
-        <p style="margin-bottom: 8px;"><strong>Motivo de Consulta:</strong><br><span style="color: var(--text-primary);">${reasonText}</span></p>
-        <p><strong>Síntomas / Examen Físico:</strong><br><span style="color: var(--text-muted);">${symptomsText}</span></p>
-      </div>
-    </div>
-
-    <div class="report-section" style="margin-bottom: 1rem;">
-      <div class="report-section-title" style="font-weight: bold; color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Diagnóstico y Auxiliares (CIE-10)</div>
-      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; font-size: 0.9rem;">
-        <p style="margin-bottom: 6px;"><strong>Diagnóstico(s) Registrado(s):</strong></p>
-        <ul style="margin-left: 10px; margin-bottom: 10px; list-style: none; padding: 0;">
-          ${diagListHtml}
-        </ul>
-
-        ${hasAux ? `
-          <p style="margin-top: 10px; font-weight: bold; border-top: 1px dashed var(--border-color); padding-top: 8px;">Estudios e Indicaciones Registrados:</p>
-          <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem;">
-            ${labsList.map(lab => `<div style="color: var(--accent-primary);">🔬 Lab: ${lab}</div>`).join('')}
-            ${imgList.map(img => `<div style="color: var(--accent-secondary);">🖼️ Imagen: ${img}</div>`).join('')}
-            ${medList.map(med => `<div style="color: var(--accent-success);">💊 Medicina: ${med.name || med} ${med.dosage ? `(${med.dosage})` : ''}</div>`).join('')}
-            ${indList.map(ind => `<div>📌 Indicación: ${ind}</div>`).join('')}
-          </div>
-        ` : '<p style="margin-top: 8px; color: var(--text-muted); font-style: italic; font-size: 0.85rem;">No se emitieron exámenes de apoyo ni tratamientos adicionales.</p>'}
-      </div>
-    </div>
-  `;
-
-  modal.style.display = 'flex';
 }
 
 function renderOrderHistory(patient) {

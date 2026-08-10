@@ -464,7 +464,7 @@ function renderConsultationHistory(patient) {
 }
 
 // Mostrar detalle de una consulta previa en un modal emergente
-export function showPastConsultationDetail(consultation, patient) {
+export function showPastConsultationDetail(consultation, patient, onSaveCallback) {
   const modal = document.getElementById('clinical-history-modal');
   const title = document.getElementById('history-modal-patient-name');
   const body = document.getElementById('history-modal-body');
@@ -587,7 +587,11 @@ export function showPastConsultationDetail(consultation, patient) {
           modal.style.display = 'none';
 
           patient.consultations = pObj.consultations;
-          renderConsultationHistory(patient);
+          if (typeof onSaveCallback === 'function') {
+            onSaveCallback(pObj);
+          } else {
+            renderConsultationHistory(patient);
+          }
         }
       }
     });

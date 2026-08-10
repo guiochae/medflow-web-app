@@ -1,6 +1,7 @@
 // src/modules/estudios.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
 import { searchLabs, searchImaging } from '../data/estudios.js';
+import { showPastConsultationDetail } from './consulta.js';
 
 // Listas temporales de estudios agregados en la orden activa
 let currentOrderLabs = [];
@@ -270,68 +271,14 @@ function renderConsultationHistory(patient) {
     `;
 
     li.addEventListener('click', () => {
-      showPastConsultationDetail(c);
+      showPastConsultationDetail(c, patient, (updatedPatient) => {
+        renderConsultationHistory(updatedPatient);
+      });
     });
 
     container.appendChild(li);
   });
 }
-
-// Mostrar detalle de una consulta previa en un modal
-function showPastConsultationDetail(consultation) {
-  const modal = document.getElementById('clinical-history-modal');
-  const title = document.getElementById('history-modal-patient-name');
-  const body = document.getElementById('history-modal-body');
-  
-  if (!modal || !title || !body) return;
-
-  title.textContent = `Detalle de Consulta`;
-  
-  body.innerHTML = `
-    <div class="report-section">
-      <div class="report-section-title">Información de la Consulta</div>
-      <div class="report-grid-patient">
-        <div class="report-item"><span>Fecha / Hora</span><strong>${new Date(consultation.date).toLocaleString()}</strong></div>
-        <div class="report-item"><span>Especialidad</span><strong>${consultation.specialty}</strong></div>
-        <div class="report-item"><span>Médico</span><strong>${consultation.doctor}</strong></div>
-        <div class="report-item"><span>Costo / Cobro</span><strong>Q${consultation.fee.toFixed(2)}</strong></div>
-      </div>
-    </div>
-
-    <div class="report-section" style="margin-top: 1.5rem;">
-      <div class="report-section-title">Evaluación Clínica</div>
-      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 15px; border-radius: 4px; font-size: 0.95rem; line-height: 1.5;">
-        <p style="margin-bottom: 10px;"><strong>Motivo de Consulta:</strong><br>${consultation.reason}</p>
-        <p><strong>Síntomas / Examen Físico:</strong><br>${consultation.symptoms}</p>
-      </div>
-    </div>
-
-    <div class="report-section" style="margin-top: 1.5rem;">
-      <div class="report-section-title">Diagnóstico y Auxiliares (CIE-10)</div>
-      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 15px; border-radius: 4px; font-size: 0.95rem;">
-        <p><strong>Diagnóstico(s) Registrado(s):</strong></p>
-        <ul style="margin-left: 20px; margin-top: 5px; list-style: square;">
-          ${consultation.diagnosisCodes.map((code, idx) => `
-            <li><span class="suggestion-code">${code}</span> - ${consultation.diagnosisNames[idx]}</li>
-          `).join('')}
-        </ul>
-
-        ${consultation.acceptedStudies.labs.length > 0 || consultation.acceptedStudies.imaging.length > 0 || (consultation.acceptedMedications && consultation.acceptedMedications.length > 0) || (consultation.acceptedIndications && consultation.acceptedIndications.length > 0) ? `
-          <p style="margin-top: 15px;"><strong>Estudios e Indicaciones Aceptados:</strong></p>
-          <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 6px;">
-            ${consultation.acceptedStudies.labs.map(lab => `<div>🔬 Lab: ${lab}</div>`).join('')}
-            ${consultation.acceptedStudies.imaging.map(img => `<div>🖼️ Imagen: ${img}</div>`).join('')}
-            ${consultation.acceptedMedications ? consultation.acceptedMedications.map(med => `<div>💊 Medicina: ${med.name} (${med.dosage})</div>`).join('') : ''}
-            ${consultation.acceptedIndications ? consultation.acceptedIndications.map(ind => `<div>📌 Indicación: ${ind}</div>`).join('') : ''}
-          </div>
-        ` : '<p style="margin-top: 15px; color: var(--text-muted); font-style: italic;">No se prescribieron exámenes de apoyo ni tratamientos.</p>'}
-      </div>
-    </div>
-  `;
-
-  modal.style.display = 'flex';
-}
-
 // Renderizar historial lateral de órdenes de estudios y archivos de resultados cargados
 function renderOrderHistory(patient) {
   const container = document.getElementById('order-history-area');
