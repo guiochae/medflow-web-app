@@ -456,7 +456,7 @@ function renderConsultationHistory(patient) {
     }
 
     li.addEventListener('click', () => {
-      showPastConsultationDetail(c);
+      showPastConsultationDetail(c, patient);
     });
 
     container.appendChild(li);
@@ -464,7 +464,7 @@ function renderConsultationHistory(patient) {
 }
 
 // Mostrar detalle de una consulta previa en un modal emergente
-export function showPastConsultationDetail(consultation) {
+export function showPastConsultationDetail(consultation, patient) {
   const modal = document.getElementById('clinical-history-modal');
   const title = document.getElementById('history-modal-patient-name');
   const body = document.getElementById('history-modal-body');
@@ -481,8 +481,8 @@ export function showPastConsultationDetail(consultation) {
   const feeText = (consultation.fee !== undefined && consultation.fee !== null) ? `Q${parseFloat(consultation.fee).toFixed(2)}` : 'Q150.00';
   const doctorText = consultation.doctor || 'Médico Tratante';
   const specialtyText = consultation.specialty || 'Medicina General';
-  const reasonText = consultation.reason || 'Sin motivo especificado';
-  const symptomsText = consultation.symptoms || 'Evaluación médica de rutina y control general.';
+  const reasonText = consultation.reason || '';
+  const symptomsText = consultation.symptoms || '';
 
   let diagListHtml = '';
   if (consultation.diagnosisCodes && Array.isArray(consultation.diagnosisCodes) && consultation.diagnosisCodes.length > 0) {
@@ -503,7 +503,7 @@ export function showPastConsultationDetail(consultation) {
 
   const hasAux = labsList.length > 0 || imgList.length > 0 || medList.length > 0 || indList.length > 0;
 
-  title.textContent = `📋 Detalle de Consulta Registrada - ${dateFormatted}`;
+  title.textContent = `📋 Detalle y Edición de Consulta - ${dateFormatted}`;
   
   body.innerHTML = `
     <div class="report-section" style="margin-bottom: 1rem;">
@@ -517,14 +517,24 @@ export function showPastConsultationDetail(consultation) {
     </div>
 
     <div class="report-section" style="margin-bottom: 1rem;">
-      <div class="report-section-title" style="font-weight: bold; color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Evaluación Clínica</div>
-      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; font-size: 0.9rem; line-height: 1.5;">
-        <p style="margin-bottom: 8px;"><strong>Motivo de Consulta:</strong><br><span style="color: var(--text-primary);">${reasonText}</span></p>
-        <p><strong>Síntomas / Examen Físico:</strong><br><span style="color: var(--text-muted);">${symptomsText}</span></p>
+      <div class="report-section-title" style="font-weight: bold; color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Evaluación Clínica (Editable)</div>
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; font-size: 0.9rem; display: flex; flex-direction: column; gap: 10px;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Motivo de Consulta</label>
+          <textarea id="edit-past-reason" rows="2" style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical;">${reasonText}</textarea>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Síntomas / Examen Físico</label>
+          <textarea id="edit-past-symptoms" rows="3" style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical;">${symptomsText}</textarea>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Diagnóstico Clínico</label>
+          <input type="text" id="edit-past-clinical-diagnosis" value="${consultation.clinicalDiagnosis || ''}" placeholder="Ej. Faringoamigdalitis aguda" style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+        </div>
       </div>
     </div>
 
-    <div class="report-section" style="margin-bottom: 1rem;">
+    <div class="report-section" style="margin-bottom: 1.5rem;">
       <div class="report-section-title" style="font-weight: bold; color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Diagnóstico y Auxiliares (CIE-10)</div>
       <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; font-size: 0.9rem;">
         <p style="margin-bottom: 6px;"><strong>Diagnóstico(s) Registrado(s):</strong></p>
@@ -543,7 +553,52 @@ export function showPastConsultationDetail(consultation) {
         ` : '<p style="margin-top: 8px; color: var(--text-muted); font-style: italic; font-size: 0.85rem;">No se emitieron exámenes de apoyo ni tratamientos adicionales.</p>'}
       </div>
     </div>
+
+    <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+      <button class="btn btn-secondary" id="btn-close-past-modal" style="padding: 8px 16px;">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-past-consultation" style="padding: 8px 16px;">💾 Guardar Cambios</button>
+    </div>
   `;
+
+  // Registrar listeners para guardar y cerrar
+  const saveBtn = body.querySelector('#btn-save-past-consultation');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      const reasonVal = body.querySelector('#edit-past-reason').value.trim();
+      const symptomsVal = body.querySelector('#edit-past-symptoms').value.trim();
+      const clinicalDiagnosisVal = body.querySelector('#edit-past-clinical-diagnosis').value.trim();
+
+      if (!reasonVal) {
+        alert("Por favor, ingrese el motivo de consulta.");
+        return;
+      }
+
+      const stateObj = getAppState();
+      const pObj = stateObj.patients.find(p => p.id === patient.id);
+      if (pObj) {
+        const cObj = pObj.consultations.find(c => c.id === consultation.id);
+        if (cObj) {
+          cObj.reason = reasonVal;
+          cObj.symptoms = symptomsVal;
+          cObj.clinicalDiagnosis = clinicalDiagnosisVal;
+          
+          await saveAppState(stateObj);
+          alert("💾 Cambios grabados correctamente en la consulta.");
+          modal.style.display = 'none';
+
+          patient.consultations = pObj.consultations;
+          renderConsultationHistory(patient);
+        }
+      }
+    });
+  }
+
+  const closePastBtn = body.querySelector('#btn-close-past-modal');
+  if (closePastBtn) {
+    closePastBtn.addEventListener('click', () => {
+      modal.style.display = 'none';
+    });
+  }
 
   modal.style.display = 'flex';
 }
