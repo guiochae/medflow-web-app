@@ -503,6 +503,94 @@ export function showPastConsultationDetail(consultation, patient, onSaveCallback
 
   const hasAux = labsList.length > 0 || imgList.length > 0 || medList.length > 0 || indList.length > 0;
 
+  let gyoHtml = '';
+  if (consultation.gyoData) {
+    const gd = consultation.gyoData;
+    const tv = gd.tactoVaginal || { dilatacion: 0, borramiento: 0, altitud: '0' };
+    gyoHtml = `
+    <div class="report-section" style="margin-bottom: 1rem;">
+      <div class="report-section-title" style="font-weight: bold; color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Información de Ginecología y Obstetricia (Editable)</div>
+      <div style="background: rgba(0, 242, 254, 0.02); border: 1px solid rgba(0, 242, 254, 0.15); padding: 12px; border-radius: 6px; font-size: 0.9rem; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Fecha Última Regla (FUR)</label>
+            <input type="date" id="edit-past-gyo-fur" value="${gd.fur || ''}" style="width:100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Edad Gestacional (EG)</label>
+            <input type="text" id="edit-past-gyo-eg" value="${gd.eg || ''}" readonly style="background: rgba(255,255,255,0.05); color: var(--accent-primary); font-weight: bold; cursor: not-allowed; width: 100%;">
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Gestas</label>
+            <input type="number" id="edit-past-gyo-gestas" value="${gd.gestas || 0}" style="width:100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Partos</label>
+            <input type="number" id="edit-past-gyo-partos" value="${gd.partos || 0}" style="width:100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Abortos</label>
+            <input type="number" id="edit-past-gyo-abortos" value="${gd.abortos || 0}" style="width:100%;">
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Altura Uterina (cm)</label>
+            <input type="number" id="edit-past-gyo-altura" value="${gd.alturaUterina || 0}" style="width:100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Frecuencia Cardiaca Fetal (FCF)</label>
+            <input type="number" id="edit-past-gyo-fcf" value="${gd.fcf || 0}" style="width:100%;">
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Actividad Uterina</label>
+            <select id="edit-past-gyo-act-ut" style="width:100%; padding:8px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <option value="No" ${gd.actividadUterina === 'No' ? 'selected' : ''}>No</option>
+              <option value="Si" ${gd.actividadUterina === 'Si' ? 'selected' : ''}>Si</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Movimientos Fetales</label>
+            <select id="edit-past-gyo-mov-fet" style="width:100%; padding:8px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+              <option value="Si" ${gd.movimientosFetales === 'Si' ? 'selected' : ''}>Si</option>
+              <option value="No" ${gd.movimientosFetales === 'No' ? 'selected' : ''}>No</option>
+            </select>
+          </div>
+        </div>
+        <div style="border-top: 1px dashed rgba(0, 242, 254, 0.15); padding-top: 6px;">
+          <span style="font-weight: bold; font-size: 0.8rem; color: var(--accent-secondary); display: block; margin-bottom: 4px;">Tacto Vaginal</span>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Dilatación (cm)</label>
+              <input type="number" id="edit-past-gyo-dilatacion" value="${tv.dilatacion || 0}" style="width:100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Borramiento (%)</label>
+              <input type="number" id="edit-past-gyo-borramiento" value="${tv.borramiento || 0}" style="width:100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Altitud</label>
+              <select id="edit-past-gyo-altitud" style="width:100%; padding:8px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                <option value="-3" ${tv.altitud === '-3' ? 'selected' : ''}>-3</option>
+                <option value="-2" ${tv.altitud === '-2' ? 'selected' : ''}>-2</option>
+                <option value="-1" ${tv.altitud === '-1' ? 'selected' : ''}>-1</option>
+                <option value="0" ${tv.altitud === '0' ? 'selected' : ''}>0</option>
+                <option value="+1" ${tv.altitud === '+1' ? 'selected' : ''}>+1</option>
+                <option value="+2" ${tv.altitud === '+2' ? 'selected' : ''}>+2</option>
+                <option value="+3" ${tv.altitud === '+3' ? 'selected' : ''}>+3</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    `;
+  }
+
   title.textContent = `📋 Detalle y Edición de Consulta - ${dateFormatted}`;
   
   body.innerHTML = `
@@ -534,6 +622,8 @@ export function showPastConsultationDetail(consultation, patient, onSaveCallback
       </div>
     </div>
 
+    ${gyoHtml}
+
     <div class="report-section" style="margin-bottom: 1.5rem;">
       <div class="report-section-title" style="font-weight: bold; color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Diagnóstico y Auxiliares (CIE-10)</div>
       <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; font-size: 0.9rem;">
@@ -560,6 +650,35 @@ export function showPastConsultationDetail(consultation, patient, onSaveCallback
     </div>
   `;
 
+  // Registrar listener de FUR para edición obstétrica
+  const pastFur = body.querySelector('#edit-past-gyo-fur');
+  const pastEg = body.querySelector('#edit-past-gyo-eg');
+  if (pastFur && pastEg) {
+    pastFur.addEventListener('change', () => {
+      const val = pastFur.value;
+      if (!val) {
+        pastEg.value = '';
+        return;
+      }
+      const furDate = new Date(val);
+      const today = new Date();
+      furDate.setHours(0,0,0,0);
+      today.setHours(0,0,0,0);
+
+      const diffMs = today.getTime() - furDate.getTime();
+      if (diffMs < 0) {
+        pastEg.value = 'Fecha inválida';
+        return;
+      }
+
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const weeks = Math.floor(diffDays / 7);
+      const days = diffDays % 7;
+
+      pastEg.value = `${weeks} semanas y ${days} días`;
+    });
+  }
+
   // Registrar listeners para guardar y cerrar
   const saveBtn = body.querySelector('#btn-save-past-consultation');
   if (saveBtn) {
@@ -582,6 +701,23 @@ export function showPastConsultationDetail(consultation, patient, onSaveCallback
           cObj.symptoms = symptomsVal;
           cObj.clinicalDiagnosis = clinicalDiagnosisVal;
           
+          if (cObj.gyoData) {
+            cObj.gyoData.fur = body.querySelector('#edit-past-gyo-fur').value;
+            cObj.gyoData.eg = body.querySelector('#edit-past-gyo-eg').value;
+            cObj.gyoData.gestas = parseInt(body.querySelector('#edit-past-gyo-gestas').value) || 0;
+            cObj.gyoData.partos = parseInt(body.querySelector('#edit-past-gyo-partos').value) || 0;
+            cObj.gyoData.abortos = parseInt(body.querySelector('#edit-past-gyo-abortos').value) || 0;
+            cObj.gyoData.alturaUterina = parseFloat(body.querySelector('#edit-past-gyo-altura').value) || 0;
+            cObj.gyoData.fcf = parseInt(body.querySelector('#edit-past-gyo-fcf').value) || 0;
+            cObj.gyoData.actividadUterina = body.querySelector('#edit-past-gyo-act-ut').value;
+            cObj.gyoData.movimientosFetales = body.querySelector('#edit-past-gyo-mov-fet').value;
+            cObj.gyoData.tactoVaginal = {
+              dilatacion: parseInt(body.querySelector('#edit-past-gyo-dilatacion').value) || 0,
+              borramiento: parseInt(body.querySelector('#edit-past-gyo-borramiento').value) || 0,
+              altitud: body.querySelector('#edit-past-gyo-altitud').value
+            };
+          }
+
           await saveAppState(stateObj);
           alert("💾 Cambios grabados correctamente en la consulta.");
           modal.style.display = 'none';
@@ -701,6 +837,91 @@ function renderConsultationForm(patient, doctors) {
           <textarea id="c-symptoms" required placeholder="Ej. Faringe congestiva con placas purulentas, ganglios submandibulares inflamados..." style="min-height: 100px;"></textarea>
         </div>
 
+        <!-- SECCIÓN ESPECIAL: GINECOLOGÍA Y OBSTETRICIA -->
+        <div id="gyo-special-section" style="display: none; background: rgba(0, 242, 254, 0.02); border: 1px solid rgba(0, 242, 254, 0.15); padding: 15px; border-radius: var(--radius-md); margin-top: 1rem; margin-bottom: 1.25rem;">
+          <h4 style="color: var(--accent-primary); font-family: var(--font-heading); margin-top: 0; margin-bottom: 10px; border-bottom: 1px solid rgba(0, 242, 254, 0.15); padding-bottom: 4px; font-size: 0.95rem;">🔬 Información de Ginecología y Obstetricia</h4>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Fecha Última Regla (FUR)</label>
+              <input type="date" id="gyo-fur" style="width:100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Edad Gestacional (EG)</label>
+              <input type="text" id="gyo-eg" readonly placeholder="Semanas y Días (se calcula desde FUR)" style="background: rgba(255,255,255,0.05); color: var(--accent-primary); font-weight: bold; cursor: not-allowed;">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Número de Gestas</label>
+              <input type="number" id="gyo-gestas" min="0" placeholder="Ej. 1" style="width:100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Número de Partos</label>
+              <input type="number" id="gyo-partos" min="0" placeholder="Ej. 0" style="width:100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Abortos Previos</label>
+              <input type="number" id="gyo-abortos" min="0" placeholder="Ej. 0" style="width:100%;">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Altura Uterina (cm)</label>
+              <input type="number" id="gyo-altura-uterina" min="0" step="0.1" placeholder="Ej. 28" style="width:100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Frecuencia Cardiaca Fetal (FCF - lpm)</label>
+              <input type="number" id="gyo-fcf" min="0" placeholder="Ej. 140" style="width:100%;">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Actividad Uterina</label>
+              <select id="gyo-actividad-uterina" style="width:100%; padding:8px; border-radius: var(--radius-sm); border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-primary);">
+                <option value="No">No</option>
+                <option value="Si">Si</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Movimientos Fetales</label>
+              <select id="gyo-movimientos-fetales" style="width:100%; padding:8px; border-radius: var(--radius-sm); border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-primary);">
+                <option value="Si">Si</option>
+                <option value="No">No</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="border-top: 1px dashed rgba(0, 242, 254, 0.15); padding-top: 8px; margin-top: 10px;">
+            <span style="font-weight: bold; font-size: 0.82rem; color: var(--accent-secondary); display: block; margin-bottom: 6px;">Tacto Vaginal</span>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label>Dilatación (cm)</label>
+                <input type="number" id="gyo-tacto-dilatacion" min="0" max="10" placeholder="Ej. 4" style="width:100%;">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label>Borramiento (%)</label>
+                <input type="number" id="gyo-tacto-borramiento" min="0" max="100" placeholder="Ej. 80" style="width:100%;">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label>Altitud de Presentación</label>
+                <select id="gyo-tacto-altitud" style="width:100%; padding:8px; border-radius: var(--radius-sm); border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-primary);">
+                  <option value="-3">-3</option>
+                  <option value="-2">-2</option>
+                  <option value="-1">-1</option>
+                  <option value="0">0</option>
+                  <option value="+1">+1</option>
+                  <option value="+2">+2</option>
+                  <option value="+3">+3</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="form-group" style="margin-top: 1.25rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <label for="c-clinical-diagnosis" style="margin-bottom: 0; font-weight: 700; color: var(--accent-primary);">Diagnóstico Clínico del Médico</label>
@@ -782,6 +1003,47 @@ function renderConsultationForm(patient, doctors) {
   reasonInput.addEventListener('input', handleInputTrigger);
   symptomsInput.addEventListener('input', handleInputTrigger);
 
+  // Manejadores especiales para Ginecología y Obstetricia
+  const specialtySelect = document.getElementById('c-specialty');
+  const gyoSection = document.getElementById('gyo-special-section');
+  if (specialtySelect && gyoSection) {
+    specialtySelect.addEventListener('change', (e) => {
+      if (e.target.value === 'Ginecología y Obstetricia') {
+        gyoSection.style.display = 'block';
+      } else {
+        gyoSection.style.display = 'none';
+      }
+    });
+  }
+
+  const furInput = document.getElementById('gyo-fur');
+  const egInput = document.getElementById('gyo-eg');
+  if (furInput && egInput) {
+    furInput.addEventListener('change', () => {
+      const val = furInput.value;
+      if (!val) {
+        egInput.value = '';
+        return;
+      }
+      const furDate = new Date(val);
+      const today = new Date();
+      furDate.setHours(0,0,0,0);
+      today.setHours(0,0,0,0);
+
+      const diffMs = today.getTime() - furDate.getTime();
+      if (diffMs < 0) {
+        egInput.value = 'Fecha inválida (es a futuro)';
+        return;
+      }
+
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const weeks = Math.floor(diffDays / 7);
+      const days = diffDays % 7;
+
+      egInput.value = `${weeks} semanas y ${days} días`;
+    });
+  }
+
   // Inicializar dictado por micrófono
   initializeVoiceDictation();
 
@@ -850,7 +1112,23 @@ function renderConsultationForm(patient, doctors) {
         imaging: [...activeConsultationState.imaging]
       },
       acceptedTreatments: [...activeConsultationState.treatments],
-      fee
+      fee,
+      gyoData: specialty === 'Ginecología y Obstetricia' ? {
+        fur: document.getElementById('gyo-fur').value,
+        eg: document.getElementById('gyo-eg').value,
+        gestas: parseInt(document.getElementById('gyo-gestas').value) || 0,
+        partos: parseInt(document.getElementById('gyo-partos').value) || 0,
+        abortos: parseInt(document.getElementById('gyo-abortos').value) || 0,
+        alturaUterina: parseFloat(document.getElementById('gyo-altura-uterina').value) || 0,
+        fcf: parseInt(document.getElementById('gyo-fcf').value) || 0,
+        actividadUterina: document.getElementById('gyo-actividad-uterina').value,
+        movimientosFetales: document.getElementById('gyo-movimientos-fetales').value,
+        tactoVaginal: {
+          dilatacion: parseInt(document.getElementById('gyo-tacto-dilatacion').value) || 0,
+          borramiento: parseInt(document.getElementById('gyo-tacto-borramiento').value) || 0,
+          altitud: document.getElementById('gyo-tacto-altitud').value
+        }
+      } : null
     };
 
     // Guardar en el historial clínico del paciente
