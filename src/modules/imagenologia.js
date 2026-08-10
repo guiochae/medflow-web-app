@@ -1327,13 +1327,13 @@ export function showUltrasoundPrintWindow(patient, report) {
 
   if (report.type === 'pelvico') {
     reportBodyHtml = `
-      <div style="position: relative; min-height: 520px;">
+      <div style="position: relative;">
         <!-- Ilustración de fondo (marca de agua) -->
-        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 440px; z-index: -1; opacity: 0.05;">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 340px; z-index: -1; opacity: 0.04;">
           <img src="/usg_uterus.jpg" style="width: 100%; object-fit: contain;">
         </div>
 
-        <p style="font-size: 1rem; margin-bottom: 20px; font-family: 'Montserrat', sans-serif; font-weight: 600; color: #334155;">
+        <p style="font-size: 0.95rem; margin-bottom: 12px; font-family: 'Montserrat', sans-serif; font-weight: 600; color: #334155;">
           Con Ultrasonido en escala de grises con transductor <strong>${d.transducer || '5.0'} MHz</strong> se visualiza:
         </p>
 
@@ -1376,89 +1376,92 @@ export function showUltrasoundPrintWindow(patient, report) {
     `;
   } else if (report.type === 'obstetrico_1t') {
     reportBodyHtml = `
-      <div style="position: relative; min-height: 520px; display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 20px;">
-        <div>
-          <p style="font-size: 1rem; margin-bottom: 20px; font-family: 'Montserrat', sans-serif; font-weight: 600; color: #334155;">
-            Ultrasonido en escala de grises con transductor <strong>${d.transducer || '6.5'} MHz</strong> se visualiza:
-          </p>
-
-          <div class="section-title">Biometría de Primer Trimestre</div>
-          <table class="report-table">
-            <thead>
-              <tr>
-                <th>Parámetro Fetal</th>
-                <th class="center-text">Medida Obtenida</th>
-                <th class="center-text">Semanas de Gestación</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><strong>Saco Gestacional (SG)</strong></td>
-                <td class="center-text"><strong>${d.sg || '—'}</strong> mm</td>
-                <td class="center-text">${d.sgSemanas || '—'} semanas</td>
-              </tr>
-              <tr>
-                <td><strong>Longitud Céfalo-Caudal (LCC/CRL)</strong></td>
-                <td class="center-text"><strong>${d.lcc || '—'}</strong> mm</td>
-                <td class="center-text">${d.lccSemanas || '—'} semanas</td>
-              </tr>
-              <tr>
-                <td><strong>Frecuencia Cardíaca Fetal (FCF)</strong></td>
-                <td class="center-text"><strong>${d.fcf || '—'}</strong> lpm</td>
-                <td class="center-text">--</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div class="section-title">Valoración Clínica</div>
-          <table class="report-info-table">
-            <tr>
-              <td class="label">Movimiento Fetal:</td>
-              <td><strong>${d.actividad || 'Presente'}</strong></td>
-              <td class="label">Situación Saco:</td>
-              <td>${d.situacion || 'Intrauterino'}</td>
-            </tr>
-            <tr>
-              <td class="label">Reacción Decidual:</td>
-              <td>${d.reaccion || 'Adecuada'}</td>
-              <td class="label">Ovarios y Anexos:</td>
-              <td>${d.ovariosAnexos || 'Sin hallazgos patológicos significativos.'}</td>
-            </tr>
-          </table>
-          
-          <div style="margin-top: 25px; font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 1.15rem; color: #1e3a8a; text-transform: uppercase;">
-            Edad Gestacional Final: <span style="border-bottom: 2px solid #1e3a8a; padding: 0 10px;">${d.embarazoSemanas || '—'} Semanas</span>
-          </div>
+      <div style="position: relative;">
+        <!-- Ilustración de fondo (marca de agua) -->
+        <div style="position: absolute; bottom: 40px; right: 20px; width: 170px; z-index: -1; opacity: 0.04;">
+          <img src="/usg_pregnant.jpg" style="width: 100%; object-fit: contain;">
         </div>
 
-        <div style="display: flex; align-items: flex-end; justify-content: center; padding-bottom: 40px; z-index: -1;">
-          <img src="/usg_pregnant.jpg" style="width: 100%; max-width: 250px; opacity: 0.95; object-fit: contain;">
+        <p style="font-size: 0.95rem; margin-bottom: 12px; font-family: 'Montserrat', sans-serif; font-weight: 600; color: #334155;">
+          Ultrasonido en escala de grises con transductor <strong>${d.transducer || '6.5'} MHz</strong> se visualiza:
+        </p>
+
+        <div class="section-title">Biometría de Primer Trimestre</div>
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Parámetro Fetal</th>
+              <th class="center-text">Medida Obtenida</th>
+              <th class="center-text">Semanas de Gestación</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Saco Gestacional (SG)</strong></td>
+              <td class="center-text"><strong>${d.sg || '—'}</strong> mm</td>
+              <td class="center-text">${d.sgSemanas || '—'} semanas</td>
+            </tr>
+            <tr>
+              <td><strong>Longitud Céfalo-Caudal (LCC/CRL)</strong></td>
+              <td class="center-text"><strong>${d.lcc || '—'}</strong> mm</td>
+              <td class="center-text">${d.lccSemanas || '—'} semanas</td>
+            </tr>
+            <tr>
+              <td><strong>Frecuencia Cardíaca Fetal (FCF)</strong></td>
+              <td class="center-text"><strong>${d.fcf || '—'}</strong> lpm</td>
+              <td class="center-text">--</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="section-title">Valoración Clínica</div>
+        <table class="report-info-table">
+          <tr>
+            <td class="label">Movimiento Fetal:</td>
+            <td><strong>${d.actividad || 'Presente'}</strong></td>
+            <td class="label">Situación Saco:</td>
+            <td>${d.situacion || 'Intrauterino'}</td>
+          </tr>
+          <tr>
+            <td class="label">Reacción Decidual:</td>
+            <td>${d.reaccion || 'Adecuada'}</td>
+            <td class="label">Ovarios y Anexos:</td>
+            <td>${d.ovariosAnexos || 'Sin hallazgos patológicos significativos.'}</td>
+          </tr>
+        </table>
+        
+        <div style="margin-top: 15px; font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 1.05rem; color: #1e3a8a; text-transform: uppercase;">
+          Edad Gestacional Final: <span style="border-bottom: 2px solid #1e3a8a; padding: 0 10px;">${d.embarazoSemanas || '—'} Semanas</span>
         </div>
       </div>
     `;
   } else if (report.type === 'obstetrico_2t_3t') {
     reportBodyHtml = `
-      <div style="position: relative; min-height: 520px; display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 20px;">
-        <div>
-          <p style="font-size: 1rem; margin-bottom: 20px; font-family: 'Montserrat', sans-serif; font-weight: 600; color: #334155;">
-            Ultrasonido en escala de grises con transductor <strong>${d.transducer || '3.5'} MHz</strong> se visualiza:
-          </p>
+      <div style="position: relative;">
+        <!-- Ilustración de fondo (marca de agua) -->
+        <div style="position: absolute; bottom: 40px; right: 20px; width: 170px; z-index: -1; opacity: 0.04;">
+          <img src="/usg_pregnant.jpg" style="width: 100%; object-fit: contain;">
+        </div>
 
-          <div class="section-title">Biometría y Parámetros Fetales</div>
-          <table class="report-table">
-            <thead>
-              <tr>
-                <th>Biometría Fetal</th>
-                <th class="center-text">Medida Obtenida</th>
-                <th class="center-text">Edad Gestacional</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><strong>Diámetro Biparietal (DBP)</strong></td>
-                <td class="center-text"><strong>${d.dbp || '—'}</strong> cm</td>
-                <td class="center-text">${d.dbpSemanas || '—'} semanas</td>
-              </tr>
+        <p style="font-size: 0.95rem; margin-bottom: 12px; font-family: 'Montserrat', sans-serif; font-weight: 600; color: #334155;">
+          Ultrasonido en escala de grises con transductor <strong>${d.transducer || '3.5'} MHz</strong> se visualiza:
+        </p>
+
+        <div class="section-title">Biometría y Parámetros Fetales</div>
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Biometría Fetal</th>
+              <th class="center-text">Medida Obtenida</th>
+              <th class="center-text">Edad Gestacional</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Diámetro Biparietal (DBP)</strong></td>
+              <td class="center-text"><strong>${d.dbp || '—'}</strong> cm</td>
+              <td class="center-text">${d.dbpSemanas || '—'} semanas</td>
+            </tr>
               <tr>
                 <td><strong>Circunferencia Abdominal (CA)</strong></td>
                 <td class="center-text"><strong>${d.ca || '—'}</strong> cm</td>
@@ -1488,15 +1491,10 @@ export function showUltrasoundPrintWindow(patient, report) {
             </tr>
           </table>
           
-          <div style="margin-top: 25px; font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 1.15rem; color: #1e3a8a; text-transform: uppercase;">
+          <div style="margin-top: 15px; font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 1.05rem; color: #1e3a8a; text-transform: uppercase;">
             Edad Gestacional Final: <span style="border-bottom: 2px solid #1e3a8a; padding: 0 10px;">${d.embarazoSemanas || '—'} Semanas</span>
           </div>
         </div>
-
-        <div style="display: flex; align-items: flex-end; justify-content: center; padding-bottom: 40px; z-index: -1;">
-          <img src="/usg_pregnant.jpg" style="width: 100%; max-width: 250px; opacity: 0.95; object-fit: contain;">
-        </div>
-      </div>
     `;
   }
 
@@ -1509,27 +1507,31 @@ export function showUltrasoundPrintWindow(patient, report) {
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400&family=Montserrat:wght@400;600;700;800&display=swap');
         
+        * {
+          box-sizing: border-box;
+        }
         body {
           font-family: 'Lora', Georgia, serif;
           color: #1e293b;
           margin: 0;
-          padding: 50px;
-          line-height: 1.6;
+          padding: 25px 40px;
+          line-height: 1.5;
           background: #ffffff;
+          font-size: 13px;
         }
         .header-container {
           display: flex;
           justify-content: space-between;
           align-items: center;
           border-bottom: 3px double #1e3a8a;
-          padding-bottom: 15px;
-          margin-bottom: 25px;
+          padding-bottom: 10px;
+          margin-bottom: 15px;
         }
         .clinic-title-box {
           font-family: 'Montserrat', sans-serif;
         }
         .clinic-name {
-          font-size: 1.65rem;
+          font-size: 1.5rem;
           font-weight: 800;
           color: #1e3a8a;
           margin: 0;
@@ -1537,71 +1539,71 @@ export function showUltrasoundPrintWindow(patient, report) {
           letter-spacing: 0.5px;
         }
         .clinic-sub {
-          font-size: 0.85rem;
+          font-size: 0.8rem;
           font-weight: 700;
           color: #0284c7;
-          margin: 4px 0 0 0;
+          margin: 2px 0 0 0;
           text-transform: uppercase;
           letter-spacing: 0.5px;
         }
         .clinic-details {
           text-align: right;
-          font-size: 0.82rem;
+          font-size: 0.78rem;
           color: #475569;
-          line-height: 1.5;
+          line-height: 1.4;
           font-family: 'Montserrat', sans-serif;
         }
         .title-box {
           text-align: center;
-          margin-top: 10px;
-          margin-bottom: 25px;
+          margin-top: 5px;
+          margin-bottom: 15px;
         }
         .title {
           font-family: 'Montserrat', sans-serif;
-          font-size: 1.4rem;
+          font-size: 1.25rem;
           font-weight: 700;
           text-transform: uppercase;
           color: #1e3a8a;
-          letter-spacing: 1.5px;
+          letter-spacing: 1px;
           margin: 0;
           border-bottom: 1px solid #cbd5e1;
           display: inline-block;
-          padding-bottom: 4px;
+          padding-bottom: 2px;
         }
         .patient-card {
           background-color: #f8fafc;
           border: 1px solid #e2e8f0;
           border-radius: 6px;
-          padding: 15px 20px;
-          margin-bottom: 30px;
+          padding: 10px 15px;
+          margin-bottom: 18px;
           display: grid;
           grid-template-columns: 1.2fr 0.8fr;
           gap: 15px;
-          font-size: 0.88rem;
+          font-size: 0.82rem;
           font-family: 'Montserrat', sans-serif;
         }
         .patient-col p {
-          margin: 4px 0;
+          margin: 3px 0;
         }
         .patient-col strong {
           color: #0f172a;
         }
         .section-title {
           font-family: 'Montserrat', sans-serif;
-          font-size: 1.05rem;
+          font-size: 0.95rem;
           font-weight: 700;
           color: #1e3a8a;
           text-transform: uppercase;
-          margin-top: 25px;
-          margin-bottom: 10px;
+          margin-top: 15px;
+          margin-bottom: 8px;
           border-bottom: 1px dashed #cbd5e1;
-          padding-bottom: 4px;
+          padding-bottom: 3px;
           letter-spacing: 0.5px;
         }
         .report-table {
           width: 100%;
           border-collapse: collapse;
-          margin: 15px 0;
+          margin: 8px 0;
         }
         .report-table th {
           font-family: 'Montserrat', sans-serif;
@@ -1609,30 +1611,33 @@ export function showUltrasoundPrintWindow(patient, report) {
           color: #1e3a8a;
           font-weight: 700;
           text-align: left;
-          padding: 10px 12px;
-          font-size: 0.82rem;
+          padding: 8px 10px;
+          font-size: 0.78rem;
           text-transform: uppercase;
           border-top: 1px solid #cbd5e1;
           border-bottom: 2px solid #cbd5e1;
         }
         .report-table td {
-          padding: 10px 12px;
-          font-size: 0.95rem;
+          padding: 8px 10px;
+          font-size: 0.9rem;
           border-bottom: 1px solid #e2e8f0;
+        }
+        .report-table tr:hover {
+          background-color: #f8fafc;
         }
         .report-info-table {
           width: 100%;
           border-collapse: collapse;
-          margin: 10px 0;
+          margin: 6px 0;
         }
         .report-info-table td {
-          padding: 8px 12px;
-          font-size: 0.95rem;
+          padding: 6px 10px;
+          font-size: 0.9rem;
           vertical-align: top;
         }
         .report-info-table td.label {
           font-family: 'Montserrat', sans-serif;
-          font-size: 0.82rem;
+          font-size: 0.78rem;
           font-weight: 700;
           color: #475569;
           width: 25%;
@@ -1644,64 +1649,76 @@ export function showUltrasoundPrintWindow(patient, report) {
         .diag-box {
           background-color: #f8fafc;
           border-left: 4px solid #1e3a8a;
-          padding: 15px;
+          padding: 12px;
           border-radius: 0 6px 6px 0;
-          margin-top: 30px;
-          margin-bottom: 30px;
+          margin-top: 15px;
+          margin-bottom: 15px;
+          break-inside: avoid;
         }
         .diag-title {
           font-family: 'Montserrat', sans-serif;
-          font-size: 0.88rem;
+          font-size: 0.82rem;
           font-weight: 700;
           color: #1e3a8a;
           text-transform: uppercase;
-          margin-bottom: 8px;
+          margin-bottom: 6px;
           letter-spacing: 0.5px;
         }
         .diag-text {
-          font-size: 1.1rem;
+          font-size: 1rem;
           font-weight: 700;
           color: #0f172a;
           margin: 0;
-          line-height: 1.5;
+          line-height: 1.4;
         }
         .recom-text {
-          font-size: 0.95rem;
+          font-size: 0.9rem;
           font-style: italic;
           color: #334155;
-          margin: 5px 0 0 0;
+          margin: 4px 0 0 0;
         }
         .footer-sig {
-          margin-top: 70px;
+          margin-top: 30px;
           display: flex;
           flex-direction: column;
           align-items: center;
           text-align: center;
           font-family: 'Montserrat', sans-serif;
+          break-inside: avoid;
         }
         .line {
-          width: 220px;
+          width: 200px;
           border-top: 1.5px solid #475569;
-          margin-bottom: 8px;
+          margin-bottom: 6px;
         }
         .footer-advertisement {
-          margin-top: 50px;
-          padding: 12px 16px;
+          margin-top: 25px;
+          padding: 10px 14px;
           border: 1px solid #cbd5e1;
           border-radius: 4px;
-          font-size: 0.75rem;
+          font-size: 0.72rem;
           color: #64748b;
           text-align: justify;
-          line-height: 1.5;
+          line-height: 1.4;
           background-color: #f8fafc;
           font-family: 'Montserrat', sans-serif;
+          break-inside: avoid;
         }
         @media print {
-          body { padding: 0; }
+          @page {
+            size: letter;
+            margin: 10mm 15mm;
+          }
+          body {
+            padding: 0;
+            margin: 0;
+            font-size: 12px;
+          }
           .no-print { display: none; }
           .patient-card { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .footer-advertisement { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .report-table th { background-color: #f1f5f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          tr, p, div, table { page-break-inside: avoid; break-inside: avoid; }
         }
       </style>
     </head>
