@@ -1123,6 +1123,70 @@ function renderLabBuilder(patient, doctors) {
       };
     }
 
+    // Helper to sync selected items to the sidebar
+    function updateSelectedList() {
+      const selectedList = document.getElementById('checklist-selected-items-list');
+      const countBadge = document.getElementById('checklist-selected-count');
+      const emptyMsg = document.getElementById('checklist-empty-selected-msg');
+      if (!selectedList || !countBadge) return;
+
+      const checkedBoxes = checklistBody.querySelectorAll('input[type="checkbox"]:checked');
+      countBadge.textContent = checkedBoxes.length;
+
+      if (emptyMsg) {
+        emptyMsg.style.display = checkedBoxes.length === 0 ? 'block' : 'none';
+      }
+
+      // Render items
+      const itemsHtml = Array.from(checkedBoxes).map(cb => {
+        const name = cb.value;
+        return `
+          <div class="selected-study-pill" style="
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            background: rgba(2, 132, 199, 0.08); 
+            border: 1px solid var(--accent-primary); 
+            border-radius: 4px; 
+            padding: 6px 10px; 
+            font-size: 0.85rem; 
+            color: var(--text-primary);
+          ">
+            <span style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;">${name}</span>
+            <button type="button" class="btn-remove-selected-study" data-name="${name}" style="
+              background: none; 
+              border: none; 
+              color: var(--accent-danger); 
+              font-size: 1rem; 
+              font-weight: bold; 
+              cursor: pointer; 
+              padding: 0 4px;
+            ">&times;</button>
+          </div>
+        `;
+      }).join('');
+
+      const existingPills = selectedList.querySelectorAll('.selected-study-pill');
+      existingPills.forEach(p => p.remove());
+      selectedList.insertAdjacentHTML('beforeend', itemsHtml);
+
+      // Bind remove button events
+      selectedList.querySelectorAll('.btn-remove-selected-study').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const name = btn.getAttribute('data-name');
+          const chk = checklistBody.querySelector(`input[type="checkbox"][value="${name}"]`);
+          if (chk) {
+            chk.checked = false;
+            const card = chk.closest('.checklist-item-card') || chk.closest('label');
+            if (card) card.classList.remove('selected');
+          }
+          updateSelectedList();
+        });
+      });
+    }
+
     // Vincular clic en la tarjeta entera para seleccionar
     const cards = checklistBody.querySelectorAll('.checklist-item-card');
     cards.forEach(card => {
@@ -1136,8 +1200,24 @@ function renderLabBuilder(patient, doctors) {
         } else {
           card.classList.remove('selected');
         }
+        updateSelectedList();
       });
     });
+
+    // Handle manual checkbox changes (e.g. keyboard)
+    checklistBody.querySelectorAll('input[type="checkbox"]').forEach(chk => {
+      chk.addEventListener('change', () => {
+        const card = chk.closest('.checklist-item-card');
+        if (card) {
+          if (chk.checked) card.classList.add('selected');
+          else card.classList.remove('selected');
+        }
+        updateSelectedList();
+      });
+    });
+
+    // Initial update
+    updateSelectedList();
 
     btnSubmitChecklist.onclick = () => {
       const checkedBoxes = checklistBody.querySelectorAll('input[type="checkbox"]:checked');

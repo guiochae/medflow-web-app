@@ -1622,6 +1622,18 @@ html, body {
     grid-template-columns: 1fr !important;
   }
 
+  .checklist-modal-layout {
+    grid-template-columns: 1fr !important;
+    gap: 15px !important;
+  }
+
+  .checklist-left-side {
+    border-right: none !important;
+    padding-right: 0 !important;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 15px;
+  }
+
   table {
     display: block;
     width: 100%;
