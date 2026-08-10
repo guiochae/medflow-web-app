@@ -902,6 +902,23 @@ function renderRecipeBuilder(patient, doctors) {
     patientObj.prescriptions = patientObj.prescriptions || [];
     patientObj.prescriptions.unshift(newRecipe);
 
+    // Registrar en Demanda Real medicamentos que no estén en el catálogo de farmacia
+    stateObj.demandaReal = stateObj.demandaReal || [];
+    currentPrescriptionMedicines.forEach(m => {
+      const inCatalog = stateObj.medications && stateObj.medications.some(med => med.name.toLowerCase().trim() === m.name.toLowerCase().trim());
+      if (!inCatalog) {
+        stateObj.demandaReal.push({
+          id: 'dr-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+          date: new Date().toISOString(),
+          patientName: patientObj.name,
+          patientId: patientObj.id,
+          doctorName: doctorName,
+          medicineName: m.name,
+          quantity: parseInt(m.quantity) || 1
+        });
+      }
+    });
+
     saveAppState(stateObj);
 
     // Abrir Modal de Vista Preliminar e Impresión

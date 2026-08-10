@@ -24,6 +24,7 @@ export function renderFarmacia(container) {
       <button class="tab-btn active" id="tab-dispense-recipes">📋 Despachar Recetas</button>
       <button class="tab-btn" id="tab-external-sale">🏪 Venta Externa</button>
       <button class="tab-btn" id="tab-sales-history">📜 Historial de Farmacia</button>
+      <button class="tab-btn" id="tab-demanda-real">📈 Demanda Real</button>
     </div>
 
     <!-- Contenedor de Alertas de Inventario y Vencimiento -->
@@ -167,6 +168,62 @@ export function renderFarmacia(container) {
               <!-- Se listan las ventas externas -->
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- PESTAÑA: DEMANDA REAL -->
+      <div id="pane-demanda-real" class="tab-pane" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+          <div>
+            <h3 style="color: var(--accent-primary); margin-bottom: 0.25rem;">Demanda Real de Medicamentos</h3>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin: 0;">
+              Registro de medicamentos recetados por médicos que no se encuentran en el Catálogo de Farmacia.
+            </p>
+          </div>
+          <button class="btn btn-secondary" id="btn-print-demanda-real" style="display: flex; align-items: center; gap: 6px;">
+            🖨️ Exportar / Imprimir Reporte
+          </button>
+        </div>
+
+        <!-- Panel de Estadísticas (Aesthetic Cards) -->
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 1.5rem;">
+          <div class="glass-card" style="padding: 1rem; border-top: 3px solid var(--accent-primary); display: flex; flex-direction: column; gap: 4px; background: rgba(30, 41, 59, 0.4);">
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Medicamentos Solicitados</span>
+            <strong style="font-size: 1.6rem; color: var(--text-primary);" id="dr-stat-unique-meds">0</strong>
+            <span style="font-size: 0.72rem; color: var(--text-muted);">Nombres distintos recetados</span>
+          </div>
+          <div class="glass-card" style="padding: 1rem; border-top: 3px solid var(--accent-secondary); display: flex; flex-direction: column; gap: 4px; background: rgba(30, 41, 59, 0.4);">
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Total Recetas Afectadas</span>
+            <strong style="font-size: 1.6rem; color: var(--text-primary);" id="dr-stat-total-records">0</strong>
+            <span style="font-size: 0.72rem; color: var(--text-muted);">Solicitudes registradas en recetario</span>
+          </div>
+          <div class="glass-card" style="padding: 1rem; border-top: 3px solid var(--accent-success); display: flex; flex-direction: column; gap: 4px; background: rgba(30, 41, 59, 0.4);">
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Medicamento Más Solicitado</span>
+            <strong style="font-size: 1.1rem; color: var(--text-primary); text-overflow: ellipsis; white-space: nowrap; overflow: hidden;" id="dr-stat-top-med">Ninguno</strong>
+            <span style="font-size: 0.72rem; color: var(--text-muted);" id="dr-stat-top-med-qty">0 unidades acumuladas</span>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1rem; display: flex; gap: 10px;">
+          <input type="text" id="dr-search" placeholder="Buscar medicamento o médico..." style="flex: 1; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+        </div>
+
+        <!-- Tabla de Datos -->
+        <div style="overflow-x: auto;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;" id="dr-table">
+            <thead>
+              <tr style="border-bottom: 2px solid var(--border-color); color: var(--text-muted);">
+                <th style="padding: 10px;">Fecha y Hora</th>
+                <th style="padding: 10px;">Medicamento Recetado</th>
+                <th style="padding: 10px; text-align: center;">Cantidad</th>
+                <th style="padding: 10px;">Paciente</th>
+                <th style="padding: 10px;">Médico Tratante</th>
+              </tr>
+            </thead>
+            <tbody id="dr-table-body">
+              <!-- Creado por JS -->
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -355,6 +412,8 @@ function refreshActiveTab() {
     renderCartTable();
   } else if (activeFarmaciaTab === 'tab-sales-history') {
     renderSalesHistory();
+  } else if (activeFarmaciaTab === 'tab-demanda-real') {
+    renderDemandaReal();
   }
 }
 
@@ -1109,4 +1168,232 @@ function renderInventoryAlerts() {
       </div>
     </div>
   `;
+}
+
+// 7. RENDERIZAR REPORTE DE DEMANDA REAL
+function renderDemandaReal() {
+  const tbody = document.getElementById('dr-table-body');
+  if (!tbody) return;
+
+  const state = getAppState();
+  const rawList = state.demandaReal || [];
+
+  // 1. Estadísticas
+  const uniqueMeds = new Set(rawList.map(r => r.medicineName.toLowerCase().trim())).size;
+  const statUnique = document.getElementById('dr-stat-unique-meds');
+  const statTotal = document.getElementById('dr-stat-total-records');
+  if (statUnique) statUnique.textContent = uniqueMeds;
+  if (statTotal) statTotal.textContent = rawList.length;
+
+  // Calcular medicamento más solicitado
+  const medCounts = {};
+  rawList.forEach(r => {
+    const key = r.medicineName;
+    medCounts[key] = (medCounts[key] || 0) + (r.quantity || 1);
+  });
+
+  let topMed = 'Ninguno';
+  let topQty = 0;
+  Object.keys(medCounts).forEach(med => {
+    if (medCounts[med] > topQty) {
+      topQty = medCounts[med];
+      topMed = med;
+    }
+  });
+  
+  const statTopMed = document.getElementById('dr-stat-top-med');
+  const statTopMedQty = document.getElementById('dr-stat-top-med-qty');
+  if (statTopMed) statTopMed.textContent = topMed;
+  if (statTopMedQty) statTopMedQty.textContent = `${topQty} unidades acumuladas`;
+
+  // 2. Filtro de Búsqueda
+  const searchInput = document.getElementById('dr-search');
+  const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+  const filtered = rawList.filter(r => {
+    return r.medicineName.toLowerCase().includes(query) ||
+           (r.doctorName || '').toLowerCase().includes(query) ||
+           (r.patientName || '').toLowerCase().includes(query);
+  });
+
+  // Ordenar por fecha descendente
+  filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" style="padding: 20px; text-align: center; color: var(--text-muted);">
+          No se encontraron registros de demanda real.
+        </td>
+      </tr>
+    `;
+  } else {
+    tbody.innerHTML = filtered.map(r => {
+      const dateFormatted = new Date(r.date).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' });
+      return `
+        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+          <td style="padding: 10px; color: var(--text-muted);">${dateFormatted}</td>
+          <td style="padding: 10px; font-weight: bold; color: var(--accent-primary);">${r.medicineName}</td>
+          <td style="padding: 10px; text-align: center; font-weight: bold; color: var(--accent-secondary);">${r.quantity}</td>
+          <td style="padding: 10px; color: var(--text-primary);">${r.patientName}</td>
+          <td style="padding: 10px; color: var(--text-primary); font-style: italic;">Dr/a. ${r.doctorName}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // 3. Registrar eventos para búsqueda e impresión (solo una vez)
+  if (searchInput && !searchInput.dataset.listenerInitialized) {
+    searchInput.dataset.listenerInitialized = 'true';
+    searchInput.addEventListener('input', () => {
+      renderDemandaReal();
+    });
+  }
+
+  const printBtn = document.getElementById('btn-print-demanda-real');
+  if (printBtn && !printBtn.dataset.listenerInitialized) {
+    printBtn.dataset.listenerInitialized = 'true';
+    printBtn.addEventListener('click', () => {
+      printDemandaRealReport();
+    });
+  }
+}
+
+// 8. IMPRIMIR REPORTE DE DEMANDA REAL
+function printDemandaRealReport() {
+  const state = getAppState();
+  const rawList = state.demandaReal || [];
+  const clinicInfo = state.clinicInfo || { name: 'HOSPITAL MULTIMÉDICA', phone: '31640152', address: 'Guatemala' };
+
+  if (rawList.length === 0) {
+    alert("No hay registros en el reporte de Demanda Real para imprimir.");
+    return;
+  }
+
+  // Ordenar por fecha descendente
+  const list = [...rawList].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>Reporte de Demanda Real - ${clinicInfo.name}</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            color: #333;
+            margin: 30px;
+          }
+          .header {
+            text-align: center;
+            border-bottom: 2px solid #3b82f6;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+          }
+          .header h1 {
+            margin: 0;
+            color: #1e3a8a;
+            font-size: 1.8rem;
+          }
+          .header p {
+            margin: 5px 0 0 0;
+            font-size: 0.9rem;
+            color: #666;
+          }
+          .meta-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: #555;
+            margin-bottom: 20px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+          }
+          th {
+            background-color: #f3f4f6;
+            border-bottom: 2px solid #d1d5db;
+            color: #1f2937;
+            font-weight: bold;
+            text-align: left;
+            padding: 10px;
+            font-size: 0.85rem;
+          }
+          td {
+            border-bottom: 1px solid #e5e7eb;
+            padding: 10px;
+            font-size: 0.85rem;
+          }
+          tr:nth-child(even) {
+            background-color: #fafafa;
+          }
+          .signatures {
+            margin-top: 50px;
+            display: flex;
+            justify-content: space-between;
+          }
+          .sig-line {
+            width: 40%;
+            border-top: 1px solid #333;
+            text-align: center;
+            padding-top: 5px;
+            font-size: 0.85rem;
+            margin-top: 40px;
+          }
+          @media print {
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${clinicInfo.name}</h1>
+          <p>REPORTE OFICIAL DE DEMANDA REAL DE MEDICAMENTOS</p>
+          <p style="font-size: 0.8rem; font-style: italic;">Medicamentos Recetados Fuera de Catálogo de Farmacia</p>
+        </div>
+        <div class="meta-info">
+          <div><strong>Fecha de Generación:</strong> ${new Date().toLocaleString('es-GT')}</div>
+          <div><strong>Registros Totales:</strong> ${list.length}</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha y Hora</th>
+              <th>Medicamento Recetado</th>
+              <th style="text-align: center;">Cantidad</th>
+              <th>Paciente</th>
+              <th>Médico Tratante</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map(r => `
+              <tr>
+                <td>${new Date(r.date).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                <td style="font-weight: bold; color: #1e3a8a;">${r.medicineName}</td>
+                <td style="text-align: center; font-weight: bold;">${r.quantity}</td>
+                <td>${r.patientName}</td>
+                <td>Dr/a. ${r.doctorName}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div class="signatures">
+          <div class="sig-line">
+            Firma Encargado de Farmacia
+          </div>
+          <div class="sig-line">
+            Firma Dirección Médica
+          </div>
+        </div>
+        <script>
+          window.onload = function() {
+            window.print();
+          };
+        </script>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
 }
