@@ -2661,9 +2661,8 @@ function renderBilling(patient) {
             const desc = typeof d === 'string' ? d : (d.description || d.name || 'Servicio / Honorario');
             const amt = (d && d.amount !== undefined && !isNaN(d.amount)) ? parseFloat(d.amount).toFixed(2) : ((bill.total !== undefined && !isNaN(bill.total)) ? parseFloat(bill.total).toFixed(2) : '50.00');
             
-            const isRecipeBill = bill.id.startsWith('FAC-REC-') || String(bill.concept).toLowerCase().includes('receta');
-            const deleteAction = (bill.status === 'Pendiente' && isRecipeBill)
-              ? `<button class="btn-delete-bill-item" data-bill-id="${bill.id}" data-desc="${desc}" style="background: none; border: none; color: var(--accent-danger); font-size: 0.75rem; cursor: pointer; padding: 0 4px; margin-left: 5px;" title="Eliminar de la receta y cobro">❌</button>`
+            const deleteAction = (bill.status === 'Pendiente')
+              ? `<button class="btn-delete-bill-item" data-bill-id="${bill.id}" data-desc="${desc}" style="background: none; border: none; color: var(--accent-danger); font-size: 0.75rem; cursor: pointer; padding: 0 4px; margin-left: 5px;" title="Eliminar del cobro">❌</button>`
               : '';
 
             return `<li>${desc} — <strong style="color: var(--accent-secondary);">Q${amt}</strong>${deleteAction}</li>`;
@@ -2693,56 +2692,96 @@ function renderBilling(patient) {
         const bId = btn.getAttribute('data-bill-id');
         const itemDesc = btn.getAttribute('data-desc');
 
-        if (!confirm(`¿Está seguro de que el paciente no desea adquirir el medicamento:\n"${itemDesc}"?`)) return;
+        if (!confirm(`¿Está seguro de que desea eliminar el producto/servicio:\n"${itemDesc}"?`)) return;
 
         const stateToSave = getAppState();
         const pObj = stateToSave.patients.find(p => p.id === currentPatient.id);
         const billObj = pObj.billingHistory.find(b => b.id === bId);
         if (!billObj) return;
 
-        // Find associated recipe
-        const recipeObj = pObj.prescriptions && pObj.prescriptions.find(r => r.billId === bId);
-
-        // Extract medicine name
-        let medName = '';
-        const prefixMatch = itemDesc.match(/Medicamento Recetado:\s*([^\(]+)/);
-        if (prefixMatch) {
-          medName = prefixMatch[1].trim();
-        } else {
-          medName = itemDesc.replace('Medicamento Recetado:', '').trim();
-        }
-
-        // Remove item from bill details
-        const detailIndex = billObj.details.findIndex(d => (d.description || d.name) === itemDesc);
+        // 1. Remove item from bill details
+        const detailIndex = billObj.details.findIndex(d => {
+          const desc = typeof d === 'string' ? d : (d.description || d.name || 'Servicio / Honorario');
+          return desc === itemDesc;
+        });
         if (detailIndex !== -1) {
           const removedAmount = parseFloat(billObj.details[detailIndex].amount || 0);
           billObj.details.splice(detailIndex, 1);
           billObj.total = Math.max(0, parseFloat(billObj.total) - removedAmount);
         }
 
-        // Remove medicine from recipe
-        if (recipeObj && recipeObj.medicines) {
-          const medIndex = recipeObj.medicines.findIndex(m => m.name.toLowerCase().trim() === medName.toLowerCase().trim() || medName.toLowerCase().includes(m.name.toLowerCase().trim()));
+        // 2. If it is a medicine (Recipe or Consultation Prescription)
+        const recipeObj = pObj.prescriptions && pObj.prescriptions.find(r => r.billId === bId);
+        let medName = '';
+        if (itemDesc.includes('Medicamento Recetado:') || itemDesc.includes('Medicamento Prescrito:')) {
+          medName = itemDesc.replace('Medicamento Recetado:', '').replace('Medicamento Prescrito:', '').trim();
+          medName = medName.split('(')[0].trim(); // Remove quantity info
+        }
+
+        if (medName && recipeObj && recipeObj.medicines) {
+          const medIndex = recipeObj.medicines.findIndex(m => 
+            m.name.toLowerCase().trim() === medName.toLowerCase().trim() || 
+            medName.toLowerCase().includes(m.name.toLowerCase().trim())
+          );
           if (medIndex !== -1) {
             recipeObj.medicines.splice(medIndex, 1);
           }
         }
 
-        let isEntirelyDeleted = false;
-        // If all medicines are removed, delete the recipe and bill completely
-        if (!recipeObj || !recipeObj.medicines || recipeObj.medicines.length === 0) {
-          const deleteEntire = confirm("Esta receta ya no tiene medicamentos. ¿Desea eliminar completamente la receta y su cobro asociado?");
-          if (deleteEntire) {
-            if (recipeObj) {
-              pObj.prescriptions = pObj.prescriptions.filter(r => r.id !== recipeObj.id);
+        // 3. If it is a study (Laboratory or Imaging) from an order
+        if (itemDesc.includes('Examen de Laboratorio:') || itemDesc.includes('Estudio de Imagenología:')) {
+          const studyName = itemDesc.replace('Examen de Laboratorio:', '').replace('Estudio de Imagenología:', '').trim();
+          
+          // Remove from studyOrders
+          const orderObj = pObj.studyOrders && pObj.studyOrders.find(o => o.billId === bId);
+          if (orderObj && orderObj.studies) {
+            const sIdx = orderObj.studies.findIndex(s => s.name.toLowerCase().trim() === studyName.toLowerCase().trim());
+            if (sIdx !== -1) {
+              orderObj.studies.splice(sIdx, 1);
             }
+            if (orderObj.studies.length === 0) {
+              pObj.studyOrders = pObj.studyOrders.filter(o => o.id !== orderObj.id);
+            }
+          }
+
+          // Remove from localLabs
+          const labIdx = pObj.localLabs && pObj.localLabs.findIndex(l => 
+            l.name.toLowerCase().trim() === studyName.toLowerCase().trim() && l.billId === bId
+          );
+          if (labIdx !== -1 && labIdx !== undefined) {
+            pObj.localLabs.splice(labIdx, 1);
+          }
+        }
+
+        // 4. Alternative format for local laboratory
+        if (itemDesc.includes('Análisis de Laboratorio:')) {
+          const labName = itemDesc.replace('Análisis de Laboratorio:', '').trim();
+          const labIdx = pObj.localLabs && pObj.localLabs.findIndex(l => 
+            l.name.toLowerCase().trim() === labName.toLowerCase().trim() && l.billId === bId
+          );
+          if (labIdx !== -1 && labIdx !== undefined) {
+            pObj.localLabs.splice(labIdx, 1);
+          }
+        }
+
+        let isEntirelyDeleted = false;
+
+        // Check if the recipe associated became empty
+        if (recipeObj && (!recipeObj.medicines || recipeObj.medicines.length === 0)) {
+          pObj.prescriptions = pObj.prescriptions.filter(r => r.id !== recipeObj.id);
+        }
+
+        // If all items are removed from the bill, delete the bill completely
+        if (!billObj.details || billObj.details.length === 0) {
+          const deleteEntire = confirm("Este cobro ya no tiene productos o servicios. ¿Desea eliminar completamente este cobro?");
+          if (deleteEntire) {
             pObj.billingHistory = pObj.billingHistory.filter(b => b.id !== bId);
             isEntirelyDeleted = true;
           }
         }
 
         saveAppState(stateToSave);
-        alert(isEntirelyDeleted ? "¡Receta y cobro eliminados completamente!" : "¡Receta y cobro actualizados correctamente!");
+        alert(isEntirelyDeleted ? "¡Cobro eliminado completamente!" : "¡Cobro actualizado correctamente!");
         renderBilling(pObj);
       });
     });
