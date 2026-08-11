@@ -1652,3 +1652,10 @@ html, body {
     font-size: 16px !important; /* Evita auto-zoom en iOS / Android */
   }
 }
+
+/* Recetario split grid column collapse */
+@media (max-width: 992px) {
+  .recipe-layout-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

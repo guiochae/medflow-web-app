@@ -37,6 +37,102 @@ function searchMedications(query) {
   });
 }
 
+function renderInventoryAlerts(query = '') {
+  const container = document.getElementById('recipe-inventory-alerts');
+  if (!container) return;
+
+  const state = getAppState();
+  const medications = state.medications || [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const queryLower = query.toLowerCase().trim();
+  const filteredMeds = medications.filter(m => {
+    if (!m.name) return false;
+    return m.name.toLowerCase().includes(queryLower);
+  });
+
+  const alerts = [];
+
+  filteredMeds.forEach(m => {
+    // 1. Check expiration date
+    if (m.vencimiento) {
+      let vencDate = new Date(m.vencimiento);
+      if (isNaN(vencDate.getTime())) {
+        const parts = m.vencimiento.split('/');
+        if (parts.length === 3) {
+          vencDate = new Date(parts[2], parts[1] - 1, parts[0]);
+        }
+      }
+
+      if (!isNaN(vencDate.getTime())) {
+        vencDate.setHours(0, 0, 0, 0);
+        const diffTime = vencDate.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const dateFormatted = `${vencDate.getDate()}/${vencDate.getMonth() + 1}/${vencDate.getFullYear()}`;
+
+        if (diffDays < 0) {
+          alerts.push({
+            type: 'expired',
+            message: `🚨 <strong>CADUCADO:</strong> El medicamento "${m.name}" (Lote: ${m.lote || 'N/A'}) venció el ${dateFormatted}.`
+          });
+        } else if (diffDays <= 30) {
+          alerts.push({
+            type: 'expiring',
+            message: `⚠️ <strong>PRÓXIMO A VENCER:</strong> "${m.name}" (Lote: ${m.lote || 'N/A'}) vence el ${dateFormatted} (en ${diffDays} días).`
+          });
+        }
+      }
+    }
+
+    // 2. Check stock level
+    if (m.stock !== undefined && m.minStock !== undefined && m.stock <= m.minStock) {
+      alerts.push({
+        type: 'lowStock',
+        message: `📉 <strong>BAJO STOCK:</strong> "${m.name}" tiene un stock de ${m.stock} unidades (Mínimo: ${m.minStock}).`
+      });
+    }
+  });
+
+  if (alerts.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; color: var(--text-muted); font-size: 0.82rem; padding: 2rem 0; font-style: italic;">
+        No hay alertas vigentes ${query ? 'que coincidan' : ''}
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = alerts.map(alt => {
+    let cardStyle = '';
+    let textColor = '';
+
+    if (alt.type === 'expired') {
+      cardStyle = 'background: rgba(225, 29, 72, 0.06); border: 1px solid rgba(225, 29, 72, 0.25); border-left: 4px solid #f43f5e !important;';
+      textColor = '#f43f5e';
+    } else if (alt.type === 'expiring') {
+      cardStyle = 'background: rgba(245, 158, 11, 0.06); border: 1px solid rgba(245, 158, 11, 0.25); border-left: 4px solid #fbbf24 !important;';
+      textColor = '#fbbf24';
+    } else { // lowStock
+      cardStyle = 'background: rgba(14, 165, 233, 0.06); border: 1px solid rgba(14, 165, 233, 0.25); border-left: 4px solid #38bdf8 !important;';
+      textColor = '#38bdf8';
+    }
+
+    return `
+      <div class="inventory-alert-item" style="
+        padding: 10px 12px; 
+        border-radius: var(--radius-sm); 
+        font-size: 0.8rem; 
+        line-height: 1.45;
+        color: var(--text-primary);
+        ${cardStyle}
+      ">
+        ${alt.message}
+      </div>
+    `;
+  }).join('');
+}
+
 // Lista temporal de medicamentos agregados a la receta en curso
 let currentPrescriptionMedicines = [];
 
@@ -475,115 +571,131 @@ function renderRecipeBuilder(patient, doctors) {
 
   container.innerHTML = `
     ${vitalsHeaderHtml}
-    <div class="glass-card">
-      <h2 style="font-family: var(--font-heading); margin-bottom: 1.5rem; color: var(--accent-primary);">Emitir Nueva Receta</h2>
+    <div class="glass-card" style="padding: 1.5rem;">
+      <h2 style="font-family: var(--font-heading); margin-bottom: 1.5rem; color: var(--accent-primary); border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Emitir Nueva Receta</h2>
       
-      <!-- Doctor que receta (automático del paciente) -->
-      <div class="form-group" style="max-width: 400px; margin-bottom: 1.5rem;">
-        <label>Médico que Prescribe (Tratante)</label>
-        <input type="text" value="${patient.assignedDoctorName || 'Dr. Carlos Mendoza'}" readonly style="background: rgba(255,255,255,0.05); cursor: not-allowed; font-weight: bold; color: var(--accent-primary);">
-        <input type="hidden" id="r-doctor" value="${patient.assignedDoctorId || 'u-1'}">
-      </div>
-
-      <!-- Formulario para agregar medicina a la receta -->
-      <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); padding: 1.25rem; border-radius: var(--radius-sm); margin-bottom: 1.5rem;">
-        <h4 style="margin-bottom: 1rem; color: var(--accent-secondary);">Agregar Medicamento</h4>
-        <form id="add-medicine-form">
-          <div class="form-row">
-            <div class="form-group" style="flex: 2; position: relative;">
-              <label for="m-name">Nombre del Medicamento</label>
-              <input type="text" id="m-name" required placeholder="Buscar en Vademécum de Guatemala..." autocomplete="off">
-              <!-- Caja de Autocompletado -->
-              <div id="med-autocomplete-list" style="
-                position: absolute; 
-                top: 100%; 
-                left: 0; 
-                right: 0; 
-                background: #13151f; 
-                border: 1px solid rgba(255,255,255,0.15); 
-                border-radius: var(--radius-sm); 
-                max-height: 200px; 
-                overflow-y: auto; 
-                z-index: 99; 
-                display: none;
-                box-shadow: var(--shadow-lg);
-              "></div>
-            </div>
-            <div class="form-group">
-              <label for="m-presentation">Presentación</label>
-              <select id="m-presentation" required>
-                <option value="Tabletas">Tabletas</option>
-                <option value="Cápsulas">Cápsulas</option>
-                <option value="Jarabe">Jarabe</option>
-                <option value="Suspensión">Suspensión</option>
-                <option value="Ampollas">Ampollas</option>
-                <option value="Crema/Pomada">Crema/Pomada</option>
-                <option value="Gotas">Gotas</option>
-                <option value="Inhalador">Inhalador</option>
-                <option value="Sobre">Sobre</option>
-                <option value="Frasco">Frasco</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="m-quantity">Cantidad</label>
-              <input type="text" id="m-quantity" required placeholder="Ej. 20 tabletas, 1 frasco">
-            </div>
+      <div class="recipe-layout-grid" style="display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 20px; align-items: start;">
+        <!-- Columna Izquierda: Formulario e Historial Recetas -->
+        <div>
+          <!-- Doctor que receta (automático del paciente) -->
+          <div class="form-group" style="max-width: 400px; margin-bottom: 1.5rem;">
+            <label>Médico que Prescribe (Tratante)</label>
+            <input type="text" value="${patient.assignedDoctorName || 'Dr. Carlos Mendoza'}" readonly style="background: rgba(255,255,255,0.05); cursor: not-allowed; font-weight: bold; color: var(--accent-primary);">
+            <input type="hidden" id="r-doctor" value="${patient.assignedDoctorId || 'u-1'}">
           </div>
-          <div class="form-row">
-            <div class="form-group" style="flex: 2;">
-              <label for="m-dosage">Dosis y Frecuencia</label>
-              <input type="text" id="m-dosage" required placeholder="Ej. 1 tableta cada 8 horas">
-            </div>
-            <div class="form-group" style="flex: 2;">
-              <label for="m-duration">Indicaciones / Duración</label>
-              <input type="text" id="m-duration" required placeholder="Ej. Tomar después de comida por 7 días">
-            </div>
-          <div style="display: flex; align-items: center; gap: 1.25rem; margin-top: 1.25rem; flex-wrap: wrap;">
-            <button type="submit" class="btn btn-secondary btn-small">
-              <span>+</span> Agregar a la Receta
+
+          <!-- Formulario para agregar medicina a la receta -->
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); padding: 1.25rem; border-radius: var(--radius-sm); margin-bottom: 1.5rem;">
+            <h4 style="margin-bottom: 1rem; color: var(--accent-secondary);">Agregar Medicamento</h4>
+            <form id="add-medicine-form">
+              <div class="form-row">
+                <div class="form-group" style="flex: 2; position: relative;">
+                  <label for="m-name">Nombre del Medicamento</label>
+                  <input type="text" id="m-name" required placeholder="Buscar en Vademécum de Guatemala..." autocomplete="off">
+                  <!-- Caja de Autocompletado -->
+                  <div id="med-autocomplete-list" style="
+                    position: absolute; 
+                    top: 100%; 
+                    left: 0; 
+                    right: 0; 
+                    background: #13151f; 
+                    border: 1px solid rgba(255,255,255,0.15); 
+                    border-radius: var(--radius-sm); 
+                    max-height: 200px; 
+                    overflow-y: auto; 
+                    z-index: 99; 
+                    display: none;
+                    box-shadow: var(--shadow-lg);
+                  "></div>
+                </div>
+                <div class="form-group">
+                  <label for="m-presentation">Presentación</label>
+                  <select id="m-presentation" required>
+                    <option value="Tabletas">Tabletas</option>
+                    <option value="Cápsulas">Cápsulas</option>
+                    <option value="Jarabe">Jarabe</option>
+                    <option value="Suspensión">Suspensión</option>
+                    <option value="Ampollas">Ampollas</option>
+                    <option value="Crema/Pomada">Crema/Pomada</option>
+                    <option value="Gotas">Gotas</option>
+                    <option value="Inhalador">Inhalador</option>
+                    <option value="Sobre">Sobre</option>
+                    <option value="Frasco">Frasco</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="m-quantity">Cantidad</label>
+                  <input type="text" id="m-quantity" required placeholder="Ej. 20 tabletas, 1 frasco">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group" style="flex: 2;">
+                  <label for="m-dosage">Dosis y Frecuencia</label>
+                  <input type="text" id="m-dosage" required placeholder="Ej. 1 tableta cada 8 horas">
+                </div>
+                <div class="form-group" style="flex: 2;">
+                  <label for="m-duration">Indicaciones / Duración</label>
+                  <input type="text" id="m-duration" required placeholder="Ej. Tomar después de comida por 7 días">
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 1.25rem; margin-top: 1.25rem; flex-wrap: wrap;">
+                <button type="submit" class="btn btn-secondary btn-small">
+                  <span>+</span> Agregar a la Receta
+                </button>
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.88rem; color: var(--accent-primary); font-weight: 500; user-select: none; margin: 0;">
+                  <input type="checkbox" id="m-breakdown-schedule" style="width: 17px; height: 17px; accent-color: var(--accent-primary); cursor: pointer;">
+                  Desglosar horarios de administración
+                </label>
+              </div>
+            </form>
+          </div>
+
+          <!-- Medicamentos Recetados (Lista Actual) -->
+          <h3 style="margin-bottom: 1rem; color: var(--text-primary);">Medicamentos en la Receta</h3>
+          <div style="overflow-x: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Medicamento</th>
+                  <th>Cantidad</th>
+                  <th>Dosis y Frecuencia</th>
+                  <th>Duración / Indicaciones</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody id="recipe-medicines-table-body">
+                <tr>
+                  <td colspan="5" style="text-align: center; color: var(--text-muted); font-style: italic;">
+                    No se han agregado medicamentos a esta receta todavía.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Indicaciones Generales / Recomendaciones -->
+          <div class="form-group" style="margin-top: 1.5rem;">
+            <label for="r-indications">Indicaciones y Recomendaciones Generales</label>
+            <textarea id="r-indications" rows="3" placeholder="Ej. Reposo absoluto, tomar abundante agua, evitar ejercicio..." style="width: 100%; min-height: 80px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); padding: 10px; font-family: inherit; font-size: 0.9rem;">${draftInds}</textarea>
+          </div>
+
+          <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+            <button type="button" class="btn btn-secondary" id="btn-clear-recipe">Limpiar Receta</button>
+            <button type="button" class="btn btn-success" id="btn-approve-recipe">
+              <span>✓</span> Aprobar y Previsualizar Receta
             </button>
-            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.88rem; color: var(--accent-primary); font-weight: 500; user-select: none; margin: 0;">
-              <input type="checkbox" id="m-breakdown-schedule" style="width: 17px; height: 17px; accent-color: var(--accent-primary); cursor: pointer;">
-              Desglosar horarios de administración
-            </label>
           </div>
-        </form>
-      </div>
+        </div>
 
-      <!-- Medicamentos Recetados (Lista Actual) -->
-      <h3 style="margin-bottom: 1rem; color: var(--text-primary);">Medicamentos en la Receta</h3>
-      <div style="overflow-x: auto;">
-        <table>
-          <thead>
-            <tr>
-              <th>Medicamento</th>
-              <th>Cantidad</th>
-              <th>Dosis y Frecuencia</th>
-              <th>Duración / Indicaciones</th>
-              <th>Acción</th>
-            </tr>
-          </thead>
-          <tbody id="recipe-medicines-table-body">
-            <tr>
-              <td colspan="5" style="text-align: center; color: var(--text-muted); font-style: italic;">
-                No se han agregado medicamentos a esta receta todavía.
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Indicaciones Generales / Recomendaciones -->
-      <div class="form-group" style="margin-top: 1.5rem;">
-        <label for="r-indications">Indicaciones y Recomendaciones Generales</label>
-        <textarea id="r-indications" rows="3" placeholder="Ej. Reposo absoluto, tomar abundante agua, evitar ejercicio..." style="width: 100%; min-height: 80px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); padding: 10px; font-family: inherit; font-size: 0.9rem;">${draftInds}</textarea>
-      </div>
-
-      <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
-        <button type="button" class="btn btn-secondary" id="btn-clear-recipe">Limpiar Receta</button>
-        <button type="button" class="btn btn-success" id="btn-approve-recipe">
-          <span>✓</span> Aprobar y Previsualizar Receta
-        </button>
+        <!-- Columna Derecha: Alertas de Inventario y Caducidad -->
+        <div style="background: rgba(0, 0, 0, 0.15); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 1.25rem; display: flex; flex-direction: column; max-height: 700px; position: sticky; top: 10px;">
+          <h3 style="font-size: 0.95rem; margin-top: 0; margin-bottom: 12px; color: var(--accent-primary); border-bottom: 2px solid var(--accent-primary); padding-bottom: 6px; display: flex; align-items: center; gap: 8px; font-family: var(--font-heading);">
+            📢 Alertas de Inventario y Caducidad
+          </h3>
+          <div id="recipe-inventory-alerts" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 5px; max-height: 600px;">
+            <!-- Carga dinámicamente -->
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -595,6 +707,7 @@ function renderRecipeBuilder(patient, doctors) {
 
   medNameInput.addEventListener('input', (e) => {
     const val = e.target.value;
+    renderInventoryAlerts(val);
     autocompleteList.innerHTML = '';
     
     if (val.trim().length < 2) {
@@ -720,6 +833,7 @@ function renderRecipeBuilder(patient, doctors) {
     autocompleteList.style.display = 'none';
 
     renderCurrentMedicinesTable();
+    renderInventoryAlerts('');
   });
 
   // Bind Limpiar Receta
@@ -854,6 +968,9 @@ function renderRecipeBuilder(patient, doctors) {
 
   // Inicializar la tabla de medicamentos con lo que esté cargado (por ejemplo, borradores)
   renderCurrentMedicinesTable();
+
+  // Inicializar alertas de inventario y caducidad
+  renderInventoryAlerts('');
 }
 
 // Renderizar tabla de medicamentos en curso
