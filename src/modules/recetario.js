@@ -1082,10 +1082,10 @@ function showPrescriptionPreviewModal(patient, recipe) {
           ${recipe.medicines.map(m => `
             <tr>
               <td style="text-align: left; padding: 12px 8px;">
-                <strong style="color: #000; font-size: 0.95rem;">${m.name} (${m.presentation})</strong>
+                <strong style="color: #000; font-size: 1.1rem;">${m.name} (${m.presentation})</strong>
                 <div class="prescription-preview-indications">${m.dosage} — ${m.duration}</div>
               </td>
-              <td style="text-align: right; font-weight: 700; padding: 12px 8px; font-size: 0.95rem; color: #333;">
+              <td style="text-align: right; font-weight: 700; padding: 12px 8px; font-size: 1.1rem; color: #333;">
                 ${m.quantity}
               </td>
             </tr>
