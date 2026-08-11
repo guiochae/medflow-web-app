@@ -1173,59 +1173,76 @@ function renderConsultationForm(patient, doctors) {
   const btnSaveReading = document.getElementById('btn-save-partogram-reading');
   if (btnSaveReading) {
     btnSaveReading.onclick = () => {
-      const stateObj = getAppState();
-      const pObj = stateObj.patients.find(p => p.id === patient.id);
-      const activePartogram = pObj.partograms.find(part => part.status === 'active');
-      if (!activePartogram) return;
+      try {
+        const stateObj = getAppState();
+        const pObj = stateObj.patients.find(p => p.id === patient.id);
+        const activePartogram = pObj.partograms.find(part => part.status === 'active');
+        if (!activePartogram) {
+          alert("No hay ningún partograma activo iniciado para esta paciente.");
+          return;
+        }
 
-      const hour = parseFloat(document.getElementById('p-form-hour').value);
-      const realtime = document.getElementById('p-form-realtime').value;
-      const dilatacion = parseInt(document.getElementById('p-form-dilatacion').value);
-      const descenso = parseInt(document.getElementById('p-form-descenso').value);
-      const fcf = parseInt(document.getElementById('p-form-fcf').value);
-      const contracciones = parseInt(document.getElementById('p-form-contracciones').value);
-      const liquido = document.getElementById('p-form-liquido').value;
-      const moldeamiento = document.getElementById('p-form-moldeamiento').value;
-      const oxitocina = document.getElementById('p-form-oxitocina').value;
-      const drogas = document.getElementById('p-form-drogas').value;
-      const pulso = parseInt(document.getElementById('p-form-pulso').value);
-      const pa = document.getElementById('p-form-pa').value;
-      const temperatura = parseFloat(document.getElementById('p-form-temperatura').value);
-      const orina = document.getElementById('p-form-orina').value;
+        const hour = parseFloat(document.getElementById('p-form-hour').value);
+        const realtime = document.getElementById('p-form-realtime').value;
+        const dilatacion = parseInt(document.getElementById('p-form-dilatacion').value);
+        const descenso = parseInt(document.getElementById('p-form-descenso').value);
+        const fcf = parseInt(document.getElementById('p-form-fcf').value);
+        const contracciones = parseInt(document.getElementById('p-form-contracciones').value);
+        const liquido = document.getElementById('p-form-liquido').value;
+        const moldeamiento = document.getElementById('p-form-moldeamiento').value;
+        const oxitocina = document.getElementById('p-form-oxitocina').value;
+        const drogas = document.getElementById('p-form-drogas').value;
+        const pulso = parseInt(document.getElementById('p-form-pulso').value);
+        const pa = document.getElementById('p-form-pa').value;
+        const temperatura = parseFloat(document.getElementById('p-form-temperatura').value);
+        const orina = document.getElementById('p-form-orina').value;
 
-      if (isNaN(hour) || isNaN(dilatacion) || isNaN(descenso) || isNaN(fcf)) {
-        alert("Por favor complete los campos obligatorios: Hora, Dilatación, Descenso y Frecuencia Cardíaca Fetal.");
-        return;
+        if (isNaN(hour) || isNaN(dilatacion) || isNaN(descenso) || isNaN(fcf)) {
+          alert("Por favor complete los campos obligatorios: Hora, Dilatación, Descenso y Frecuencia Cardíaca Fetal.");
+          return;
+        }
+
+        const existingIdx = activePartogram.readings.findIndex(r => r.hour === hour);
+        const newReading = {
+          hour, realtime, dilatacion, descenso, fcf, contracciones: isNaN(contracciones) ? 0 : contracciones,
+          liquido, moldeamiento, oxitocina, drogas, pulso: isNaN(pulso) ? 80 : pulso, pa, temperatura: isNaN(temperatura) ? 36.6 : temperatura, orina
+        };
+
+        if (existingIdx >= 0) {
+          activePartogram.readings[existingIdx] = newReading;
+        } else {
+          activePartogram.readings.push(newReading);
+        }
+
+        // Sync checkboxes and subobjects defensively
+        activePartogram.matep = activePartogram.matep || { oxitocina10UI: false, traccionCordon: false, masajeUterino: false };
+        activePartogram.placenta = activePartogram.placenta || { tipo: 'Completa', hora: '' };
+        activePartogram.newborn = activePartogram.newborn || { sexo: 'F', apgar: '', peso: '', talla: '', cef: '', capurro: '', responsable: '', indicaciones: '' };
+
+        activePartogram.matep.oxitocina10UI = document.getElementById('p-form-matep-oxitocina').checked;
+        activePartogram.matep.traccionCordon = document.getElementById('p-form-matep-traccion').checked;
+        activePartogram.matep.masajeUterino = document.getElementById('p-form-matep-masaje').checked;
+        activePartogram.placenta.tipo = document.getElementById('p-form-placenta-tipo').value;
+        activePartogram.placenta.hora = document.getElementById('p-form-placenta-hora').value;
+
+        // Keep closure patient memory reference synchronized
+        patient.partograms = pObj.partograms;
+
+        saveAppState(stateObj);
+        renderPartogram(activePartogram);
+
+        alert("Lectura registrada exitosamente.");
+
+        // Pre-fill next half hour
+        document.getElementById('p-form-hour').value = hour + 0.5;
+        document.getElementById('p-form-dilatacion').value = '';
+        document.getElementById('p-form-descenso').value = '';
+        document.getElementById('p-form-fcf').value = '';
+        document.getElementById('p-form-contracciones').value = '';
+      } catch (err) {
+        alert("Error al registrar lectura: " + err.message);
+        console.error(err);
       }
-
-      const existingIdx = activePartogram.readings.findIndex(r => r.hour === hour);
-      const newReading = {
-        hour, realtime, dilatacion, descenso, fcf, contracciones: isNaN(contracciones) ? 0 : contracciones,
-        liquido, moldeamiento, oxitocina, drogas, pulso: isNaN(pulso) ? 80 : pulso, pa, temperatura: isNaN(temperatura) ? 36.6 : temperatura, orina
-      };
-
-      if (existingIdx >= 0) {
-        activePartogram.readings[existingIdx] = newReading;
-      } else {
-        activePartogram.readings.push(newReading);
-      }
-
-      // Sync checkboxes
-      activePartogram.matep.oxitocina10UI = document.getElementById('p-form-matep-oxitocina').checked;
-      activePartogram.matep.traccionCordon = document.getElementById('p-form-matep-traccion').checked;
-      activePartogram.matep.masajeUterino = document.getElementById('p-form-matep-masaje').checked;
-      activePartogram.placenta.tipo = document.getElementById('p-form-placenta-tipo').value;
-      activePartogram.placenta.hora = document.getElementById('p-form-placenta-hora').value;
-
-      saveAppState(stateObj);
-      renderPartogram(activePartogram);
-
-      // Pre-fill next half hour
-      document.getElementById('p-form-hour').value = hour + 0.5;
-      document.getElementById('p-form-dilatacion').value = '';
-      document.getElementById('p-form-descenso').value = '';
-      document.getElementById('p-form-fcf').value = '';
-      document.getElementById('p-form-contracciones').value = '';
     };
   }
 
