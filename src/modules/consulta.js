@@ -920,6 +920,12 @@ function renderConsultationForm(patient, doctors) {
               </div>
             </div>
           </div>
+          
+          <div style="border-top: 1px dashed rgba(0, 242, 254, 0.2); padding-top: 12px; margin-top: 15px; text-align: center;">
+            <button type="button" class="btn btn-outline-info" id="btn-open-partograma" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: bold; padding: 10px;">
+              <span>📈</span> Monitoreo de Partograma (Fase Activa de Parto)
+            </button>
+          </div>
         </div>
 
         <div class="form-group" style="margin-top: 1.25rem;">
@@ -1042,6 +1048,468 @@ function renderConsultationForm(patient, doctors) {
 
       egInput.value = `${weeks} semanas y ${days} días`;
     });
+  }
+
+  // --- CONTROLADOR DE PARTOGRAMA ---
+  const btnOpenPartogram = document.getElementById('btn-open-partograma');
+  const partogramModal = document.getElementById('partogram-modal');
+  const btnClosePartogram = document.getElementById('btn-close-partograma');
+  const btnClosePartogramFooter = document.getElementById('btn-close-partograma-footer');
+  
+  if (btnOpenPartogram && partogramModal) {
+    const closePartogramModal = () => { partogramModal.style.display = 'none'; };
+    btnClosePartogram.onclick = closePartogramModal;
+    btnClosePartogramFooter.onclick = closePartogramModal;
+
+    btnOpenPartogram.onclick = (e) => {
+      e.preventDefault();
+      partogramModal.style.display = 'flex';
+      initPartogramUI();
+    };
+  }
+
+  function initPartogramUI() {
+    const stateObj = getAppState();
+    const pObj = stateObj.patients.find(p => p.id === patient.id);
+    if (!pObj.partograms) pObj.partograms = [];
+
+    const activePartogram = pObj.partograms.find(part => part.status === 'active');
+    const startSection = document.getElementById('partogram-start-section');
+    const activeSection = document.getElementById('partogram-active-section');
+    const formsSidebar = document.getElementById('partogram-forms-sidebar');
+
+    if (activePartogram) {
+      startSection.style.display = 'none';
+      activeSection.style.display = 'flex';
+      formsSidebar.style.display = 'flex';
+
+      // Prefill next relative hour
+      const lastHour = activePartogram.readings.length > 0 
+        ? Math.max(...activePartogram.readings.map(r => r.hour)) 
+        : -0.5;
+      document.getElementById('p-form-hour').value = lastHour + 0.5;
+      
+      const now = new Date();
+      document.getElementById('p-form-realtime').value = now.toTimeString().substring(0, 5);
+
+      // Render Charts & Table
+      renderPartogram(activePartogram);
+    } else {
+      startSection.style.display = 'block';
+      activeSection.style.display = 'none';
+      formsSidebar.style.display = 'none';
+    }
+  }
+
+  // Iniciar nuevo partograma
+  const btnStartPartogram = document.getElementById('btn-start-new-partogram');
+  if (btnStartPartogram) {
+    btnStartPartogram.onclick = () => {
+      const stateObj = getAppState();
+      const pObj = stateObj.patients.find(p => p.id === patient.id);
+      if (!pObj.partograms) pObj.partograms = [];
+
+      const furVal = document.getElementById('gyo-fur') ? document.getElementById('gyo-fur').value : '';
+      const egVal = document.getElementById('gyo-eg') ? document.getElementById('gyo-eg').value : '';
+      const gestasVal = document.getElementById('gyo-gestas') ? parseInt(document.getElementById('gyo-gestas').value) || 0 : 0;
+      const partosVal = document.getElementById('gyo-partos') ? parseInt(document.getElementById('gyo-partos').value) || 0 : 0;
+      const abortosVal = document.getElementById('gyo-abortos') ? parseInt(document.getElementById('gyo-abortos').value) || 0 : 0;
+
+      const newPartogram = {
+        id: 'PART-' + Date.now(),
+        startDate: new Date().toISOString(),
+        status: 'active',
+        fur: furVal,
+        eg: egVal,
+        gestas: gestasVal,
+        partos: partosVal,
+        abortos: abortosVal,
+        readings: [],
+        matep: { oxitocina10UI: false, traccionCordon: false, masajeUterino: false },
+        placenta: { tipo: 'Completa', hora: '' },
+        newborn: { sexo: 'F', apgar: '', peso: '', talla: '', cef: '', capurro: '', responsable: '', indicaciones: '' }
+      };
+
+      // Add initial reading if they already entered dilatation
+      const initialDil = document.getElementById('gyo-tacto-dilatacion') ? parseInt(document.getElementById('gyo-tacto-dilatacion').value) : NaN;
+      if (!isNaN(initialDil)) {
+        const initialFCF = document.getElementById('gyo-fcf') ? parseInt(document.getElementById('gyo-fcf').value) || 140 : 140;
+        const initialAlt = document.getElementById('gyo-tacto-altitud') ? document.getElementById('gyo-tacto-altitud').value : '0';
+        
+        let descentVal = 3;
+        if (initialAlt === '-3') descentVal = 5;
+        else if (initialAlt === '-2') descentVal = 4;
+        else if (initialAlt === '-1') descentVal = 3;
+        else if (initialAlt === '0') descentVal = 2;
+        else if (initialAlt === '+1') descentVal = 1;
+        else if (initialAlt === '+2' || initialAlt === '+3') descentVal = 0;
+
+        newPartogram.readings.push({
+          hour: 0,
+          realtime: new Date().toTimeString().substring(0, 5),
+          dilatacion: initialDil,
+          descenso: descentVal,
+          fcf: initialFCF,
+          contracciones: document.getElementById('gyo-actividad-uterina') && document.getElementById('gyo-actividad-uterina').value === 'Si' ? 3 : 0,
+          liquido: 'C',
+          moldeamiento: '-',
+          oxitocina: '',
+          drogas: '',
+          pulso: 80,
+          pa: '120/80',
+          temperatura: 36.6,
+          orina: 'Neg/Neg'
+        });
+      }
+
+      pObj.partograms.push(newPartogram);
+      saveAppState(stateObj);
+      
+      initPartogramUI();
+    };
+  }
+
+  // Registrar Lectura
+  const btnSaveReading = document.getElementById('btn-save-partogram-reading');
+  if (btnSaveReading) {
+    btnSaveReading.onclick = () => {
+      const stateObj = getAppState();
+      const pObj = stateObj.patients.find(p => p.id === patient.id);
+      const activePartogram = pObj.partograms.find(part => part.status === 'active');
+      if (!activePartogram) return;
+
+      const hour = parseFloat(document.getElementById('p-form-hour').value);
+      const realtime = document.getElementById('p-form-realtime').value;
+      const dilatacion = parseInt(document.getElementById('p-form-dilatacion').value);
+      const descenso = parseInt(document.getElementById('p-form-descenso').value);
+      const fcf = parseInt(document.getElementById('p-form-fcf').value);
+      const contracciones = parseInt(document.getElementById('p-form-contracciones').value);
+      const liquido = document.getElementById('p-form-liquido').value;
+      const moldeamiento = document.getElementById('p-form-moldeamiento').value;
+      const oxitocina = document.getElementById('p-form-oxitocina').value;
+      const drogas = document.getElementById('p-form-drogas').value;
+      const pulso = parseInt(document.getElementById('p-form-pulso').value);
+      const pa = document.getElementById('p-form-pa').value;
+      const temperatura = parseFloat(document.getElementById('p-form-temperatura').value);
+      const orina = document.getElementById('p-form-orina').value;
+
+      if (isNaN(hour) || isNaN(dilatacion) || isNaN(descenso) || isNaN(fcf)) {
+        alert("Por favor complete los campos obligatorios: Hora, Dilatación, Descenso y Frecuencia Cardíaca Fetal.");
+        return;
+      }
+
+      const existingIdx = activePartogram.readings.findIndex(r => r.hour === hour);
+      const newReading = {
+        hour, realtime, dilatacion, descenso, fcf, contracciones: isNaN(contracciones) ? 0 : contracciones,
+        liquido, moldeamiento, oxitocina, drogas, pulso: isNaN(pulso) ? 80 : pulso, pa, temperatura: isNaN(temperatura) ? 36.6 : temperatura, orina
+      };
+
+      if (existingIdx >= 0) {
+        activePartogram.readings[existingIdx] = newReading;
+      } else {
+        activePartogram.readings.push(newReading);
+      }
+
+      // Sync checkboxes
+      activePartogram.matep.oxitocina10UI = document.getElementById('p-form-matep-oxitocina').checked;
+      activePartogram.matep.traccionCordon = document.getElementById('p-form-matep-traccion').checked;
+      activePartogram.matep.masajeUterino = document.getElementById('p-form-matep-masaje').checked;
+      activePartogram.placenta.tipo = document.getElementById('p-form-placenta-tipo').value;
+      activePartogram.placenta.hora = document.getElementById('p-form-placenta-hora').value;
+
+      saveAppState(stateObj);
+      renderPartogram(activePartogram);
+
+      // Pre-fill next half hour
+      document.getElementById('p-form-hour').value = hour + 0.5;
+      document.getElementById('p-form-dilatacion').value = '';
+      document.getElementById('p-form-descenso').value = '';
+      document.getElementById('p-form-fcf').value = '';
+      document.getElementById('p-form-contracciones').value = '';
+    };
+  }
+
+  // Eliminar Lectura
+  function deleteReading(hour) {
+    const stateObj = getAppState();
+    const pObj = stateObj.patients.find(p => p.id === patient.id);
+    const activePartogram = pObj.partograms.find(part => part.status === 'active');
+    if (!activePartogram) return;
+
+    activePartogram.readings = activePartogram.readings.filter(r => r.hour !== hour);
+    saveAppState(stateObj);
+    renderPartogram(activePartogram);
+  }
+
+  // Render Charts & Table
+  function renderPartogram(partogram) {
+    const tbody = document.getElementById('partogram-readings-tbody');
+    tbody.innerHTML = '';
+    
+    const sorted = [...partogram.readings].sort((a, b) => a.hour - b.hour);
+    sorted.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid var(--border-color)';
+      tr.innerHTML = `
+        <td style="padding: 8px; text-align: left; font-weight: bold;">${r.hour} h</td>
+        <td style="padding: 8px; text-align: center;">${r.realtime}</td>
+        <td style="padding: 8px; text-align: center; color: var(--accent-primary); font-weight: bold;">${r.dilatacion} cm</td>
+        <td style="padding: 8px; text-align: center; color: var(--accent-secondary); font-weight: bold;">${r.descenso}</td>
+        <td style="padding: 8px; text-align: center;">${r.fcf} lpm</td>
+        <td style="padding: 8px; text-align: center;">${r.contracciones}</td>
+        <td style="padding: 8px; text-align: center;">${r.liquido}</td>
+        <td style="padding: 8px; text-align: center;">${r.moldeamiento}</td>
+        <td style="padding: 8px; text-align: center;">${r.oxitocina || '-'}</td>
+        <td style="padding: 8px; text-align: center;">${r.pa || '-'} (${r.pulso || '-'})</td>
+        <td style="padding: 8px; text-align: center;">${r.temperatura || '-'} °C</td>
+        <td style="padding: 8px; text-align: center;">
+          <button type="button" class="btn-delete-reading" data-hour="${r.hour}" style="background:none; border:none; color:var(--accent-danger); cursor:pointer; font-weight:bold; font-size:1.1rem;">&times;</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll('.btn-delete-reading').forEach(btn => {
+      btn.onclick = () => {
+        const hr = parseFloat(btn.getAttribute('data-hour'));
+        if (confirm(`¿Eliminar lectura de la hora ${hr}?`)) {
+          deleteReading(hr);
+        }
+      };
+    });
+
+    // Populate current active fields for MATEP and placenta
+    document.getElementById('p-form-matep-oxitocina').checked = partogram.matep.oxitocina10UI;
+    document.getElementById('p-form-matep-traccion').checked = partogram.matep.traccionCordon;
+    document.getElementById('p-form-matep-masaje').checked = partogram.matep.masajeUterino;
+    document.getElementById('p-form-placenta-tipo').value = partogram.placenta.tipo || 'Completa';
+    document.getElementById('p-form-placenta-hora').value = partogram.placenta.hora || '';
+
+    if (partogram.status === 'completed') {
+      document.getElementById('p-form-rn-sexo').value = partogram.newborn.sexo || 'F';
+      document.getElementById('p-form-rn-apgar').value = partogram.newborn.apgar || '';
+      document.getElementById('p-form-rn-peso').value = partogram.newborn.peso || '';
+      document.getElementById('p-form-rn-talla').value = partogram.newborn.talla || '';
+      document.getElementById('p-form-rn-cef').value = partogram.newborn.cef || '';
+      document.getElementById('p-form-rn-capurro').value = partogram.newborn.capurro || '';
+      document.getElementById('p-form-rn-responsable').value = partogram.newborn.responsable || '';
+      document.getElementById('p-form-rn-indicaciones').value = partogram.newborn.indicaciones || '';
+    }
+
+    // Charts
+    const ctx = document.getElementById('partogram-chart').getContext('2d');
+    if (window.partogramChartInstance) {
+      window.partogramChartInstance.destroy();
+    }
+
+    const dilData = sorted.map(r => ({ x: r.hour, y: r.dilatacion }));
+    const descData = sorted.map(r => ({ x: r.hour, y: r.descenso }));
+
+    window.partogramChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        datasets: [
+          {
+            label: 'Línea de Alerta',
+            data: [{ x: 0, y: 4 }, { x: 6, y: 10 }],
+            borderColor: 'orange',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            fill: false,
+            pointRadius: 0,
+            tension: 0
+          },
+          {
+            label: 'Línea de Acción',
+            data: [{ x: 4, y: 4 }, { x: 10, y: 10 }],
+            borderColor: 'red',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            fill: false,
+            pointRadius: 0,
+            tension: 0
+          },
+          {
+            label: 'Dilatación Cervical (X)',
+            data: dilData,
+            borderColor: '#e11d48',
+            backgroundColor: '#e11d48',
+            borderWidth: 2,
+            pointStyle: 'cross',
+            pointRadius: 10,
+            pointHoverRadius: 12,
+            showLine: true,
+            tension: 0
+          },
+          {
+            label: 'Descenso de Cabeza (O)',
+            data: descData,
+            borderColor: '#2563eb',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            pointStyle: 'circle',
+            pointRadius: 8,
+            pointHoverRadius: 10,
+            showLine: true,
+            tension: 0
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            type: 'linear',
+            title: { display: true, text: 'Horas desde Fase Activa', font: { weight: 'bold' } },
+            min: 0,
+            max: 12,
+            ticks: { stepSize: 1 }
+          },
+          y: {
+            title: { display: true, text: 'Dilatación (cm) / Descenso (0-5)', font: { weight: 'bold' } },
+            min: 0,
+            max: 10,
+            ticks: { stepSize: 1 }
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: { boxWidth: 15, font: { size: 10 } }
+          }
+        }
+      }
+    });
+
+    const ctx2 = document.getElementById('fcf-contracciones-chart').getContext('2d');
+    if (window.fcfChartInstance) {
+      window.fcfChartInstance.destroy();
+    }
+
+    const fcfData = sorted.map(r => ({ x: r.hour, y: r.fcf }));
+    const contData = sorted.map(r => ({ x: r.hour, y: r.contracciones }));
+
+    window.fcfChartInstance = new Chart(ctx2, {
+      type: 'bar',
+      data: {
+        datasets: [
+          {
+            type: 'line',
+            label: 'F.C. Fetal (bpm)',
+            data: fcfData,
+            borderColor: '#059669',
+            backgroundColor: '#059669',
+            borderWidth: 2.5,
+            yAxisID: 'y-fcf',
+            tension: 0.1,
+            pointRadius: 5
+          },
+          {
+            type: 'bar',
+            label: 'Contracciones / 10 min',
+            data: contData,
+            backgroundColor: 'rgba(99, 102, 241, 0.4)',
+            borderColor: '#6366f1',
+            borderWidth: 1,
+            yAxisID: 'y-cont',
+            barThickness: 15
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            type: 'linear',
+            title: { display: true, text: 'Horas desde Fase Activa', font: { size: 10 } },
+            min: 0,
+            max: 12,
+            ticks: { stepSize: 1 }
+          },
+          'y-fcf': {
+            type: 'linear',
+            position: 'left',
+            title: { display: true, text: 'F.C. Fetal (bpm)', font: { size: 10, weight: 'bold' } },
+            min: 60,
+            max: 200,
+            ticks: { stepSize: 20 }
+          },
+          'y-cont': {
+            type: 'linear',
+            position: 'right',
+            title: { display: true, text: 'Contracciones / 10m', font: { size: 10, weight: 'bold' } },
+            min: 0,
+            max: 5,
+            ticks: { stepSize: 1 },
+            grid: { drawOnChartArea: false }
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: { boxWidth: 15, font: { size: 10 } }
+          }
+        }
+      }
+    });
+  }
+
+  // Finalizar Parto
+  const btnFinishPartogram = document.getElementById('btn-finish-partogram');
+  if (btnFinishPartogram) {
+    btnFinishPartogram.onclick = () => {
+      const stateObj = getAppState();
+      const pObj = stateObj.patients.find(p => p.id === patient.id);
+      const activePartogram = pObj.partograms.find(part => part.status === 'active');
+      if (!activePartogram) return;
+
+      if (confirm("¿Está seguro de que desea finalizar el monitoreo de parto? Esto cerrará el partograma activo y registrará el nacimiento.")) {
+        activePartogram.status = 'completed';
+
+        activePartogram.newborn.sexo = document.getElementById('p-form-rn-sexo').value;
+        activePartogram.newborn.apgar = document.getElementById('p-form-rn-apgar').value;
+        activePartogram.newborn.peso = parseFloat(document.getElementById('p-form-rn-peso').value) || 0;
+        activePartogram.newborn.talla = parseFloat(document.getElementById('p-form-rn-talla').value) || 0;
+        activePartogram.newborn.cef = parseFloat(document.getElementById('p-form-rn-cef').value) || 0;
+        activePartogram.newborn.capurro = parseInt(document.getElementById('p-form-rn-capurro').value) || 0;
+        activePartogram.newborn.responsable = document.getElementById('p-form-rn-responsable').value;
+        activePartogram.newborn.indicaciones = document.getElementById('p-form-rn-indicaciones').value;
+
+        // Sync state back
+        saveAppState(stateObj);
+
+        // Add a clinical history consultation card about birth
+        const stateObjUpdated = getAppState();
+        const pObjUpdated = stateObjUpdated.patients.find(p => p.id === patient.id);
+        if (!pObjUpdated.consultations) pObjUpdated.consultations = [];
+
+        const birthConsultation = {
+          id: 'C-' + Date.now(),
+          date: new Date().toISOString().substring(0, 10),
+          time: new Date().toTimeString().substring(0, 5),
+          doctor: activePartogram.newborn.responsable || patient.assignedDoctorName || 'Dr. Carlos Mendoza',
+          specialty: 'Ginecología y Obstetricia',
+          reason: 'Atención de Parto y Nacimiento',
+          symptoms: 'Se finaliza monitoreo de trabajo de parto de forma exitosa.',
+          diagnosis: `Parto eutócico. Recién nacido de sexo ${activePartogram.newborn.sexo === 'F' ? 'Femenino' : 'Masculino'}. APGAR: ${activePartogram.newborn.apgar}. Peso: ${activePartogram.newborn.peso}Kg. Talla: ${activePartogram.newborn.talla}cm. Capurro: ${activePartogram.newborn.capurro} semanas.`,
+          recipe: [],
+          fee: 0,
+          treatment: `Egreso RN: ${activePartogram.newborn.indicaciones || 'n/a'}`
+        };
+        pObjUpdated.consultations.unshift(birthConsultation);
+        saveAppState(stateObjUpdated);
+        
+        alert("El parto ha sido registrado e incorporado al historial de consultas de la paciente.");
+        partogramModal.style.display = 'none';
+
+        // Refresh history list if visible
+        if (typeof renderPatientConsultationHistory === 'function') {
+          renderPatientConsultationHistory();
+        }
+      }
+    };
   }
 
   // Inicializar dictado por micrófono

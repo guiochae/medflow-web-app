@@ -213,7 +213,238 @@
         </div>
       </form>
     </div>
+  </div>
 
+  <!-- PARTOGRAM MODAL -->
+  <div id="partogram-modal" class="modal-overlay" style="display: none; z-index: 1100;">
+    <div class="modal-content" style="max-width: 95%; width: 1150px; height: 92vh; display: flex; flex-direction: column;">
+      <div class="modal-header" style="padding: 12px 20px;">
+        <h2 id="partogram-modal-title" style="margin: 0; font-size: 1.25rem;">Partograma Clínico de Trabajo de Parto</h2>
+        <button class="modal-close" id="btn-close-partograma" style="font-size: 1.5rem; background: none; border: none; cursor: pointer; color: var(--text-primary);">&times;</button>
+      </div>
+      <div class="modal-body" style="flex: 1; overflow-y: auto; padding: 1.5rem; display: grid; grid-template-columns: 1.25fr 0.75fr; gap: 20px;">
+        <!-- Left Side: Charts and Table -->
+        <div style="display: flex; flex-direction: column; gap: 15px; overflow-y: auto; padding-right: 5px;">
+          <!-- Partogram start state -->
+          <div id="partogram-start-section" style="text-align: center; padding: 4rem 2rem; background: rgba(0, 242, 254, 0.02); border: 2px dashed var(--border-color); border-radius: 8px; margin: auto 0;">
+            <span style="font-size: 3rem;">📊</span>
+            <h3 style="font-size: 1.15rem; margin-top: 1rem; color: var(--text-primary);">Monitoreo Gráfico de Parto</h3>
+            <p style="font-size: 0.88rem; color: var(--text-muted); max-width: 500px; margin: 8px auto 20px auto; line-height: 1.5;">No hay ningún registro de partograma activo para el trabajo de parto de esta paciente. Inicie el monitoreo para registrar dilatación, descenso de la cabeza, FCF y contracciones.</p>
+            <button type="button" class="btn btn-primary" id="btn-start-new-partogram" style="padding: 10px 24px; font-weight: bold;">🆕 Iniciar Monitoreo de Partograma</button>
+          </div>
+
+          <!-- Active Partogram Layout -->
+          <div id="partogram-active-section" style="display: none; flex-direction: column; gap: 15px;">
+            <!-- Dilatación & Descenso Chart -->
+            <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 15px; border-radius: 8px;">
+              <h3 style="font-size: 0.9rem; margin-top: 0; margin-bottom: 12px; color: var(--accent-primary); text-transform: uppercase; font-family: var(--font-heading); letter-spacing: 0.5px;">Curva de Dilatación Cervical y Descenso (WHO/CLH)</h3>
+              <div style="background: white; padding: 8px; border-radius: 6px; position: relative; height: 300px;">
+                <canvas id="partogram-chart" style="width: 100%; height: 100%;"></canvas>
+              </div>
+            </div>
+
+            <!-- FCF & Contracciones Chart -->
+            <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 15px; border-radius: 8px;">
+              <h3 style="font-size: 0.9rem; margin-top: 0; margin-bottom: 12px; color: var(--accent-secondary); text-transform: uppercase; font-family: var(--font-heading); letter-spacing: 0.5px;">Frecuencia Cardíaca Fetal (F.C.F.) y Contracciones</h3>
+              <div style="background: white; padding: 8px; border-radius: 6px; position: relative; height: 180px;">
+                <canvas id="fcf-contracciones-chart" style="width: 100%; height: 100%;"></canvas>
+              </div>
+            </div>
+
+            <!-- Table of readings -->
+            <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 15px; border-radius: 8px;">
+              <h3 style="font-size: 0.9rem; margin-top: 0; margin-bottom: 12px; color: var(--text-primary); text-transform: uppercase; font-family: var(--font-heading); letter-spacing: 0.5px;">Historial de Mediciones (Temporalidades)</h3>
+              <div style="overflow-x: auto;">
+                <table class="table" style="width: 100%; border-collapse: collapse; font-size: 0.8rem; min-width: 600px;">
+                  <thead>
+                    <tr style="background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--border-color);">
+                      <th style="padding: 8px; text-align: left; color: var(--text-muted);">Hora Relativa</th>
+                      <th style="padding: 8px; text-align: center; color: var(--text-muted);">Hora Real</th>
+                      <th style="padding: 8px; text-align: center; color: var(--text-muted);">Dilatación</th>
+                      <th style="padding: 8px; text-align: center; color: var(--text-muted);">Descenso</th>
+                      <th style="padding: 8px; text-align: center; color: var(--text-muted);">F.C.F</th>
+                      <th style="padding: 8px; text-align: center; color: var(--text-muted);">Contrac.</th>
+                      <th style="padding: 8px; text-align: center; color: var(--text-muted);">Líq. Amn.</th>
+                      <th style="padding: 8px; text-align: center; color: var(--text-muted);">Moldeam.</th>
+                      <th style="padding: 8px; text-align: center; color: var(--text-muted);">Oxitocina</th>
+                      <th style="padding: 8px; text-align: center; color: var(--text-muted);">P/A - Pulso</th>
+                      <th style="padding: 8px; text-align: center; color: var(--text-muted);">Temp</th>
+                      <th style="padding: 8px; text-align: center; color: var(--text-muted);">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="partogram-readings-tbody">
+                    <!-- Loaded dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Side: Forms and Configurations -->
+        <div id="partogram-forms-sidebar" style="display: none; flex-direction: column; gap: 15px; overflow-y: auto; padding-right: 5px; border-left: 1px solid var(--border-color); padding-left: 20px;">
+          <!-- 1. Add Reading Form -->
+          <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 15px; border-radius: 8px;">
+            <h3 style="font-size: 0.95rem; margin-top: 0; margin-bottom: 12px; color: var(--accent-primary); border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Ingresar Registro Temporal</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.82rem;">
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">Hora Relativa (0-12)</label>
+                <input type="number" id="p-form-hour" min="0" max="24" step="0.5" value="0" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">Hora Real</label>
+                <input type="time" id="p-form-realtime" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500; color: var(--accent-primary);">Dilatación (1-10 cm)</label>
+                <input type="number" id="p-form-dilatacion" min="1" max="10" placeholder="Ej. 4" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500; color: var(--accent-secondary);">Descenso (0-5)</label>
+                <input type="number" id="p-form-descenso" min="0" max="5" placeholder="Ej. 5 (móvil)" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">F.C. Fetal (bpm)</label>
+                <input type="number" id="p-form-fcf" min="60" max="220" placeholder="Ej. 140" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">Contracciones / 10m</label>
+                <input type="number" id="p-form-contracciones" min="0" max="5" placeholder="Ej. 3" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">Líq. Amniótico</label>
+                <select id="p-form-liquido" style="width: 100%; padding: 6px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+                  <option value="I">I - Íntegro</option>
+                  <option value="R">R - Roto</option>
+                  <option value="C">C - Claro</option>
+                  <option value="M">M - Meconio</option>
+                  <option value="B">B - Sanguinolento</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">Moldeamiento</label>
+                <select id="p-form-moldeamiento" style="width: 100%; padding: 6px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+                  <option value="-">- (Suturas separadas)</option>
+                  <option value="+">+ (Huesos se tocan)</option>
+                  <option value="++">++ (Huesos se superponen)</option>
+                  <option value="+++">+++ (Superposición severa)</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">Oxitocina (gotas/min)</label>
+                <input type="number" id="p-form-oxitocina" min="0" placeholder="Ej. 12" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">Medicamentos / IV</label>
+                <input type="text" id="p-form-drogas" placeholder="Ej. Solución Hartmann" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">Pulso Materno (bpm)</label>
+                <input type="number" id="p-form-pulso" min="40" max="180" placeholder="Ej. 76" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">P. Arterial (P/A)</label>
+                <input type="text" id="p-form-pa" placeholder="Ej. 110/70" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">Temperatura (°C)</label>
+                <input type="number" id="p-form-temperatura" step="0.1" min="34" max="42" placeholder="Ej. 36.6" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">Orina (P/A/V)</label>
+                <input type="text" id="p-form-orina" placeholder="Ej. Prot: - / Vol: 250cc" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+            </div>
+            <button type="button" class="btn btn-success" id="btn-save-partogram-reading" style="width: 100%; margin-top: 12px; font-weight: bold;">💾 Registrar Lectura</button>
+          </div>
+
+          <!-- 2. MATEP & Placenta -->
+          <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 15px; border-radius: 8px;">
+            <h3 style="font-size: 0.95rem; margin-top: 0; margin-bottom: 12px; color: var(--accent-secondary); border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">MATEP y Alumbramiento</h3>
+            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.82rem;">
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <input type="checkbox" id="p-form-matep-oxitocina" style="width:16px; height:16px;">
+                <span>Oxitocina 10 UI IM post-parto</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <input type="checkbox" id="p-form-matep-traccion" style="width:16px; height:16px;">
+                <span>Tracción controlada del cordón</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <input type="checkbox" id="p-form-matep-masaje" style="width:16px; height:16px;">
+                <span>Masaje uterino cada 15 min por 2 horas</span>
+              </label>
+              
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 5px;">
+                <div>
+                  <label style="display:block; margin-bottom: 3px; font-weight: 500;">Placenta</label>
+                  <select id="p-form-placenta-tipo" style="width: 100%; padding: 6px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+                    <option value="Completa">Completa</option>
+                    <option value="Incompleta">Incompleta</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="display:block; margin-bottom: 3px; font-weight: 500;">Expulsión (Hora)</label>
+                  <input type="time" id="p-form-placenta-hora" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Newborn registry -->
+          <div style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 15px; border-radius: 8px;">
+            <h3 style="font-size: 0.95rem; margin-top: 0; margin-bottom: 12px; color: var(--text-primary); border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Registro de Recién Nacido (Pediatría)</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.82rem;">
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">Sexo del Neonato</label>
+                <select id="p-form-rn-sexo" style="width: 100%; padding: 6px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+                  <option value="F">Femenino (F)</option>
+                  <option value="M">Masculino (M)</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">APGAR (1 min / 5 min)</label>
+                <input type="text" id="p-form-rn-apgar" placeholder="Ej. 9 / 10" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">Peso del RN (Kg)</label>
+                <input type="number" id="p-form-rn-peso" step="0.01" placeholder="Ej. 3.15" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">Talla del RN (cm)</label>
+                <input type="number" id="p-form-rn-talla" step="0.1" placeholder="Ej. 49.5" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">Circunferencia Cefálica (cm)</label>
+                <input type="number" id="p-form-rn-cef" step="0.1" placeholder="Ej. 34.0" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+              <div>
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">Capurro (Semanas)</label>
+                <input type="number" id="p-form-rn-capurro" placeholder="Ej. 39" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+              <div style="grid-column: 1 / -1;">
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">Responsable de Recepción</label>
+                <input type="text" id="p-form-rn-responsable" placeholder="Nombre del Pediatra u Obstetra" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+              <div style="grid-column: 1 / -1;">
+                <label style="display:block; margin-bottom: 3px; font-weight: 500;">Indicaciones RN</label>
+                <input type="text" id="p-form-rn-indicaciones" placeholder="Ej. Lactancia exclusiva, alojamiento conjunto, vit. K" style="width: 100%; padding: 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+              </div>
+            </div>
+          </div>
+          
+          <!-- Bottom actions -->
+          <div style="display: flex; gap: 10px; margin-top: 10px; break-inside: avoid;">
+            <button type="button" class="btn btn-outline-info" id="btn-print-partogram" style="flex: 1; padding: 10px 0; font-weight: bold;">🖨️ Imprimir Partograma</button>
+            <button type="button" class="btn btn-danger" id="btn-finish-partogram" style="flex: 1; padding: 10px 0; font-weight: bold;">🏁 Finalizar Parto</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="padding: 10px 20px;">
+        <button class="btn btn-secondary" id="btn-close-partograma-footer">Cerrar</button>
+      </div>
+    </div>
+  </div>
 
   <!-- CDNs para Importación Masiva (Excel / Word) y Gráficas (Chart.js) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
