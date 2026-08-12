@@ -1,6 +1,36 @@
 // src/modules/encamamiento.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
 
+function enrichMedication(m) {
+  if (!m) return null;
+  const precio = parseFloat(m.price || m.precio_presentacion || 50.0);
+  const unidades = parseInt(m.unidades_por_presentacion || 10);
+  
+  const presNorm = String(m.presentation || '').toLowerCase();
+  const nameNorm = String(m.name || '').toLowerCase();
+  
+  const esFrac = m.es_fraccionable !== undefined 
+    ? !!m.es_fraccionable 
+    : (m.permite_dosis !== undefined 
+        ? !!m.permite_dosis 
+        : (presNorm.includes('jarabe') || presNorm.includes('gotas') || presNorm.includes('ampolla') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('crema') || presNorm.includes('frasco') || presNorm.includes('gotero') ||
+           nameNorm.includes('jarabe') || nameNorm.includes('gotas') || nameNorm.includes('ampolla') || nameNorm.includes('solucion') || nameNorm.includes('suspension') || nameNorm.includes('crema')));
+           
+  const unidadMedida = m.unidad_medida_dosis || (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') ? 'ml' : 'mg');
+  const dosisTotal = parseFloat(m.dosis_total_presentacion || (unidadMedida === 'ml' ? 100 : 500));
+
+  return {
+    ...m,
+    price: precio,
+    precio_presentacion: precio,
+    unidades_por_presentacion: unidades,
+    es_fraccionable: esFrac,
+    permite_dosis: esFrac,
+    dosis_total_presentacion: dosisTotal,
+    unidad_medida_dosis: unidadMedida
+  };
+}
+
 // Lista temporal de órdenes para la evolución médica en curso
 let tempMeds = [];
 let tempLabs = [];
@@ -15,11 +45,14 @@ export function renderEncamamiento(container) {
 
   // 1. Validar Control de Acceso (RBAC)
   const roleLower = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const nameLower = String(currentUser && currentUser.name || '').toLowerCase();
+  
+  const isDoctor = roleLower.includes('medico') || roleLower.includes('medica') || roleLower.includes('doctor') || nameLower.startsWith('dr.') || nameLower.startsWith('dra.');
+  const isNurse = roleLower.includes('enfermero') || roleLower.includes('enfermera') || roleLower.includes('enfermeria') || roleLower.startsWith('enf') || nameLower.startsWith('enf.');
   const isAuthorized = roleLower.includes('administrador') ||
                        roleLower.includes('admin') ||
-                       roleLower.startsWith('medico') ||
-                       roleLower.includes('enfermera') ||
-                       roleLower.includes('enfermero');
+                       isDoctor ||
+                       isNurse;
 
   if (!isAuthorized) {
     container.innerHTML = `
@@ -668,7 +701,7 @@ function renderActiveTabContent(activeHosp, patient) {
     const roomRate = getRoomRatePrice(activeHosp.roomRateId, state);
     const roomTotal = daysIn * roomRate;
 
-    const medsTotal = (activeHosp.consumedMedicines || []).reduce((acc, m) => acc + (parseFloat(m.price) * parseInt(m.qty)), 0);
+    const medsTotal = (activeHosp.consumedMedicines || []).reduce((acc, m) => acc + (m.costo_calculado !== undefined ? parseFloat(m.costo_calculado) : (parseFloat(m.price) * parseInt(m.qty))), 0);
     const labsTotal = (activeHosp.consumedLabs || []).reduce((acc, l) => acc + parseFloat(l.price), 0);
     const imgsTotal = (activeHosp.consumedImaging || []).reduce((acc, i) => acc + parseFloat(i.price), 0);
 
@@ -697,14 +730,20 @@ function renderActiveTabContent(activeHosp, patient) {
             </tr>
 
             <!-- Medicamentos despachados -->
-            ${(activeHosp.consumedMedicines || []).map(m => `
-              <tr style="border-bottom: 1px solid var(--border-color); font-size: 0.85rem; color: var(--text-muted);">
-                <td style="padding: 8px 8px 8px 20px;">💊 ${m.name} (${m.presentation || 'N/A'})</td>
-                <td style="padding: 8px; text-align: center;">${m.qty}</td>
-                <td style="padding: 8px; text-align: right;">Q${parseFloat(m.price).toFixed(2)}</td>
-                <td style="padding: 8px; text-align: right;">Q${(parseFloat(m.price) * parseInt(m.qty)).toFixed(2)}</td>
-              </tr>
-            `).join('')}
+            ${(activeHosp.consumedMedicines || []).map(m => {
+              const displayQtyText = m.tipoPrescripcion === 'dosis' 
+                ? `${m.cantidad_o_dosis} dosis`
+                : (m.tipoPrescripcion === 'unidad' ? `${m.cantidad_o_dosis} uds` : `${m.qty} cajas`);
+              const totalCost = m.costo_calculado !== undefined ? parseFloat(m.costo_calculado) : (parseFloat(m.price) * parseInt(m.qty));
+              return `
+                <tr style="border-bottom: 1px solid var(--border-color); font-size: 0.85rem; color: var(--text-muted);">
+                  <td style="padding: 8px 8px 8px 20px;">💊 ${m.name} (${m.presentation || 'N/A'}) ${m.tipoPrescripcion ? `[${m.tipoPrescripcion === 'presentacion' ? 'Caja' : (m.tipoPrescripcion === 'unidad' ? 'Unidad' : 'Dosis')}]` : ''}</td>
+                  <td style="padding: 8px; text-align: center;">${displayQtyText}</td>
+                  <td style="padding: 8px; text-align: right;">Q${parseFloat(m.price).toFixed(2)}</td>
+                  <td style="padding: 8px; text-align: right;">Q${totalCost.toFixed(2)}</td>
+                </tr>
+              `;
+            }).join('')}
             ${medsTotal > 0 ? `
               <tr style="border-bottom: 1px solid var(--border-color); font-weight: 500;">
                 <td colspan="3" style="padding: 10px 8px; text-align: right; color: var(--accent-primary);">Subtotal Medicación:</td>
@@ -757,7 +796,7 @@ function renderActiveTabContent(activeHosp, patient) {
 }
 
 // Renderizar formulario de ingreso hospitalario
-function renderAdmissionForm(targetPatientId = null) {
+export function renderAdmissionForm(targetPatientId = null, prefilledData = null) {
   const state = getAppState();
   const dashboardArea = document.getElementById('hosp-dashboard-area');
   if (!dashboardArea) return;
@@ -941,6 +980,29 @@ function renderAdmissionForm(targetPatientId = null) {
     }
   }
 
+  // Pre-rellenar campos si se pasa prefilledData (ej. traslado desde Emergencias)
+  if (prefilledData) {
+    if (prefilledData.origin && document.getElementById('adm-origin')) {
+      document.getElementById('adm-origin').value = prefilledData.origin;
+    }
+    if (prefilledData.reason && document.getElementById('adm-reason')) {
+      document.getElementById('adm-reason').value = prefilledData.reason;
+    }
+    if (prefilledData.vitals) {
+      const v = prefilledData.vitals;
+      if (v.temp && document.getElementById('adm-vit-temp')) document.getElementById('adm-vit-temp').value = v.temp;
+      if (v.bp_systolic && document.getElementById('adm-vit-bpsys')) document.getElementById('adm-vit-bpsys').value = v.bp_systolic;
+      if (v.bp_diastolic && document.getElementById('adm-vit-bpdia')) document.getElementById('adm-vit-bpdia').value = v.bp_diastolic;
+      if (v.heart_rate && document.getElementById('adm-vit-hr')) document.getElementById('adm-vit-hr').value = v.heart_rate;
+      if (v.resp_rate && document.getElementById('adm-vit-rr')) document.getElementById('adm-vit-rr').value = v.resp_rate;
+      if (v.oxygen && document.getElementById('adm-vit-ox')) document.getElementById('adm-vit-ox').value = v.oxygen;
+      if (v.glucose && document.getElementById('adm-vit-glu')) document.getElementById('adm-vit-glu').value = v.glucose;
+    }
+    if (prefilledData.medsOrders && document.getElementById('adm-orders-meds')) {
+      document.getElementById('adm-orders-meds').value = prefilledData.medsOrders;
+    }
+  }
+
   // Bind Form Cancel
   document.getElementById('btn-cancel-admission').addEventListener('click', () => {
     renderHospitalizationDashboard();
@@ -1026,9 +1088,9 @@ function renderAdmissionForm(targetPatientId = null) {
       initialVitals: vitalsObj,
       evolutions: [],
       nursingNotes: [],
-      consumedMedicines: [],
-      consumedLabs: [],
-      consumedImaging: []
+      consumedMedicines: prefilledData && prefilledData.consumedMedicines ? prefilledData.consumedMedicines : [],
+      consumedLabs: prefilledData && prefilledData.consumedLabs ? prefilledData.consumedLabs : [],
+      consumedImaging: prefilledData && prefilledData.consumedImaging ? prefilledData.consumedImaging : []
     };
 
     state.encamamiento = state.encamamiento || [];
@@ -1060,7 +1122,7 @@ function renderDischargeForm(activeHosp, patient) {
   const roomRate = getRoomRatePrice(activeHosp.roomRateId, state);
   const roomTotal = daysIn * roomRate;
 
-  const medsTotal = (activeHosp.consumedMedicines || []).reduce((acc, m) => acc + (parseFloat(m.price) * parseInt(m.qty)), 0);
+  const medsTotal = (activeHosp.consumedMedicines || []).reduce((acc, m) => acc + (m.costo_calculado !== undefined ? parseFloat(m.costo_calculado) : (parseFloat(m.price) * parseInt(m.qty))), 0);
   const labsTotal = (activeHosp.consumedLabs || []).reduce((acc, l) => acc + parseFloat(l.price), 0);
   const imgsTotal = (activeHosp.consumedImaging || []).reduce((acc, i) => acc + parseFloat(i.price), 0);
 
@@ -1122,7 +1184,11 @@ function renderDischargeForm(activeHosp, patient) {
 
     if (activeHosp.consumedMedicines && activeHosp.consumedMedicines.length > 0) {
       activeHosp.consumedMedicines.forEach(m => {
-        details.push({ description: `Hospitalización - Med: ${m.name} (Cant: ${m.qty})`, amount: parseFloat(m.price) * parseInt(m.qty) });
+        const amt = m.costo_calculado !== undefined ? parseFloat(m.costo_calculado) : (parseFloat(m.price) * parseInt(m.qty));
+        const displayQty = m.tipoPrescripcion === 'dosis' 
+          ? `${m.cantidad_o_dosis} dosis`
+          : (m.tipoPrescripcion === 'unidad' ? `${m.cantidad_o_dosis} uds` : `${m.qty} cajas`);
+        details.push({ description: `Hospitalización - Med: ${m.name} (Cant: ${displayQty})`, amount: amt });
       });
     }
 
@@ -1170,19 +1236,224 @@ function showMedsOrderModal(patient) {
   const modalHeader = modal.querySelector('.modal-header h2') || modal.querySelector('h2');
   if (!modalBody) return;
 
-  if (modalHeader) modalHeader.textContent = "Recetar Medicamentos de Farmacia";
+  if (modalHeader) modalHeader.textContent = "Recetar Medicamento - Encamamiento";
 
-  let listHtml = `
-    <div style="margin-bottom: 10px;">
-      <input type="text" id="hosp-med-search" placeholder="Buscar medicamento..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
-    </div>
-    <div id="hosp-meds-list-container" style="max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
-      <!-- Se inyecta catálogo -->
+  // We set the modal width to be larger for the split view
+  const modalContentEl = modal.querySelector('.modal-content');
+  if (modalContentEl) {
+    modalContentEl.style.maxWidth = '850px';
+    modalContentEl.style.width = '95%';
+  }
+
+  // Construct a split layout
+  modalBody.innerHTML = `
+    <div style="display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 20px; min-height: 380px; align-items: start;">
+      <!-- Left Column: Search & List -->
+      <div style="border-right: 1px solid var(--border-color); padding-right: 15px;">
+        <div style="margin-bottom: 12px;">
+          <label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.85rem;">Buscar Medicamento</label>
+          <input type="text" id="hosp-med-search" placeholder="Escriba nombre o principio activo..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+        </div>
+        <div id="hosp-meds-list-container" style="max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 5px;">
+          <!-- Injected List -->
+        </div>
+      </div>
+
+      <!-- Right Column: Prescription Form and Preview -->
+      <div id="hosp-prescription-form-area" style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="text-align: center; color: var(--text-muted); padding: 4rem 1rem; font-style: italic; font-size: 0.9rem;">
+          👈 Seleccione un medicamento del listado para configurar su prescripción.
+        </div>
+      </div>
     </div>
   `;
 
-  modalBody.innerHTML = listHtml;
-  modal.style.display = 'flex';
+  let selectedMed = null;
+
+  const updateFormArea = () => {
+    const area = document.getElementById('hosp-prescription-form-area');
+    if (!area) return;
+
+    if (!selectedMed) {
+      area.innerHTML = `
+        <div style="text-align: center; color: var(--text-muted); padding: 4rem 1rem; font-style: italic; font-size: 0.9rem;">
+          👈 Seleccione un medicamento del listado para configurar su prescripción.
+        </div>
+      `;
+      return;
+    }
+
+    const m = enrichMedication(selectedMed);
+
+    // Options for Prescription Type
+    let typeOptions = `
+      <option value="presentacion">Presentación Completa (Q${m.precio_presentacion.toFixed(2)})</option>
+      <option value="unidad">Unidad Individual (Q${(m.precio_presentacion / m.unidades_por_presentacion).toFixed(2)} c/u)</option>
+    `;
+
+    if (m.es_fraccionable) {
+      typeOptions += `
+        <option value="dosis">Dosis Específica (${m.unidad_medida_dosis})</option>
+      `;
+    }
+
+    area.innerHTML = `
+      <div style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; font-size: 0.85rem;">
+        <h4 style="margin: 0 0 10px 0; color: var(--accent-primary); font-size: 0.92rem;">${m.name}</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; opacity: 0.8; font-size: 0.78rem;">
+          <div>📦 Lote: <strong>${m.lote || 'N/A'}</strong></div>
+          <div>🩺 Stock: <strong>${m.stock} cajas</strong></div>
+          <div>📑 Unidades/Caja: <strong>${m.unidades_por_presentacion} uds</strong></div>
+          <div>📏 Dosis/Caja: <strong>${m.dosis_total_presentacion} ${m.unidad_medida_dosis}</strong></div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 10px;">
+          <label style="display: block; font-weight: bold; margin-bottom: 3px; font-size: 0.8rem;">Tipo de Despacho</label>
+          <select id="presc-type-select" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); outline: none;">
+            ${typeOptions}
+          </select>
+        </div>
+
+        <div id="presc-conditional-container" style="margin-bottom: 10px;">
+          <!-- Injected fields -->
+        </div>
+
+        <div class="form-group" style="margin-bottom: 10px;">
+          <label style="display: block; font-weight: bold; margin-bottom: 3px; font-size: 0.8rem;">Frecuencia y Duración (Dosificación)</label>
+          <input type="text" id="presc-dose-text" placeholder="Ej. Tomar 1 tableta cada 8 horas por 5 días" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+        </div>
+
+        <div style="background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.15); border-radius: 6px; padding: 10px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <span style="font-weight: 500; font-size: 0.8rem; color: var(--accent-primary);">Costo Calculado (Pre-factura):</span>
+          <strong id="presc-cost-preview" style="font-size: 1.1rem; color: var(--accent-primary);">Q0.00</strong>
+        </div>
+
+        <button type="button" class="btn btn-success" id="btn-save-hosp-presc" style="width: 100%; padding: 8px; font-weight: bold;">💾 Agregar Medicación</button>
+      </div>
+    `;
+
+    const typeSelect = document.getElementById('presc-type-select');
+    const condContainer = document.getElementById('presc-conditional-container');
+    const costPreview = document.getElementById('presc-cost-preview');
+    const saveBtn = document.getElementById('btn-save-hosp-presc');
+
+    const updateConditionalFields = () => {
+      const type = typeSelect.value;
+      if (type === 'presentacion') {
+        condContainer.innerHTML = `
+          <label style="display: block; font-weight: bold; margin-bottom: 3px; font-size: 0.8rem;">Cantidad (Presentación Completa)</label>
+          <input type="number" id="presc-qty-val" value="1" min="1" max="${m.stock}" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+        `;
+      } else if (type === 'unidad') {
+        const totalUnitsStock = m.stock * m.unidades_por_presentacion;
+        condContainer.innerHTML = `
+          <label style="display: block; font-weight: bold; margin-bottom: 3px; font-size: 0.8rem;">Cantidad (Unidades Individuales)</label>
+          <input type="number" id="presc-qty-val" value="1" min="1" max="${totalUnitsStock}" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+        `;
+      } else if (type === 'dosis') {
+        condContainer.innerHTML = `
+          <label style="display: block; font-weight: bold; margin-bottom: 3px; font-size: 0.8rem;">Dosis Específica Prescrita (${m.unidad_medida_dosis})</label>
+          <input type="number" id="presc-qty-val" value="" min="0.1" max="${m.dosis_total_presentacion}" step="any" placeholder="Dosis (Máx: ${m.dosis_total_presentacion} ${m.unidad_medida_dosis})" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+        `;
+      }
+
+      // Event listener for cost updates
+      const qtyInput = document.getElementById('presc-qty-val');
+      const recalcCost = () => {
+        const type = typeSelect.value;
+        const val = parseFloat(qtyInput.value) || 0;
+        let cost = 0;
+
+        if (type === 'presentacion') {
+          cost = val * m.precio_presentacion;
+        } else if (type === 'unidad') {
+          cost = val * (m.precio_presentacion / m.unidades_por_presentacion);
+        } else if (type === 'dosis') {
+          cost = val * (m.precio_presentacion / m.dosis_total_presentacion);
+        }
+
+        costPreview.textContent = `Q${cost.toFixed(2)}`;
+      };
+
+      qtyInput.addEventListener('input', recalcCost);
+      recalcCost();
+    };
+
+    typeSelect.addEventListener('change', updateConditionalFields);
+    updateConditionalFields();
+
+    saveBtn.onclick = () => {
+      const type = typeSelect.value;
+      const valInput = document.getElementById('presc-qty-val');
+      const val = parseFloat(valInput.value);
+      const doseText = document.getElementById('presc-dose-text').value.trim() || 'Según indicación';
+
+      if (!val || val <= 0) {
+        alert("Por favor ingrese una cantidad o dosis válida.");
+        return;
+      }
+
+      // Validation bounds
+      if (type === 'presentacion') {
+        if (val > m.stock) {
+          alert(`No hay suficiente stock. Stock disponible: ${m.stock} cajas.`);
+          return;
+        }
+      } else if (type === 'unidad') {
+        const totalUnitsStock = m.stock * m.unidades_por_presentacion;
+        if (val > totalUnitsStock) {
+          alert(`No hay suficiente stock. Stock disponible: ${totalUnitsStock} unidades.`);
+          return;
+        }
+      } else if (type === 'dosis') {
+        if (val > m.dosis_total_presentacion) {
+          alert(`La dosis ingresada (${val} ${m.unidad_medida_dosis}) supera el total de la presentación (${m.dosis_total_presentacion} ${m.unidad_medida_dosis}).`);
+          return;
+        }
+      }
+
+      // Compute final cost
+      let finalCost = 0;
+      let qtyToRecord = 1;
+      let displayPresentation = m.presentation || 'N/A';
+
+      if (type === 'presentacion') {
+        finalCost = val * m.precio_presentacion;
+        qtyToRecord = val;
+      } else if (type === 'unidad') {
+        finalCost = val * (m.precio_presentacion / m.unidades_por_presentacion);
+        qtyToRecord = val; // units
+        displayPresentation = `Unidad (${m.presentation || 'N/A'})`;
+      } else if (type === 'dosis') {
+        finalCost = val * (m.precio_presentacion / m.dosis_total_presentacion);
+        qtyToRecord = 1;
+        displayPresentation = `Dosis fracc. (${m.presentation || 'N/A'})`;
+      }
+
+      const prescriptionItem = {
+        id: m.id,
+        name: m.name,
+        presentation: displayPresentation,
+        price: finalCost / qtyToRecord, // Calculated price unit
+        qty: qtyToRecord,
+        dosage: `${doseText} (${type === 'presentacion' ? `${val} cajas` : (type === 'unidad' ? `${val} unidades` : `${val} ${m.unidad_medida_dosis}`)})`,
+        tipoPrescripcion: type,
+        cantidad_o_dosis: val,
+        costo_calculado: finalCost,
+        fecha_hora: new Date().toISOString(),
+        medico_id: state.currentUser?.id || 'u-1',
+        estado_cobro: 'Pendiente'
+      };
+
+      tempMeds.push(prescriptionItem);
+      alert(`Agregado a la orden: ${m.name} (${type === 'presentacion' ? `${val} cajas` : (type === 'unidad' ? `${val} uds` : `${val} ${m.unidad_medida_dosis}`)})`);
+      renderTempOrdersList();
+      
+      // Clear selection
+      selectedMed = null;
+      updateFormArea();
+    };
+  };
 
   const filterContainer = () => {
     const q = document.getElementById('hosp-med-search').value.toLowerCase();
@@ -1191,39 +1462,45 @@ function showMedsOrderModal(patient) {
     if (!container) return;
 
     container.innerHTML = medsList.filter(m => m.name.toLowerCase().includes(q) || (m.generic && m.generic.toLowerCase().includes(q)))
-      .map(m => `
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(255,255,255,0.02); border-radius: 4px; border: 1px solid var(--border-color); font-size: 0.85rem;">
-          <div style="flex: 2;">
-            <strong>${m.name}</strong> (${m.presentation || 'N/A'})<br>
-            <span style="font-size: 0.75rem; color: var(--text-muted);">Stock: ${m.stock} | Precio: Q${parseFloat(m.price).toFixed(2)}</span>
+      .map(m => {
+        return `
+          <div class="hosp-med-item-card" data-id="${m.id}" style="
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            padding: 8px 10px; 
+            background: rgba(255,255,255,0.02); 
+            border-radius: 4px; 
+            border: 1px solid var(--border-color); 
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">
+            <div>
+              <strong>${m.name}</strong> (${m.presentation || 'N/A'})<br>
+              <span style="font-size: 0.72rem; color: var(--text-muted);">Stock: ${m.stock} | Precio: Q${parseFloat(m.price).toFixed(2)}</span>
+            </div>
+            <span style="font-size: 1.1rem; color: var(--accent-primary); font-weight: bold;">➔</span>
           </div>
-          <div style="display: flex; gap: 5px; align-items: center; flex: 1; justify-content: flex-end;">
-            <input type="number" id="qty-${m.id}" value="1" min="1" max="${m.stock}" style="width: 45px; padding: 4px; text-align: center; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
-            <input type="text" id="dose-${m.id}" placeholder="Dosis..." style="width: 100px; padding: 4px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
-            <button class="btn btn-success btn-small btn-add-med-hosp" data-id="${m.id}" style="padding: 4px 8px;">+</button>
-          </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
 
-    // Bind Add buttons
-    container.querySelectorAll('.btn-add-med-hosp').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const id = e.target.getAttribute('data-id');
-        const m = medsList.find(x => x.id === id);
-        const qty = parseInt(document.getElementById(`qty-${id}`).value) || 1;
-        const dose = document.getElementById(`dose-${id}`).value || 'Según indicación';
+    // Bind selection clicks
+    container.querySelectorAll('.hosp-med-item-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        const cardEl = e.currentTarget;
+        const id = cardEl.getAttribute('data-id');
+        selectedMed = medsList.find(x => x.id === id);
 
-        tempMeds.push({
-          id: m.id,
-          name: m.name,
-          presentation: m.presentation || 'N/A',
-          price: parseFloat(m.price),
-          qty: qty,
-          dosage: dose
+        // Highlight active card
+        container.querySelectorAll('.hosp-med-item-card').forEach(c => {
+          c.style.background = 'rgba(255,255,255,0.02)';
+          c.style.borderColor = 'var(--border-color)';
         });
+        cardEl.style.background = 'rgba(0, 242, 254, 0.05)';
+        cardEl.style.borderColor = 'var(--accent-primary)';
 
-        alert(`Agregado: ${m.name} (Cant: ${qty})`);
-        renderTempOrdersList();
+        updateFormArea();
       });
     });
   };
@@ -1231,7 +1508,7 @@ function showMedsOrderModal(patient) {
   document.getElementById('hosp-med-search').addEventListener('input', filterContainer);
   filterContainer();
 
-  // Cambiar pie del modal para botón Cerrar
+  // Reset footer and close action
   const modalFooter = modal.querySelector('.modal-footer');
   if (modalFooter) {
     modalFooter.innerHTML = `<button class="btn btn-secondary" onclick="document.getElementById('checklist-modal').style.display='none'">Cerrar y Regresar</button>`;

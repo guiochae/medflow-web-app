@@ -7,6 +7,7 @@ import { renderImagenologia } from './modules/imagenologia.js';
 import { renderConfiguracion } from './modules/configuracion.js';
 import { renderFarmacia } from './modules/farmacia.js';
 import { renderEncamamiento } from './modules/encamamiento.js';
+import { renderEmergencias } from './modules/emergencias.js';
 import { renderQuirofano } from './modules/quirofano.js';
 import logoUrl from './assets/logo.jpg';
 import {
@@ -173,6 +174,7 @@ export function getAppState() {
     consultationTypes: [],
     roomRates: [],
     encamamiento: [],
+    emergencias: [],
     clinicInfo: {
       name: "LUGAMED 2.0 - Clínica Médica y Hospital",
       address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
@@ -207,6 +209,7 @@ export async function saveAppState(state) {
   if (state.consultationTypes) firestoreState.consultationTypes = state.consultationTypes;
   if (state.roomRates) firestoreState.roomRates = state.roomRates;
   if (state.encamamiento) firestoreState.encamamiento = state.encamamiento;
+  if (state.emergencias) firestoreState.emergencias = state.emergencias;
   if (state.clinicInfo) firestoreState.clinicInfo = state.clinicInfo;
 
   // Persistir cambios en caché local inmediatamente por si Firestore falla (ej. cuota excedida)
@@ -334,6 +337,17 @@ export async function saveAppState(state) {
           const hasChanged = !prevE || JSON.stringify(prevE) !== JSON.stringify(e);
           if (hasChanged) {
             addWriteToBatch('encamamiento', e.id, e);
+          }
+        }
+      });
+    }
+    if (state.emergencias && Array.isArray(state.emergencias)) {
+      state.emergencias.forEach(e => {
+        if (e && e.id) {
+          const prevE = lastSyncedState && lastSyncedState.emergencias && lastSyncedState.emergencias.find(x => x.id === e.id);
+          const hasChanged = !prevE || JSON.stringify(prevE) !== JSON.stringify(e);
+          if (hasChanged) {
+            addWriteToBatch('emergencias', e.id, e);
           }
         }
       });
@@ -476,6 +490,9 @@ export function router(route) {
       break;
     case 'encamamiento':
       renderEncamamiento(container);
+      break;
+    case 'emergencias':
+      renderEmergencias(container);
       break;
     case 'quirofano':
       renderQuirofano(container);
@@ -750,14 +767,20 @@ function initializeSidebar(loggedUser) {
     const target = item.getAttribute('data-target');
     let hasAccess = isFullAdmin || userModules.includes(target);
 
-    // Aplicar restricción específica para Encamamiento (Administrador, Médicos, Enfermera)
+    // Aplicar restricción específica para Encamamiento (Administrador, Médicos, Enfermeros)
     if (target === 'encamamiento') {
-      hasAccess = isFullAdmin || 
-                  roleLower.includes('administrador') ||
-                  roleLower.includes('admin') ||
-                  roleLower.startsWith('medico') ||
-                  roleLower.includes('enfermera') ||
-                  roleLower.includes('enfermero');
+      const nameLower = String(userObj.name || '').toLowerCase();
+      const isDoctor = roleLower.includes('medico') || roleLower.includes('medica') || roleLower.includes('doctor') || nameLower.startsWith('dr.') || nameLower.startsWith('dra.');
+      const isNurse = roleLower.includes('enfermero') || roleLower.includes('enfermera') || roleLower.includes('enfermeria') || roleLower.startsWith('enf') || nameLower.startsWith('enf.');
+      hasAccess = isFullAdmin || roleLower.includes('administrador') || roleLower.includes('admin') || isDoctor || isNurse;
+    }
+
+    // Aplicar restricción específica para Emergencias (Administrador, Médicos, Enfermeros)
+    if (target === 'emergencias') {
+      const nameLower = String(userObj.name || '').toLowerCase();
+      const isDoctor = roleLower.includes('medico') || roleLower.includes('medica') || roleLower.includes('doctor') || nameLower.startsWith('dr.') || nameLower.startsWith('dra.');
+      const isNurse = roleLower.includes('enfermero') || roleLower.includes('enfermera') || roleLower.includes('enfermeria') || roleLower.startsWith('enf') || nameLower.startsWith('enf.');
+      hasAccess = isFullAdmin || roleLower.includes('administrador') || roleLower.includes('admin') || isDoctor || isNurse;
     }
 
     // Aplicar restricción específica para Quirófano (Administrador, Médicos, Enfermeros)

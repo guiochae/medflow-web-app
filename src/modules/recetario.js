@@ -133,6 +133,36 @@ function renderInventoryAlerts(query = '') {
   }).join('');
 }
 
+function enrichMedication(m) {
+  if (!m) return null;
+  const precio = parseFloat(m.price || m.precio_presentacion || 50.0);
+  const unidades = parseInt(m.unidades_por_presentacion || 10);
+  
+  const presNorm = String(m.presentation || '').toLowerCase();
+  const nameNorm = String(m.name || '').toLowerCase();
+  
+  const esFrac = m.es_fraccionable !== undefined 
+    ? !!m.es_fraccionable 
+    : (m.permite_dosis !== undefined 
+        ? !!m.permite_dosis 
+        : (presNorm.includes('jarabe') || presNorm.includes('gotas') || presNorm.includes('ampolla') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('crema') || presNorm.includes('frasco') || presNorm.includes('gotero') ||
+           nameNorm.includes('jarabe') || nameNorm.includes('gotas') || nameNorm.includes('ampolla') || nameNorm.includes('solucion') || nameNorm.includes('suspension') || nameNorm.includes('crema')));
+           
+  const unidadMedida = m.unidad_medida_dosis || (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') ? 'ml' : 'mg');
+  const dosisTotal = parseFloat(m.dosis_total_presentacion || (unidadMedida === 'ml' ? 100 : 500));
+
+  return {
+    ...m,
+    price: precio,
+    precio_presentacion: precio,
+    unidades_por_presentacion: unidades,
+    es_fraccionable: esFrac,
+    permite_dosis: esFrac,
+    dosis_total_presentacion: dosisTotal,
+    unidad_medida_dosis: unidadMedida
+  };
+}
+
 // Lista temporal de medicamentos agregados a la receta en curso
 let currentPrescriptionMedicines = [];
 
@@ -544,6 +574,7 @@ function renderRecipeBuilder(patient, doctors) {
 
   // Limpiar lista temporal
   currentPrescriptionMedicines = [];
+  let activeSelectedRecipeMed = null;
 
   // Verificar si hay medicamentos y médico precargados desde el asistente de consulta
   const draftMeds = sessionStorage.getItem('medflow_prescription_draft');
@@ -583,11 +614,11 @@ function renderRecipeBuilder(patient, doctors) {
             <input type="text" value="${patient.assignedDoctorName || 'Dr. Carlos Mendoza'}" readonly style="background: rgba(255,255,255,0.05); cursor: not-allowed; font-weight: bold; color: var(--accent-primary);">
             <input type="hidden" id="r-doctor" value="${patient.assignedDoctorId || 'u-1'}">
           </div>
-
           <!-- Formulario para agregar medicina a la receta -->
           <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); padding: 1.25rem; border-radius: var(--radius-sm); margin-bottom: 1.5rem;">
             <h4 style="margin-bottom: 1rem; color: var(--accent-secondary);">Agregar Medicamento</h4>
             <form id="add-medicine-form">
+              <!-- Medicamento e Info de Empaque -->
               <div class="form-row">
                 <div class="form-group" style="flex: 2; position: relative;">
                   <label for="m-name">Nombre del Medicamento</label>
@@ -608,6 +639,22 @@ function renderRecipeBuilder(patient, doctors) {
                     box-shadow: var(--shadow-lg);
                   "></div>
                 </div>
+                <div class="form-group" style="flex: 1;">
+                  <label for="m-presc-type">Tipo de Despacho</label>
+                  <select id="m-presc-type" required>
+                    <option value="presentacion">Presentación Completa</option>
+                    <option value="unidad">Unidad Individual</option>
+                    <option value="dosis" disabled>Dosis Específica (Inactivo)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Fila con información física del empaque seleccionada -->
+              <div id="m-pack-info" style="display: none; margin-bottom: 1rem; padding: 8px 12px; background: rgba(255,255,255,0.02); border-radius: 4px; border: 1px solid var(--border-color); font-size: 0.8rem; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <!-- Se llena por JS -->
+              </div>
+
+              <div class="form-row">
                 <div class="form-group">
                   <label for="m-presentation">Presentación</label>
                   <select id="m-presentation" required>
@@ -624,10 +671,15 @@ function renderRecipeBuilder(patient, doctors) {
                   </select>
                 </div>
                 <div class="form-group">
-                  <label for="m-quantity">Cantidad</label>
-                  <input type="text" id="m-quantity" required placeholder="Ej. 20 tabletas, 1 frasco">
+                  <label for="m-quantity" id="lbl-m-quantity">Cantidad (Cajas)</label>
+                  <input type="number" id="m-quantity" required placeholder="Ej. 1" min="1">
+                </div>
+                <div class="form-group" style="display: flex; flex-direction: column; justify-content: flex-end;">
+                  <div style="font-size: 0.75rem; color: var(--accent-primary); margin-bottom: 4px;">Costo Estimado:</div>
+                  <strong id="lbl-m-cost-preview" style="font-size: 1.1rem; color: var(--accent-primary); padding-bottom: 8px;">Q0.00</strong>
                 </div>
               </div>
+
               <div class="form-row">
                 <div class="form-group" style="flex: 2;">
                   <label for="m-dosage">Dosis y Frecuencia</label>
@@ -766,6 +818,9 @@ function renderRecipeBuilder(patient, doctors) {
           presentationSelect.value = match.presentation;
         }
         autocompleteList.style.display = 'none';
+        
+        activeSelectedRecipeMed = match;
+        updateRecipePackagingInfo();
       });
 
       autocompleteList.appendChild(item);
@@ -778,6 +833,100 @@ function renderRecipeBuilder(patient, doctors) {
   document.addEventListener('click', (e) => {
     if (e.target !== medNameInput && e.target !== autocompleteList) {
       autocompleteList.style.display = 'none';
+    }
+  });
+
+  // Funciones de actualización reactiva del empaque y costo
+  const updateRecipePackagingInfo = () => {
+    const packInfoEl = document.getElementById('m-pack-info');
+    const prescTypeSelect = document.getElementById('m-presc-type');
+    const lblQty = document.getElementById('lbl-m-quantity');
+    const costPreview = document.getElementById('lbl-m-cost-preview');
+    if (!packInfoEl || !prescTypeSelect) return;
+
+    if (!activeSelectedRecipeMed) {
+      packInfoEl.style.display = 'none';
+      prescTypeSelect.innerHTML = `
+        <option value="presentacion">Presentación Completa</option>
+        <option value="unidad">Unidad Individual</option>
+        <option value="dosis" disabled>Dosis Específica (Inactivo)</option>
+      `;
+      lblQty.textContent = "Cantidad";
+      costPreview.textContent = "Q0.00";
+      return;
+    }
+
+    const m = enrichMedication(activeSelectedRecipeMed);
+    packInfoEl.style.display = 'grid';
+    packInfoEl.innerHTML = `
+      <div>📦 Lote: <strong>${m.lote || 'N/A'}</strong></div>
+      <div>🩺 Stock: <strong>${m.stock} cajas</strong></div>
+      <div>📑 Unidades/Caja: <strong>${m.unidades_por_presentacion} uds</strong></div>
+      <div>📏 Dosis/Caja: <strong>${m.dosis_total_presentacion} ${m.unidad_medida_dosis}</strong></div>
+    `;
+
+    // Rebuild options based on fractionability
+    let typeOptions = `
+      <option value="presentacion">Presentación Completa (Q${m.precio_presentacion.toFixed(2)})</option>
+      <option value="unidad">Unidad Individual (Q${(m.precio_presentacion / m.unidades_por_presentacion).toFixed(2)} c/u)</option>
+    `;
+    if (m.es_fraccionable) {
+      typeOptions += `<option value="dosis">Dosis Específica (${m.unidad_medida_dosis})</option>`;
+    } else {
+      typeOptions += `<option value="dosis" disabled>Dosis Específica (No fraccionable)</option>`;
+    }
+    prescTypeSelect.innerHTML = typeOptions;
+    
+    // Trigger price/label update
+    updateRecipeQuantityLabelAndPrice();
+  };
+
+  const updateRecipeQuantityLabelAndPrice = () => {
+    const typeSelect = document.getElementById('m-presc-type');
+    const qtyInput = document.getElementById('m-quantity');
+    const lblQty = document.getElementById('lbl-m-quantity');
+    const costPreview = document.getElementById('lbl-m-cost-preview');
+    if (!typeSelect || !qtyInput || !lblQty || !costPreview) return;
+
+    const type = typeSelect.value;
+    if (type === 'presentacion') {
+      lblQty.textContent = "Cantidad (Cajas)";
+    } else if (type === 'unidad') {
+      lblQty.textContent = "Cantidad (Unidades)";
+    } else if (type === 'dosis') {
+      lblQty.textContent = `Dosis Específica (${activeSelectedRecipeMed ? enrichMedication(activeSelectedRecipeMed).unidad_medida_dosis : 'mg'})`;
+    }
+
+    if (!activeSelectedRecipeMed) {
+      costPreview.textContent = "Q0.00";
+      return;
+    }
+
+    const m = enrichMedication(activeSelectedRecipeMed);
+    const val = parseFloat(qtyInput.value) || 0;
+    let cost = 0;
+
+    if (type === 'presentacion') {
+      cost = val * m.precio_presentacion;
+    } else if (type === 'unidad') {
+      cost = val * (m.precio_presentacion / m.unidades_por_presentacion);
+    } else if (type === 'dosis') {
+      cost = val * (m.precio_presentacion / m.dosis_total_presentacion);
+    }
+
+    costPreview.textContent = `Q${cost.toFixed(2)}`;
+  };
+
+  const typeSelect = document.getElementById('m-presc-type');
+  const qtyInput = document.getElementById('m-quantity');
+  if (typeSelect) typeSelect.addEventListener('change', updateRecipeQuantityLabelAndPrice);
+  if (qtyInput) qtyInput.addEventListener('input', updateRecipeQuantityLabelAndPrice);
+
+  // Si vacía el buscador manualmente, limpiar selección
+  medNameInput.addEventListener('input', (e) => {
+    if (e.target.value.trim() === '') {
+      activeSelectedRecipeMed = null;
+      updateRecipePackagingInfo();
     }
   });
 
@@ -813,7 +962,7 @@ function renderRecipeBuilder(patient, doctors) {
     e.preventDefault();
     const name = medNameInput.value;
     const presentation = presentationSelect.value;
-    const quantity = document.getElementById('m-quantity').value;
+    const quantity = parseFloat(document.getElementById('m-quantity').value) || 1;
     const rawDosage = document.getElementById('m-dosage').value;
     const duration = document.getElementById('m-duration').value;
     const breakdownCheck = document.getElementById('m-breakdown-schedule');
@@ -821,7 +970,46 @@ function renderRecipeBuilder(patient, doctors) {
 
     const dosage = formatDosageSchedule(rawDosage, shouldBreakdown);
 
-    const newMed = { name, presentation, quantity, dosage, duration, breakdownSchedule: shouldBreakdown };
+    let finalCost = 50.00;
+    let qtyToRecord = quantity;
+    let displayPres = presentation;
+    let type = 'presentacion';
+
+    if (activeSelectedRecipeMed) {
+      const m = enrichMedication(activeSelectedRecipeMed);
+      const typeSelectEl = document.getElementById('m-presc-type');
+      type = typeSelectEl ? typeSelectEl.value : 'presentacion';
+
+      if (type === 'presentacion') {
+        finalCost = quantity * m.precio_presentacion;
+        qtyToRecord = quantity;
+      } else if (type === 'unidad') {
+        finalCost = quantity * (m.precio_presentacion / m.unidades_por_presentacion);
+        qtyToRecord = quantity;
+        displayPres = `Unidad (${presentation})`;
+      } else if (type === 'dosis') {
+        finalCost = quantity * (m.precio_presentacion / m.dosis_total_presentacion);
+        qtyToRecord = 1;
+        displayPres = `Dosis fracc. (${presentation})`;
+      }
+    } else {
+      finalCost = quantity * 50.00;
+    }
+
+    const newMed = {
+      name,
+      presentation: displayPres,
+      quantity: type === 'presentacion' ? `${quantity} cajas` : (type === 'unidad' ? `${quantity} unidades` : `${quantity} ${activeSelectedRecipeMed ? enrichMedication(activeSelectedRecipeMed).unidad_medida_dosis : 'mg'}`),
+      dosage,
+      duration,
+      breakdownSchedule: shouldBreakdown,
+      tipoPrescripcion: type,
+      cantidad_o_dosis: quantity,
+      costo_calculado: finalCost,
+      qty: qtyToRecord,
+      price: finalCost / qtyToRecord
+    };
+
     currentPrescriptionMedicines.push(newMed);
 
     // Reset fields
@@ -832,9 +1020,13 @@ function renderRecipeBuilder(patient, doctors) {
     if (breakdownCheck) breakdownCheck.checked = false;
     autocompleteList.style.display = 'none';
 
+    activeSelectedRecipeMed = null;
+    updateRecipePackagingInfo();
+
     renderCurrentMedicinesTable();
     renderInventoryAlerts('');
   });
+
 
   // Bind Limpiar Receta
   document.getElementById('btn-clear-recipe').addEventListener('click', () => {
@@ -882,15 +1074,21 @@ function renderRecipeBuilder(patient, doctors) {
     
     currentPrescriptionMedicines.forEach(m => {
       const catalogItem = stateObj.medications && stateObj.medications.find(med => med.name === m.name);
-      // PRECIO REAL: No multiplicar por número de pastillas prescritas (ej. 30), sino cobrar el precio unitario del catálogo
-      const price = catalogItem ? parseFloat(catalogItem.price) : 50.00;
+      
+      const price = m.costo_calculado !== undefined 
+        ? parseFloat(m.costo_calculado)
+        : (catalogItem ? parseFloat(catalogItem.price) : 50.00);
       
       // Validar si el medicamento ya fue cobrado en el cobro del día para evitar duplicidad
       const alreadyBilled = bill && bill.details.some(d => d.description.includes(m.name));
       
       if (!alreadyBilled) {
+        const descSuffix = m.tipoPrescripcion === 'unidad' 
+          ? `(${m.cantidad_o_dosis} uds)`
+          : (m.tipoPrescripcion === 'dosis' ? `(${m.cantidad_o_dosis} dosis)` : `(${m.qty || 1} cajas)`);
+        
         details.push({
-          description: `Medicamento Recetado: ${m.name} (Presentación: ${m.presentation || 'N/A'})`,
+          description: `Medicamento Recetado: ${m.name} ${descSuffix}`,
           amount: price
         });
         total += price;
@@ -1041,7 +1239,7 @@ function showPrescriptionPreviewModal(patient, recipe) {
       <div class="prescription-preview-header">
         <div style="display: flex; align-items: center; gap: 12px;">
           ${clinic.logoData 
-            ? `<img src="${clinic.logoData}" style="max-height: 48px; max-width: 120px; object-fit: contain; border-radius: 4px;">` 
+            ? `<img src="${clinic.logoData}" style="max-height: 96px; max-width: 240px; object-fit: contain; border-radius: 4px;">` 
             : `<span style="font-size: 1.5rem;">🏥</span>`}
           <div>
             <div class="prescription-preview-logo" style="margin-top: 0; font-size: 1.25rem;">${clinic.name}</div>

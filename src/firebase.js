@@ -92,6 +92,7 @@ export const firestoreState = {
   consultationTypes: [],
   roomRates: [],
   encamamiento: [],
+  emergencias: [],
   clinicInfo: {
     name: "LUGAMED 2.0 - Clínica Médica y Hospital",
     address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
@@ -117,6 +118,7 @@ function loadStateFromLocalCache() {
         if (Array.isArray(parsed.consultationTypes)) firestoreState.consultationTypes = parsed.consultationTypes;
         if (Array.isArray(parsed.roomRates)) firestoreState.roomRates = parsed.roomRates;
         if (Array.isArray(parsed.encamamiento)) firestoreState.encamamiento = parsed.encamamiento;
+        if (Array.isArray(parsed.emergencias)) firestoreState.emergencias = parsed.emergencias;
         if (parsed.clinicInfo) firestoreState.clinicInfo = parsed.clinicInfo;
         
         // Marcar como cargado inicialmente para no bloquear el flujo si Firestore falla
@@ -141,6 +143,7 @@ export function saveStateToLocalCache() {
       consultationTypes: firestoreState.consultationTypes,
       roomRates: firestoreState.roomRates,
       encamamiento: firestoreState.encamamiento,
+      emergencias: firestoreState.emergencias,
       clinicInfo: firestoreState.clinicInfo
     }));
   } catch (e) {
@@ -258,6 +261,7 @@ export function initRealtimeFirestore(onFirstLoad) {
       const types = [];
       const roomRatesList = [];
       const encamamientosList = [];
+      const emergenciasList = [];
       let clinic = null;
 
       snapshot.docs.forEach(docSnap => {
@@ -298,6 +302,7 @@ export function initRealtimeFirestore(onFirstLoad) {
         else if (type === 'consultationTypes') types.push(cleanDoc);
         else if (type === 'roomRates') roomRatesList.push(cleanDoc);
         else if (type === 'encamamiento') encamamientosList.push(cleanDoc);
+        else if (type === 'emergencias') emergenciasList.push(cleanDoc);
         else if (type === 'clinicInfo') clinic = cleanDoc;
       });
 
@@ -308,6 +313,7 @@ export function initRealtimeFirestore(onFirstLoad) {
       firestoreState.consultationTypes = types;
       firestoreState.roomRates = roomRatesList;
       firestoreState.encamamiento = encamamientosList;
+      firestoreState.emergencias = emergenciasList;
       if (clinic) firestoreState.clinicInfo = clinic;
 
       notifySubscribers();
@@ -324,6 +330,7 @@ export function initRealtimeFirestore(onFirstLoad) {
           const types = [];
           const roomRatesList = [];
           const encamamientosList = [];
+          const emergenciasList = [];
           let clinic = null;
 
           cacheSnap.docs.forEach(docSnap => {
@@ -364,6 +371,7 @@ export function initRealtimeFirestore(onFirstLoad) {
             else if (type === 'consultationTypes') types.push(cleanDoc);
             else if (type === 'roomRates') roomRatesList.push(cleanDoc);
             else if (type === 'encamamiento') encamamientosList.push(cleanDoc);
+            else if (type === 'emergencias') emergenciasList.push(cleanDoc);
             else if (type === 'clinicInfo') clinic = cleanDoc;
           });
 
@@ -374,6 +382,7 @@ export function initRealtimeFirestore(onFirstLoad) {
           firestoreState.consultationTypes = types;
           firestoreState.roomRates = roomRatesList;
           firestoreState.encamamiento = encamamientosList;
+          firestoreState.emergencias = emergenciasList;
           if (clinic) firestoreState.clinicInfo = clinic;
 
           notifySubscribers();
@@ -518,6 +527,8 @@ export async function purgeAllFirestoreData() {
     firestoreState.laboratoryTests = [];
     firestoreState.imagingStudies = [];
     firestoreState.consultationTypes = [];
+    firestoreState.encamamiento = [];
+    firestoreState.emergencias = [];
     firestoreState.clinicInfo = {
       name: "LUGAMED 2.0 - Clínica Médica y Hospital",
       address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
