@@ -780,6 +780,8 @@ function showMedsOrderModal(patient) {
 
   if (modalHeader) modalHeader.textContent = "Recetar Medicamento - Emergencias";
 
+  hideChecklistDefaultElements(modal);
+
   const modalContentEl = modal.querySelector('.modal-content');
   if (modalContentEl) {
     modalContentEl.style.maxWidth = '850px';
@@ -1005,7 +1007,10 @@ function loadPrescriptionForm(med) {
     
     // Close modal
     const modal = document.getElementById('checklist-modal');
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+      modal.style.display = 'none';
+      restoreChecklistModal();
+    }
 
     renderTempOrders();
   });
@@ -1021,6 +1026,8 @@ function showLabsOrderModal(activeEmerg) {
   if (!modalBody) return;
 
   if (modalHeader) modalHeader.textContent = "Solicitar Laboratorios - Emergencias";
+
+  hideChecklistDefaultElements(modal);
 
   const modalContentEl = modal.querySelector('.modal-content');
   if (modalContentEl) {
@@ -1075,6 +1082,7 @@ function showLabsOrderModal(activeEmerg) {
       tr.querySelector('.btn-add-lab-item').addEventListener('click', () => {
         tempLabs.push({ id: l.id, name: l.name, price: l.price });
         modal.style.display = 'none';
+        restoreChecklistModal();
         renderTempOrders();
       });
 
@@ -1097,6 +1105,8 @@ function showImgsOrderModal(activeEmerg) {
   if (!modalBody) return;
 
   if (modalHeader) modalHeader.textContent = "Solicitar Imagenología - Emergencias";
+
+  hideChecklistDefaultElements(modal);
 
   const modalContentEl = modal.querySelector('.modal-content');
   if (modalContentEl) {
@@ -1151,6 +1161,7 @@ function showImgsOrderModal(activeEmerg) {
       tr.querySelector('.btn-add-img-item').addEventListener('click', () => {
         tempImgs.push({ id: i.id, name: i.name, price: i.price });
         modal.style.display = 'none';
+        restoreChecklistModal();
         renderTempOrders();
       });
 
@@ -1772,4 +1783,88 @@ function renderDischargeForm(activeEmerg, patient) {
     alert(`Alta autorizada para ${patient.name}. La pre-factura por valor de Q${grandTotal.toFixed(2)} ha sido enviada al módulo de Facturación.`);
     renderEmergencias(document.getElementById('module-container'));
   });
+}
+
+function hideChecklistDefaultElements(modal) {
+  if (!modal) return;
+
+  const defaultSearch = document.getElementById('checklist-search-input');
+  if (defaultSearch) defaultSearch.style.display = 'none';
+
+  const rightSide = modal.querySelector('.checklist-right-side');
+  if (rightSide) rightSide.style.display = 'none';
+
+  const layout = modal.querySelector('.checklist-modal-layout');
+  if (layout) {
+    layout.style.gridTemplateColumns = '1fr';
+  }
+
+  const leftSide = modal.querySelector('.checklist-left-side');
+  if (leftSide) {
+    leftSide.style.borderRight = 'none';
+    leftSide.style.paddingRight = '0';
+  }
+
+  const btnSubmit = document.getElementById('btn-submit-checklist');
+  if (btnSubmit) btnSubmit.style.display = 'none';
+
+  const btnCancel = document.getElementById('btn-cancel-checklist');
+  if (btnCancel) {
+    btnCancel.textContent = 'Cerrar y Regresar';
+  }
+
+  // Bind close buttons to restore and close
+  const btnClose = document.getElementById('btn-close-checklist');
+  if (btnClose) {
+    btnClose.onclick = () => {
+      restoreChecklistModal();
+      modal.style.display = 'none';
+    };
+  }
+
+  if (btnCancel) {
+    btnCancel.onclick = () => {
+      restoreChecklistModal();
+      modal.style.display = 'none';
+    };
+  }
+}
+
+function restoreChecklistModal() {
+  const modal = document.getElementById('checklist-modal');
+  if (!modal) return;
+
+  const defaultSearch = document.getElementById('checklist-search-input');
+  if (defaultSearch) defaultSearch.style.display = 'block';
+
+  const rightSide = modal.querySelector('.checklist-right-side');
+  if (rightSide) rightSide.style.display = 'flex';
+
+  const layout = modal.querySelector('.checklist-modal-layout');
+  if (layout) {
+    layout.style.gridTemplateColumns = '1.3fr 0.7fr';
+  }
+
+  const leftSide = modal.querySelector('.checklist-left-side');
+  if (leftSide) {
+    leftSide.style.borderRight = '1px solid var(--border-color)';
+    leftSide.style.paddingRight = '20px';
+  }
+
+  const btnSubmit = document.getElementById('btn-submit-checklist');
+  if (btnSubmit) btnSubmit.style.display = 'inline-block';
+
+  const btnCancel = document.getElementById('btn-cancel-checklist');
+  if (btnCancel) {
+    btnCancel.textContent = 'Cancelar';
+  }
+
+  // Restore default close button bindings
+  const btnClose = document.getElementById('btn-close-checklist');
+  if (btnClose) {
+    btnClose.onclick = () => { modal.style.display = 'none'; };
+  }
+  if (btnCancel) {
+    btnCancel.onclick = () => { modal.style.display = 'none'; };
+  }
 }

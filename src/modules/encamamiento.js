@@ -1238,6 +1238,8 @@ function showMedsOrderModal(patient) {
 
   if (modalHeader) modalHeader.textContent = "Recetar Medicamento - Encamamiento";
 
+  hideChecklistDefaultElements(modal);
+
   // We set the modal width to be larger for the split view
   const modalContentEl = modal.querySelector('.modal-content');
   if (modalContentEl) {
@@ -1507,12 +1509,6 @@ function showMedsOrderModal(patient) {
 
   document.getElementById('hosp-med-search').addEventListener('input', filterContainer);
   filterContainer();
-
-  // Reset footer and close action
-  const modalFooter = modal.querySelector('.modal-footer');
-  if (modalFooter) {
-    modalFooter.innerHTML = `<button class="btn btn-secondary" onclick="document.getElementById('checklist-modal').style.display='none'">Cerrar y Regresar</button>`;
-  }
 }
 
 function showLabsOrderModal() {
@@ -1525,6 +1521,8 @@ function showLabsOrderModal() {
   if (!modalBody) return;
 
   if (modalHeader) modalHeader.textContent = "Exámenes de Laboratorio Clínico";
+
+  hideChecklistDefaultElements(modal);
 
   modalBody.innerHTML = `
     <div style="margin-bottom: 10px;">
@@ -1573,11 +1571,6 @@ function showLabsOrderModal() {
 
   document.getElementById('hosp-lab-search').addEventListener('input', filterContainer);
   filterContainer();
-
-  const modalFooter = modal.querySelector('.modal-footer');
-  if (modalFooter) {
-    modalFooter.innerHTML = `<button class="btn btn-secondary" onclick="document.getElementById('checklist-modal').style.display='none'">Cerrar y Regresar</button>`;
-  }
 }
 
 function showImgsOrderModal() {
@@ -1590,6 +1583,8 @@ function showImgsOrderModal() {
   if (!modalBody) return;
 
   if (modalHeader) modalHeader.textContent = "Estudios de Imagenología Diagnóstica";
+
+  hideChecklistDefaultElements(modal);
 
   modalBody.innerHTML = `
     <div style="margin-bottom: 10px;">
@@ -1638,11 +1633,6 @@ function showImgsOrderModal() {
 
   document.getElementById('hosp-img-search').addEventListener('input', filterContainer);
   filterContainer();
-
-  const modalFooter = modal.querySelector('.modal-footer');
-  if (modalFooter) {
-    modalFooter.innerHTML = `<button class="btn btn-secondary" onclick="document.getElementById('checklist-modal').style.display='none'">Cerrar y Regresar</button>`;
-  }
 }
 
 // 8. Helpers para renderizado interno de listas en el dashboard
@@ -1979,4 +1969,88 @@ function printHospitalizationRecord(hosp, patient) {
     </html>
   `);
   printWindow.document.close();
+}
+
+function hideChecklistDefaultElements(modal) {
+  if (!modal) return;
+
+  const defaultSearch = document.getElementById('checklist-search-input');
+  if (defaultSearch) defaultSearch.style.display = 'none';
+
+  const rightSide = modal.querySelector('.checklist-right-side');
+  if (rightSide) rightSide.style.display = 'none';
+
+  const layout = modal.querySelector('.checklist-modal-layout');
+  if (layout) {
+    layout.style.gridTemplateColumns = '1fr';
+  }
+
+  const leftSide = modal.querySelector('.checklist-left-side');
+  if (leftSide) {
+    leftSide.style.borderRight = 'none';
+    leftSide.style.paddingRight = '0';
+  }
+
+  const btnSubmit = document.getElementById('btn-submit-checklist');
+  if (btnSubmit) btnSubmit.style.display = 'none';
+
+  const btnCancel = document.getElementById('btn-cancel-checklist');
+  if (btnCancel) {
+    btnCancel.textContent = 'Cerrar y Regresar';
+  }
+
+  // Bind close buttons to restore and close
+  const btnClose = document.getElementById('btn-close-checklist');
+  if (btnClose) {
+    btnClose.onclick = () => {
+      restoreChecklistModal();
+      modal.style.display = 'none';
+    };
+  }
+
+  if (btnCancel) {
+    btnCancel.onclick = () => {
+      restoreChecklistModal();
+      modal.style.display = 'none';
+    };
+  }
+}
+
+function restoreChecklistModal() {
+  const modal = document.getElementById('checklist-modal');
+  if (!modal) return;
+
+  const defaultSearch = document.getElementById('checklist-search-input');
+  if (defaultSearch) defaultSearch.style.display = 'block';
+
+  const rightSide = modal.querySelector('.checklist-right-side');
+  if (rightSide) rightSide.style.display = 'flex';
+
+  const layout = modal.querySelector('.checklist-modal-layout');
+  if (layout) {
+    layout.style.gridTemplateColumns = '1.3fr 0.7fr';
+  }
+
+  const leftSide = modal.querySelector('.checklist-left-side');
+  if (leftSide) {
+    leftSide.style.borderRight = '1px solid var(--border-color)';
+    leftSide.style.paddingRight = '20px';
+  }
+
+  const btnSubmit = document.getElementById('btn-submit-checklist');
+  if (btnSubmit) btnSubmit.style.display = 'inline-block';
+
+  const btnCancel = document.getElementById('btn-cancel-checklist');
+  if (btnCancel) {
+    btnCancel.textContent = 'Cancelar';
+  }
+
+  // Restore default close button bindings
+  const btnClose = document.getElementById('btn-close-checklist');
+  if (btnClose) {
+    btnClose.onclick = () => { modal.style.display = 'none'; };
+  }
+  if (btnCancel) {
+    btnCancel.onclick = () => { modal.style.display = 'none'; };
+  }
 }
