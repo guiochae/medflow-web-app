@@ -1,6 +1,7 @@
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
 import { showLocalLabReportPrintWindow } from './laboratorio.js';
 import { initPartogramaChart } from './partogramaChart.js';
+import { notifyDoctorViaWhatsApp } from '../utils/whatsapp.js';
 
 function isCurrentUserAdmin() {
   const loggedUser = sessionStorage.getItem('medflow_logged_user');
@@ -295,6 +296,13 @@ function showNewPatientForm() {
 
     stateObj.patients.push(newPatient);
     saveAppState(stateObj);
+
+    // Enviar notificación al médico asignado de forma asíncrona a través de WhatsApp local
+    const doctorPhone = docObj && docObj.phone ? docObj.phone : '';
+    if (doctorPhone) {
+      notifyDoctorViaWhatsApp(assignedDoctorName, doctorPhone, newPatient.name)
+        .catch(err => console.error("Error al enviar notificación de WhatsApp:", err));
+    }
     
     setActivePatientId(newId);
     renderPatientList();
