@@ -478,7 +478,7 @@ export function showPastConsultationDetail(consultation, patient, onSaveCallback
     }
   } catch(e){}
 
-  const feeText = (consultation.fee !== undefined && consultation.fee !== null) ? `Q${parseFloat(consultation.fee).toFixed(2)}` : 'Q150.00';
+  const feeText = (consultation.fee !== undefined && consultation.fee !== null) ? `Q${parseFloat(consultation.fee).toFixed(2)}` : 'Q200.00';
   const doctorText = consultation.doctor || 'Médico Tratante';
   const specialtyText = consultation.specialty || 'Medicina General';
   const reasonText = consultation.reason || '';
@@ -980,7 +980,7 @@ function renderConsultationForm(patient, doctors) {
         <div class="form-row" style="margin-top: 1.5rem; align-items: flex-end;">
           <div class="form-group" style="max-width: 250px; margin-bottom: 0;">
             <label for="c-fee">Cobro de la Consulta (Q)</label>
-            <input type="number" id="c-fee" value="250.00" step="1" min="0" required>
+            <input type="number" id="c-fee" value="200.00" step="1" min="0" required>
           </div>
           <div id="assistant-action-buttons-container" style="display: flex; gap: 10px; align-items: center; margin-bottom: 0; padding-bottom: 0;">
             <!-- Botones de acciones del asistente se renderizan aquí -->
