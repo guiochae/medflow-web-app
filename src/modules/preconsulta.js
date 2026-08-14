@@ -2805,18 +2805,16 @@ function renderBilling(patient) {
     const payBtn = row.querySelector('.btn-pay-bill');
     if (payBtn) {
       payBtn.addEventListener('click', () => {
-        const stateToSave = getAppState();
-        const pObj = stateToSave.patients.find(p => p.id === currentPatient.id);
-        const billObj = pObj.billingHistory.find(b => b.id === bill.id);
-        
-        billObj.status = 'Pagado';
-        saveAppState(stateToSave);
-
-        alert(`🎉 Cobro de Q${parseFloat(bill.total).toFixed(2)} procesado exitosamente para el comprobante ${bill.id}.\n\nSe ha desbloqueado el despacho de medicamentos en Farmacia y la ejecución de estudios.`);
-        printBillingVoucher(pObj, billObj);
-        
-        // Refrescar vista
-        renderBilling(pObj);
+        // Redirigir al módulo de Administración / Caja seleccionando al paciente activo
+        import('./administracion.js').then(module => {
+          module.setPreSelectedPatient(currentPatient.id);
+          const adminNavItem = document.querySelector('.nav-item[data-target="administracion"]');
+          if (adminNavItem) {
+            adminNavItem.click();
+          } else {
+            alert("⚠️ No tiene los permisos requeridos para ingresar al módulo de Administración.");
+          }
+        });
       });
     }
 

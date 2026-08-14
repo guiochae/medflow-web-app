@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Función auxiliar para obtener el documento del usuario logueado en la colección multimedica_users
+    function getUserData(request) {
+      return get(/databases/$(database)/documents/multimedica_users/$(request.auth.uid)).data;
+    }
+
+    // Rol es Administrador o Médico con atribuciones de administración
+    function isAdminOrAdminDoctor(request) {
+      let role = getUserData(request).role;
+      return role == 'Administrador' || role == 'administrador' || role == 'Admin' || role == 'medico_1' || role == 'medico 1';
+    }
+
+    // Rol es Recepcionista
+    function isRecepcionista(request) {
+      let role = getUserData(request).role;
+      return role == 'recepcionista' || role == 'Recepcionista';
+    }
+
+    // --- Reglas de Acceso Granular para Submódulos Administrativos ---
+
+    // 1. Facturación y Caja: Permitir acceso a los tres roles
+    match /multimedica_administracion_caja/{document} {
+      allow read, write: if request.auth != null && (isAdminOrAdminDoctor(request) || isRecepcionista(request));
+    }
+
+    // 2. Contabilidad: Bloqueado por completo para Recepcionista (solo Admin y Médico 1)
+    match /multimedica_administracion_contabilidad/{document} {
+      allow read, write: if request.auth != null && isAdminOrAdminDoctor(request);
+    }
+
+    // 3. Compras: Bloqueado por completo para Recepcionista (solo Admin y Médico 1)
+    match /multimedica_administracion_compras/{document} {
+      allow read, write: if request.auth != null && isAdminOrAdminDoctor(request);
+    }
+
+    // 4. Recursos Humanos (RRHH): Bloqueado por completo para Recepcionista (solo Admin y Médico 1)
+    match /multimedica_administracion_rrhh/{document} {
+      allow read, write: if request.auth != null && isAdminOrAdminDoctor(request);
+    }
+
+    // --- Reglas Generales para Colecciones Existentes de Medflow ---
+    match /multimedica_users/{document} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /multimedica_pacientes/{document} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /multimedica/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

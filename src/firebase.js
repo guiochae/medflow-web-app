@@ -93,6 +93,12 @@ export const firestoreState = {
   roomRates: [],
   encamamiento: [],
   emergencias: [],
+  administracion_compras: [],
+  administracion_contabilidad: [],
+  administracion_rrhh: [],
+  administracion_caja: [],
+  administracion_employees: [],
+  administracion_nominas: [],
   clinicInfo: {
     name: "LUGAMED 2.0 - Clínica Médica y Hospital",
     address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
@@ -119,6 +125,12 @@ function loadStateFromLocalCache() {
         if (Array.isArray(parsed.roomRates)) firestoreState.roomRates = parsed.roomRates;
         if (Array.isArray(parsed.encamamiento)) firestoreState.encamamiento = parsed.encamamiento;
         if (Array.isArray(parsed.emergencias)) firestoreState.emergencias = parsed.emergencias;
+        if (Array.isArray(parsed.administracion_compras)) firestoreState.administracion_compras = parsed.administracion_compras;
+        if (Array.isArray(parsed.administracion_contabilidad)) firestoreState.administracion_contabilidad = parsed.administracion_contabilidad;
+        if (Array.isArray(parsed.administracion_rrhh)) firestoreState.administracion_rrhh = parsed.administracion_rrhh;
+        if (Array.isArray(parsed.administracion_caja)) firestoreState.administracion_caja = parsed.administracion_caja;
+        if (Array.isArray(parsed.administracion_employees)) firestoreState.administracion_employees = parsed.administracion_employees;
+        if (Array.isArray(parsed.administracion_nominas)) firestoreState.administracion_nominas = parsed.administracion_nominas;
         if (parsed.clinicInfo) firestoreState.clinicInfo = parsed.clinicInfo;
         
         // Marcar como cargado inicialmente para no bloquear el flujo si Firestore falla
@@ -144,6 +156,12 @@ export function saveStateToLocalCache() {
       roomRates: firestoreState.roomRates,
       encamamiento: firestoreState.encamamiento,
       emergencias: firestoreState.emergencias,
+      administracion_compras: firestoreState.administracion_compras,
+      administracion_contabilidad: firestoreState.administracion_contabilidad,
+      administracion_rrhh: firestoreState.administracion_rrhh,
+      administracion_caja: firestoreState.administracion_caja,
+      administracion_employees: firestoreState.administracion_employees,
+      administracion_nominas: firestoreState.administracion_nominas,
       clinicInfo: firestoreState.clinicInfo
     }));
   } catch (e) {
@@ -249,6 +267,35 @@ export function initRealtimeFirestore(onFirstLoad) {
         console.warn("No se pudo leer pacientes del caché nativo:", cacheErr);
       }
       checkFirstLoad();
+    });
+
+    // Escuchadores para colecciones de Administración (Caja, Contabilidad, Compras, RRHH)
+    const adminCollections = [
+      { col: 'multimedica_administracion_compras', prop: 'administracion_compras' },
+      { col: 'multimedica_administracion_contabilidad', prop: 'administracion_contabilidad' },
+      { col: 'multimedica_administracion_caja', prop: 'administracion_caja' },
+      { col: 'multimedica_administracion_employees', prop: 'administracion_employees' },
+      { col: 'multimedica_administracion_nominas', prop: 'administracion_nominas' }
+    ];
+
+    adminCollections.forEach(({ col, prop }) => {
+      onSnapshot(collection(db, col), (snapshot) => {
+        firestoreState[prop] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        notifySubscribers();
+        checkFirstLoad();
+      }, async (error) => {
+        console.warn(`Firestore fallback (${col}):`, error);
+        try {
+          const cacheSnap = await getDocsFromCache(collection(db, col));
+          if (!cacheSnap.empty) {
+            firestoreState[prop] = cacheSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            notifySubscribers();
+          }
+        } catch (cacheErr) {
+          console.warn(`No se pudo leer ${col} del caché nativo:`, cacheErr);
+        }
+        checkFirstLoad();
+      });
     });
 
     // 3. Escuchador de la colección 'multimedica' (agrupa medications, pharmacySales, etc.)
@@ -519,6 +566,23 @@ export async function purgeAllFirestoreData() {
       }
     }
 
+    // 3.b Purgar colecciones de administración (Caja, Contabilidad, Compras, RRHH)
+    const adminColNames = [
+      'multimedica_administracion_compras',
+      'multimedica_administracion_contabilidad',
+      'multimedica_administracion_caja',
+      'multimedica_administracion_employees',
+      'multimedica_administracion_nominas'
+    ];
+    for (const colName of adminColNames) {
+      const snap = await getDocs(collection(db, colName));
+      if (!snap.empty) {
+        const batchObj = writeBatch(db);
+        snap.docs.forEach(docSnap => batchObj.delete(docSnap.ref));
+        await batchObj.commit();
+      }
+    }
+
     // 4. Limpiar estado local en memoria dejando solo al Administrador
     firestoreState.users = [defaultAdminUser];
     firestoreState.patients = [];
@@ -529,6 +593,12 @@ export async function purgeAllFirestoreData() {
     firestoreState.consultationTypes = [];
     firestoreState.encamamiento = [];
     firestoreState.emergencias = [];
+    firestoreState.administracion_compras = [];
+    firestoreState.administracion_contabilidad = [];
+    firestoreState.administracion_rrhh = [];
+    firestoreState.administracion_caja = [];
+    firestoreState.administracion_employees = [];
+    firestoreState.administracion_nominas = [];
     firestoreState.clinicInfo = {
       name: "LUGAMED 2.0 - Clínica Médica y Hospital",
       address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",

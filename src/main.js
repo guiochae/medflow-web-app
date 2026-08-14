@@ -9,6 +9,7 @@ import { renderFarmacia } from './modules/farmacia.js';
 import { renderEncamamiento } from './modules/encamamiento.js';
 import { renderEmergencias } from './modules/emergencias.js';
 import { renderQuirofano } from './modules/quirofano.js';
+import { renderAdministracion } from './modules/administracion.js';
 import logoUrl from './assets/logo.jpg';
 import {
   db,
@@ -175,6 +176,12 @@ export function getAppState() {
     roomRates: [],
     encamamiento: [],
     emergencias: [],
+    administracion_compras: [],
+    administracion_contabilidad: [],
+    administracion_rrhh: [],
+    administracion_caja: [],
+    administracion_employees: [],
+    administracion_nominas: [],
     clinicInfo: {
       name: "LUGAMED 2.0 - Clínica Médica y Hospital",
       address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
@@ -210,6 +217,12 @@ export async function saveAppState(state) {
   if (state.roomRates) firestoreState.roomRates = state.roomRates;
   if (state.encamamiento) firestoreState.encamamiento = state.encamamiento;
   if (state.emergencias) firestoreState.emergencias = state.emergencias;
+  if (state.administracion_compras) firestoreState.administracion_compras = state.administracion_compras;
+  if (state.administracion_contabilidad) firestoreState.administracion_contabilidad = state.administracion_contabilidad;
+  if (state.administracion_rrhh) firestoreState.administracion_rrhh = state.administracion_rrhh;
+  if (state.administracion_caja) firestoreState.administracion_caja = state.administracion_caja;
+  if (state.administracion_employees) firestoreState.administracion_employees = state.administracion_employees;
+  if (state.administracion_nominas) firestoreState.administracion_nominas = state.administracion_nominas;
   if (state.clinicInfo) firestoreState.clinicInfo = state.clinicInfo;
 
   // Persistir cambios en caché local inmediatamente por si Firestore falla (ej. cuota excedida)
@@ -234,6 +247,8 @@ export async function saveAppState(state) {
         targetCollection = 'multimedica_users';
       } else if (collectionName === 'patients') {
         targetCollection = 'multimedica_pacientes';
+      } else if (collectionName.startsWith('administracion_')) {
+        targetCollection = 'multimedica_' + collectionName;
       } else {
         docData._collectionType = collectionName;
       }
@@ -353,6 +368,66 @@ export async function saveAppState(state) {
       });
     }
 
+    // Sincronizar Compras (solo modificados)
+    if (state.administracion_compras && Array.isArray(state.administracion_compras)) {
+      state.administracion_compras.forEach(p => {
+        if (p && p.id) {
+          const prevP = lastSyncedState && lastSyncedState.administracion_compras && lastSyncedState.administracion_compras.find(x => x.id === p.id);
+          if (!prevP || JSON.stringify(prevP) !== JSON.stringify(p)) {
+            addWriteToBatch('administracion_compras', p.id, p);
+          }
+        }
+      });
+    }
+
+    // Sincronizar Contabilidad (solo modificados)
+    if (state.administracion_contabilidad && Array.isArray(state.administracion_contabilidad)) {
+      state.administracion_contabilidad.forEach(e => {
+        if (e && e.id) {
+          const prevE = lastSyncedState && lastSyncedState.administracion_contabilidad && lastSyncedState.administracion_contabilidad.find(x => x.id === e.id);
+          if (!prevE || JSON.stringify(prevE) !== JSON.stringify(e)) {
+            addWriteToBatch('administracion_contabilidad', e.id, e);
+          }
+        }
+      });
+    }
+
+    // Sincronizar Caja (solo modificados)
+    if (state.administracion_caja && Array.isArray(state.administracion_caja)) {
+      state.administracion_caja.forEach(c => {
+        if (c && c.id) {
+          const prevC = lastSyncedState && lastSyncedState.administracion_caja && lastSyncedState.administracion_caja.find(x => x.id === c.id);
+          if (!prevC || JSON.stringify(prevC) !== JSON.stringify(c)) {
+            addWriteToBatch('administracion_caja', c.id, c);
+          }
+        }
+      });
+    }
+
+    // Sincronizar Empleados/Colaboradores (solo modificados)
+    if (state.administracion_employees && Array.isArray(state.administracion_employees)) {
+      state.administracion_employees.forEach(emp => {
+        if (emp && emp.id) {
+          const prevEmp = lastSyncedState && lastSyncedState.administracion_employees && lastSyncedState.administracion_employees.find(x => x.id === emp.id);
+          if (!prevEmp || JSON.stringify(prevEmp) !== JSON.stringify(emp)) {
+            addWriteToBatch('administracion_employees', emp.id, emp);
+          }
+        }
+      });
+    }
+
+    // Sincronizar Nóminas (solo modificados)
+    if (state.administracion_nominas && Array.isArray(state.administracion_nominas)) {
+      state.administracion_nominas.forEach(n => {
+        if (n && n.id) {
+          const prevN = lastSyncedState && lastSyncedState.administracion_nominas && lastSyncedState.administracion_nominas.find(x => x.id === n.id);
+          if (!prevN || JSON.stringify(prevN) !== JSON.stringify(n)) {
+            addWriteToBatch('administracion_nominas', n.id, n);
+          }
+        }
+      });
+    }
+
     // 6. Sincronizar Info de Clínica (solo modificada)
     if (state.clinicInfo) {
       const prevClinic = lastSyncedState && lastSyncedState.clinicInfo;
@@ -463,6 +538,32 @@ export function updateSidebarInfo(state) {
 
 // Enrutador de Módulos
 export function router(route) {
+  // Route Guard para módulo de Administración (Administrador, Médico 1, Recepcionista)
+  if (route === 'administracion') {
+    const loggedUser = sessionStorage.getItem('medflow_logged_user');
+    let hasAccess = false;
+    if (loggedUser) {
+      try {
+        const userObj = JSON.parse(loggedUser);
+        const roleLower = String(userObj.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const nameLower = String(userObj.name || '').toLowerCase();
+        const isFullAdmin = roleLower.includes('administrador') || 
+                            roleLower.includes('admin') || 
+                            roleLower === 'medico_1' || 
+                            roleLower === 'medico 1' || 
+                            nameLower.includes('administrador');
+        const isRecepcionista = roleLower.includes('recepcionista');
+        hasAccess = isFullAdmin || isRecepcionista;
+      } catch(e) {
+        console.error("Error validando guard:", e);
+      }
+    }
+    if (!hasAccess) {
+      alert("⚠️ Acceso denegado. No tiene permisos para ingresar al módulo de Administración.");
+      route = 'preconsulta';
+    }
+  }
+
   currentRoute = route;
   const container = document.getElementById('module-container') || document.getElementById('main-content-area');
   if (!container) return;
@@ -496,6 +597,9 @@ export function router(route) {
       break;
     case 'quirofano':
       renderQuirofano(container);
+      break;
+    case 'administracion':
+      renderAdministracion(container);
       break;
     case 'configuracion':
       renderConfiguracion(container);
@@ -793,6 +897,16 @@ function initializeSidebar(loggedUser) {
                   roleLower.includes('enfermera') ||
                   roleLower.includes('enfermero') ||
                   userModules.includes('quirofano');
+    }
+
+    // Aplicar restricción específica para Administración (Administrador, Médico 1, Recepcionista)
+    if (target === 'administracion') {
+      const isRecepcionista = roleLower.includes('recepcionista');
+      hasAccess = isFullAdmin || 
+                  roleLower.includes('administrador') || 
+                  roleLower.includes('admin') || 
+                  isRecepcionista ||
+                  userModules.includes('administracion');
     }
 
     if (!hasAccess) {
