@@ -183,6 +183,8 @@ export function getAppState() {
     administracion_employees: [],
     administracion_nominas: [],
     administracion_bancos: [],
+    external_doctors: [],
+    accounts_payable: [],
     clinicInfo: {
       name: "LUGAMED 2.0 - Clínica Médica y Hospital",
       address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
@@ -225,6 +227,8 @@ export async function saveAppState(state) {
   if (state.administracion_employees) firestoreState.administracion_employees = state.administracion_employees;
   if (state.administracion_nominas) firestoreState.administracion_nominas = state.administracion_nominas;
   if (state.administracion_bancos) firestoreState.administracion_bancos = state.administracion_bancos;
+  if (state.external_doctors) firestoreState.external_doctors = state.external_doctors;
+  if (state.accounts_payable) firestoreState.accounts_payable = state.accounts_payable;
   if (state.clinicInfo) firestoreState.clinicInfo = state.clinicInfo;
 
   // Persistir cambios en caché local inmediatamente por si Firestore falla (ej. cuota excedida)
@@ -249,7 +253,7 @@ export async function saveAppState(state) {
         targetCollection = 'multimedica_users';
       } else if (collectionName === 'patients') {
         targetCollection = 'multimedica_pacientes';
-      } else if (collectionName.startsWith('administracion_')) {
+      } else if (collectionName.startsWith('administracion_') || collectionName === 'external_doctors' || collectionName === 'accounts_payable') {
         targetCollection = 'multimedica_' + collectionName;
       } else {
         docData._collectionType = collectionName;
@@ -437,6 +441,30 @@ export async function saveAppState(state) {
           const prevB = lastSyncedState && lastSyncedState.administracion_bancos && lastSyncedState.administracion_bancos.find(x => x.id === b.id);
           if (!prevB || JSON.stringify(prevB) !== JSON.stringify(b)) {
             addWriteToBatch('administracion_bancos', b.id, b);
+          }
+        }
+      });
+    }
+
+    // Sincronizar Médicos Externos (solo modificados)
+    if (state.external_doctors && Array.isArray(state.external_doctors)) {
+      state.external_doctors.forEach(d => {
+        if (d && d.id) {
+          const prevD = lastSyncedState && lastSyncedState.external_doctors && lastSyncedState.external_doctors.find(x => x.id === d.id);
+          if (!prevD || JSON.stringify(prevD) !== JSON.stringify(d)) {
+            addWriteToBatch('external_doctors', d.id, d);
+          }
+        }
+      });
+    }
+
+    // Sincronizar Cuentas por Pagar (solo modificados)
+    if (state.accounts_payable && Array.isArray(state.accounts_payable)) {
+      state.accounts_payable.forEach(ap => {
+        if (ap && ap.id) {
+          const prevAp = lastSyncedState && lastSyncedState.accounts_payable && lastSyncedState.accounts_payable.find(x => x.id === ap.id);
+          if (!prevAp || JSON.stringify(prevAp) !== JSON.stringify(ap)) {
+            addWriteToBatch('accounts_payable', ap.id, ap);
           }
         }
       });

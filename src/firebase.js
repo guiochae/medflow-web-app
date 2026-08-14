@@ -100,6 +100,8 @@ export const firestoreState = {
   administracion_employees: [],
   administracion_nominas: [],
   administracion_bancos: [],
+  external_doctors: [],
+  accounts_payable: [],
   clinicInfo: {
     name: "LUGAMED 2.0 - Clínica Médica y Hospital",
     address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
@@ -133,6 +135,8 @@ function loadStateFromLocalCache() {
         if (Array.isArray(parsed.administracion_employees)) firestoreState.administracion_employees = parsed.administracion_employees;
         if (Array.isArray(parsed.administracion_nominas)) firestoreState.administracion_nominas = parsed.administracion_nominas;
         if (Array.isArray(parsed.administracion_bancos)) firestoreState.administracion_bancos = parsed.administracion_bancos;
+        if (Array.isArray(parsed.external_doctors)) firestoreState.external_doctors = parsed.external_doctors;
+        if (Array.isArray(parsed.accounts_payable)) firestoreState.accounts_payable = parsed.accounts_payable;
         if (parsed.clinicInfo) firestoreState.clinicInfo = parsed.clinicInfo;
         
         // Marcar como cargado inicialmente para no bloquear el flujo si Firestore falla
@@ -165,6 +169,8 @@ export function saveStateToLocalCache() {
       administracion_employees: firestoreState.administracion_employees,
       administracion_nominas: firestoreState.administracion_nominas,
       administracion_bancos: firestoreState.administracion_bancos,
+      external_doctors: firestoreState.external_doctors,
+      accounts_payable: firestoreState.accounts_payable,
       clinicInfo: firestoreState.clinicInfo
     }));
   } catch (e) {
@@ -279,7 +285,9 @@ export function initRealtimeFirestore(onFirstLoad) {
       { col: 'multimedica_administracion_caja', prop: 'administracion_caja' },
       { col: 'multimedica_administracion_employees', prop: 'administracion_employees' },
       { col: 'multimedica_administracion_nominas', prop: 'administracion_nominas' },
-      { col: 'multimedica_administracion_bancos', prop: 'administracion_bancos' }
+      { col: 'multimedica_administracion_bancos', prop: 'administracion_bancos' },
+      { col: 'multimedica_external_doctors', prop: 'external_doctors' },
+      { col: 'multimedica_accounts_payable', prop: 'accounts_payable' }
     ];
 
     adminCollections.forEach(({ col, prop }) => {
@@ -577,7 +585,9 @@ export async function purgeAllFirestoreData() {
       'multimedica_administracion_caja',
       'multimedica_administracion_employees',
       'multimedica_administracion_nominas',
-      'multimedica_administracion_bancos'
+      'multimedica_administracion_bancos',
+      'multimedica_external_doctors',
+      'multimedica_accounts_payable'
     ];
     for (const colName of adminColNames) {
       const snap = await getDocs(collection(db, colName));
@@ -605,6 +615,8 @@ export async function purgeAllFirestoreData() {
     firestoreState.administracion_employees = [];
     firestoreState.administracion_nominas = [];
     firestoreState.administracion_bancos = [];
+    firestoreState.external_doctors = [];
+    firestoreState.accounts_payable = [];
     firestoreState.clinicInfo = {
       name: "LUGAMED 2.0 - Clínica Médica y Hospital",
       address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
