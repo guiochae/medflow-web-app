@@ -190,8 +190,21 @@ function renderCajaCobros(container, state) {
       
       <!-- Columna Izquierda: Listado de Pacientes con Cargos -->
       <div class="glass-card" style="padding: 1.25rem;">
-        <h3 style="font-size: 1rem; color: var(--accent-primary); margin-bottom: 1rem;">Cuentas Pendientes</h3>
+        <h3 style="font-size: 1rem; color: var(--accent-primary); margin-bottom: 0.75rem;">Cuentas Pendientes</h3>
         
+        <!-- Barra de Búsqueda de Pacientes -->
+        <div style="margin-bottom: 12px;">
+          <input type="text" id="caja-patient-search" placeholder="🔍 Buscar paciente..." style="
+            width: 100%;
+            padding: 8px 12px;
+            font-size: 0.82rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+          ">
+        </div>
+
         <div style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
           ${patientsWithPending.length === 0 
             ? `<div style="text-align: center; color: var(--text-muted); font-style: italic; padding: 20px 0; font-size: 0.85rem;">No hay cuentas pendientes en este momento.</div>`
@@ -233,6 +246,22 @@ function renderCajaCobros(container, state) {
 
     </div>
   `;
+
+  // Bind Búsqueda de Pacientes
+  const searchInput = container.querySelector('#caja-patient-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      container.querySelectorAll('.patient-caja-card').forEach(card => {
+        const text = card.textContent.toLowerCase();
+        if (text.includes(q)) {
+          card.style.display = 'flex';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    });
+  }
 
   const bindPatientClicks = () => {
     container.querySelectorAll('.patient-caja-card').forEach(card => {
@@ -281,30 +310,56 @@ function loadPatientBillingDetails(patient, state) {
     return;
   }
 
-  const activeBill = pendingBills[0];
   state.external_doctors = state.external_doctors || [];
   
-  // Clonar los detalles de la factura original para edición en vivo
-  let tempBillItems = (activeBill.details || []).map((item, idx) => ({
-    id: 'orig-' + idx,
-    description: item.description,
-    amount: parseFloat(item.amount) || 0,
-    type: item.scenario ? (item.scenario === 1 ? 'interconsulta' : 'cuenta_ajena') : 'hospital',
-    doctorId: item.externalDoctorId || ''
-  }));
+  // Inicializar médicos externos de prueba si está vacío para que el selector siempre tenga opciones
+  if (state.external_doctors.length === 0) {
+    state.external_doctors = [
+      { id: 'ext-doc-1', name: 'Dr. Fernando Morales', specialty: 'Cardiología', colegiado: '12450', phone: '50244556677', nit: '8451240-3', billingName: 'Fernando Morales S.A.', rateType: 'fixed', rateValue: 450 },
+      { id: 'ext-doc-2', name: 'Dra. Laura Méndez', specialty: 'Traumatología', colegiado: '15890', phone: '50255667788', nit: '9562310-K', billingName: 'Laura Méndez Servicios Médicos', rateType: 'percentage', rateValue: 300 }
+    ];
+    saveAppState(state);
+  }
+
+  // Consolidar todos los cargos de TODAS las facturas pendientes
+  let tempBillItems = [];
+  pendingBills.forEach(bill => {
+    (bill.details || []).forEach((item, idx) => {
+      tempBillItems.push({
+        id: bill.id + '-' + idx,
+        billId: bill.id,
+        description: item.description,
+        amount: parseFloat(item.amount) || 0,
+        type: item.scenario ? (item.scenario === 1 ? 'interconsulta' : 'cuenta_ajena') : 'hospital',
+        doctorId: item.externalDoctorId || ''
+      });
+    });
+  });
+
+  // Si no hay cargos preexistentes en las facturas, agregar una fila vacía
+  if (tempBillItems.length === 0) {
+    tempBillItems.push({
+      id: 'default-' + Date.now(),
+      billId: pendingBills[0].id,
+      description: 'Consulta General',
+      amount: 100.00,
+      type: 'hospital',
+      doctorId: ''
+    });
+  }
 
   detailArea.innerHTML = `
     <div class="glass-card" style="padding: 1.25rem; max-width: 100%;">
       <div style="border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 12px;">
         <span style="font-size: 0.72rem; color: var(--accent-primary); font-weight: bold; text-transform: uppercase;">PROCESAR COBRO MULTI-ESCENARIO (SPLIT BILLING)</span>
         <h3 style="margin: 4px 0 0 0; font-family: var(--font-heading); color: var(--text-primary); font-size: 1.15rem;">${patient.name}</h3>
-        <span style="font-size: 0.75rem; color: var(--text-muted);">Ref: ${activeBill.id} | Fecha: ${new Date(activeBill.date).toLocaleString('es-GT')}</span>
+        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: bold;">Cuentas unificadas: ${pendingBills.length} cobro(s) pendiente(s)</span>
       </div>
 
       <!-- Asistente de edición de cargos -->
       <div style="background: rgba(0,0,0,0.15); border-radius: 6px; padding: 12px; border: 1px dashed var(--border-color); margin-bottom: 12px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <h4 style="margin: 0; font-size: 0.82rem; color: var(--accent-primary);">Ingreso y Edición Manual de Servicios/Procedimientos:</h4>
+          <h4 style="margin: 0; font-size: 0.82rem; color: var(--accent-primary);">Edición Manual de Cargos y Honorarios:</h4>
           <button type="button" class="btn btn-secondary btn-small" id="caja-btn-add-line" style="font-size: 0.72rem; padding: 3px 8px;">➕ Agregar Cargo</button>
         </div>
         
@@ -313,14 +368,14 @@ function loadPatientBillingDetails(patient, state) {
             <thead>
               <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted); text-align: left;">
                 <th style="padding: 4px 0;">Concepto / Descripción</th>
-                <th style="padding: 4px 0; width: 140px;">Tipo Cargo</th>
-                <th style="padding: 4px 0; width: 130px;">Médico Ext.</th>
+                <th style="padding: 4px 0; width: 130px;">Tipo Cargo</th>
+                <th style="padding: 4px 0; width: 140px;">Médico Ext.</th>
                 <th style="padding: 4px 0; width: 80px; text-align: right;">Importe (Q)</th>
                 <th style="padding: 4px 0; text-align: center; width: 30px;"></th>
               </tr>
             </thead>
             <tbody id="caja-edit-bill-body">
-              <!-- Se repobla dinámicamente -->
+              <!-- Inyectado dinámicamente -->
             </tbody>
           </table>
         </div>
@@ -402,9 +457,9 @@ function loadPatientBillingDetails(patient, state) {
           </select>
         </td>
         <td style="padding: 4px 0;">
-          <select class="row-doctor" style="width: 95%; padding: 4px; font-size: 0.72rem; border: 1px solid var(--border-color); border-radius: 3px; background: var(--bg-card); color: var(--text-primary);" ${item.type === 'hospital' ? 'disabled' : ''}>
-            <option value="">-- Seleccionar --</option>
-            ${state.external_doctors.map(d => `<option value="${d.id}" ${item.doctorId === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
+          <select class="row-doctor" style="width: 95%; padding: 4px; font-size: 0.72rem; border: 1px solid var(--border-color); border-radius: 3px; background: #1f2937; color: #ffffff;">
+            <option value="" style="background: #1f2937; color: #ffffff;">No aplica (Hospitalario)</option>
+            ${state.external_doctors.map(d => `<option value="${d.id}" ${item.doctorId === d.id ? 'selected' : ''} style="background: #1f2937; color: #ffffff;">${d.name}</option>`).join('')}
           </select>
         </td>
         <td style="padding: 4px 0;">
@@ -425,16 +480,26 @@ function loadPatientBillingDetails(patient, state) {
         const docSelect = tr.querySelector('.row-doctor');
         if (item.type === 'hospital') {
           docSelect.value = '';
-          docSelect.disabled = true;
           item.doctorId = '';
-        } else {
-          docSelect.disabled = false;
         }
         recalculateAndRepopulate();
       });
 
       tr.querySelector('.row-doctor').addEventListener('change', (e) => {
         item.doctorId = e.target.value;
+        const typeSelect = tr.querySelector('.row-type');
+        if (item.doctorId) {
+          // Si seleccionan un médico externo y el tipo de cargo era hospitalario, cambiar a interconsulta por defecto
+          if (item.type === 'hospital') {
+            item.type = 'interconsulta';
+            typeSelect.value = 'interconsulta';
+          }
+        } else {
+          // Si quitan el médico, cambiar a hospitalario
+          item.type = 'hospital';
+          typeSelect.value = 'hospital';
+        }
+        recalculateAndRepopulate();
       });
 
       tr.querySelector('.row-amount').addEventListener('change', (e) => {
@@ -457,7 +522,6 @@ function loadPatientBillingDetails(patient, state) {
   };
 
   const recalculateAndRepopulate = () => {
-    // recalcular sin redibujar toda la tabla para no perder el foco
     let subtotalHospital = 0;
     let subtotalCuentaAjena = 0;
     tempBillItems.forEach(item => {
@@ -473,6 +537,7 @@ function loadPatientBillingDetails(patient, state) {
   document.getElementById('caja-btn-add-line').addEventListener('click', () => {
     tempBillItems.push({
       id: 'new-' + Date.now(),
+      billId: pendingBills[0].id,
       description: 'Nuevo Servicio Médico',
       amount: 150.00,
       type: 'hospital',
@@ -505,10 +570,10 @@ function loadPatientBillingDetails(patient, state) {
     const billName = document.getElementById('caja-factura-nombre').value;
 
     const patientObj = state.patients.find(p => p.id === patient.id);
-    const billObj = patientObj.billingHistory.find(b => b.id === activeBill.id);
+    const primaryBill = patientObj.billingHistory.find(b => b.id === pendingBills[0].id);
 
-    // 1. Guardar cambios en el detalle de la factura del paciente
-    billObj.details = tempBillItems.map(i => ({
+    // 1. Guardar cambios consolidados en la primera factura del paciente
+    primaryBill.details = tempBillItems.map(i => ({
       description: i.description,
       amount: i.amount,
       externalDoctorId: i.doctorId || null,
@@ -523,14 +588,30 @@ function loadPatientBillingDetails(patient, state) {
     });
 
     const grandTotal = hospitalTotal + doctorsTotal;
-    billObj.total = grandTotal;
-    billObj.status = 'Pagado';
-    billObj.paymentMethod = method;
-    billObj.nit = nit;
-    billObj.invoiceName = billName;
-    billObj.invoiceNumber = 'FACT-' + Math.floor(100000 + Math.random() * 900000);
+    primaryBill.total = grandTotal;
+    primaryBill.status = 'Pagado';
+    primaryBill.paymentMethod = method;
+    primaryBill.nit = nit;
+    primaryBill.invoiceName = billName;
+    primaryBill.invoiceNumber = 'FACT-' + Math.floor(100000 + Math.random() * 900000);
 
-    // 2. Generar Deudas en Cuentas por Pagar (AP) para Médicos Externos de forma automática (Cloud Function local)
+    // 2. Marcar las otras facturas pendientes como 'Pagado' vacías para liquidarlas por completo
+    pendingBills.forEach(b => {
+      if (b.id !== primaryBill.id) {
+        const otherBill = patientObj.billingHistory.find(x => x.id === b.id);
+        if (otherBill) {
+          otherBill.status = 'Pagado';
+          otherBill.details = [];
+          otherBill.total = 0;
+          otherBill.paymentMethod = method;
+          otherBill.nit = nit;
+          otherBill.invoiceName = billName;
+          otherBill.invoiceNumber = primaryBill.invoiceNumber;
+        }
+      }
+    });
+
+    // 3. Generar Deudas en Cuentas por Pagar (AP) para Médicos Externos de forma automática
     state.accounts_payable = state.accounts_payable || [];
     tempBillItems.forEach(item => {
       if (item.type !== 'hospital') {
@@ -555,14 +636,14 @@ function loadPatientBillingDetails(patient, state) {
       }
     });
 
-    // 3. Generar Partida Contable en Libro Diario (NIIF Guatemala) - Sin descuentos ni retenciones
+    // 4. Generar Partida Contable en Libro Diario (NIIF Guatemala) - Sin descuentos ni retenciones
     const hospitalBeforeTax = hospitalTotal / 1.12;
     const ivaDebit = hospitalTotal - hospitalBeforeTax;
 
     const journalEntry = {
       id: 'PART-COBRO-SPLIT-' + Date.now(),
       date: new Date().toISOString(),
-      concept: `Cobro Hospitalario y Honorarios Cuenta Ajena - Fac Hospital: ${billObj.invoiceNumber} (Paciente: ${patient.name})`,
+      concept: `Cobro Hospitalario y Honorarios Cuenta Ajena - Fac Hospital: ${primaryBill.invoiceNumber} (Paciente: ${patient.name})`,
       totalDebits: grandTotal,
       totalCredits: grandTotal,
       details: [
@@ -576,7 +657,6 @@ function loadPatientBillingDetails(patient, state) {
     }
 
     if (doctorsTotal > 0) {
-      // Registrar honorarios recaudados por cuenta ajena como PASIVO (Acreedores Varios)
       journalEntry.details.push({ account: 'Acreedores Varios', type: 'Haber', amount: doctorsTotal });
     }
 
@@ -585,10 +665,10 @@ function loadPatientBillingDetails(patient, state) {
 
     saveAppState(state);
 
-    alert(`✅ Cobro dividido procesado con éxito.
-- Factura FEL Hospitalaria emitida: ${billObj.invoiceNumber} por Q${hospitalTotal.toFixed(2)}.
-- Recibos emitidos por Honorarios por Cuenta Ajena: Q${doctorsTotal.toFixed(2)}.
-- Registradas las deudas pendientes en Cuentas por Pagar (AP) a los médicos correspondientes.`);
+    alert(`✅ Cobro unificado de ${pendingBills.length} cuentas procesado con éxito.
+- Factura FEL Hospitalaria emitida: ${primaryBill.invoiceNumber} por Q${hospitalTotal.toFixed(2)}.
+- Recibos por Honorarios por Cuenta Ajena: Q${doctorsTotal.toFixed(2)}.
+- Registradas las deudas correspondientes en Cuentas por Pagar (AP) a los médicos.`);
     
     // Recargar vista
     renderAdministracion(document.getElementById('module-container'));
