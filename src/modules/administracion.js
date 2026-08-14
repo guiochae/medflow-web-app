@@ -61,6 +61,17 @@ export function renderAdministracion(container) {
   state.administracion_caja = state.administracion_caja || [];
   state.administracion_bancos = state.administracion_bancos || [];
 
+  // Filtrar de forma retroactiva partidas mock previas de Q250,000.00
+  if (state.administracion_contabilidad && Array.isArray(state.administracion_contabilidad)) {
+    const prevLength = state.administracion_contabilidad.length;
+    state.administracion_contabilidad = state.administracion_contabilidad.filter(entry => 
+      !(entry.concept && entry.concept.includes('Capital Social S.A.') && entry.totalDebits === 250000.00)
+    );
+    if (state.administracion_contabilidad.length !== prevLength) {
+      saveAppState(state);
+    }
+  }
+
   // 2. Renderizar Estructura del Módulo
   container.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
