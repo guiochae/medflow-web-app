@@ -41,6 +41,11 @@ service cloud.firestore {
       allow read, write: if request.auth != null && isAdminOrAdminDoctor(request);
     }
 
+    // 5. Bancos y Cuentas: Bloqueado por completo para Recepcionista (solo Admin y Médico 1)
+    match /multimedica_administracion_bancos/{document} {
+      allow read, write: if request.auth != null && isAdminOrAdminDoctor(request);
+    }
+
     // --- Reglas Generales para Colecciones Existentes de Medflow ---
     match /multimedica_users/{document} {
       allow read, write: if request.auth != null;

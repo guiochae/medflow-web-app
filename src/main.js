@@ -182,6 +182,7 @@ export function getAppState() {
     administracion_caja: [],
     administracion_employees: [],
     administracion_nominas: [],
+    administracion_bancos: [],
     clinicInfo: {
       name: "LUGAMED 2.0 - Clínica Médica y Hospital",
       address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
@@ -223,6 +224,7 @@ export async function saveAppState(state) {
   if (state.administracion_caja) firestoreState.administracion_caja = state.administracion_caja;
   if (state.administracion_employees) firestoreState.administracion_employees = state.administracion_employees;
   if (state.administracion_nominas) firestoreState.administracion_nominas = state.administracion_nominas;
+  if (state.administracion_bancos) firestoreState.administracion_bancos = state.administracion_bancos;
   if (state.clinicInfo) firestoreState.clinicInfo = state.clinicInfo;
 
   // Persistir cambios en caché local inmediatamente por si Firestore falla (ej. cuota excedida)
@@ -423,6 +425,18 @@ export async function saveAppState(state) {
           const prevN = lastSyncedState && lastSyncedState.administracion_nominas && lastSyncedState.administracion_nominas.find(x => x.id === n.id);
           if (!prevN || JSON.stringify(prevN) !== JSON.stringify(n)) {
             addWriteToBatch('administracion_nominas', n.id, n);
+          }
+        }
+      });
+    }
+
+    // Sincronizar Cuentas Bancarias (solo modificados)
+    if (state.administracion_bancos && Array.isArray(state.administracion_bancos)) {
+      state.administracion_bancos.forEach(b => {
+        if (b && b.id) {
+          const prevB = lastSyncedState && lastSyncedState.administracion_bancos && lastSyncedState.administracion_bancos.find(x => x.id === b.id);
+          if (!prevB || JSON.stringify(prevB) !== JSON.stringify(b)) {
+            addWriteToBatch('administracion_bancos', b.id, b);
           }
         }
       });

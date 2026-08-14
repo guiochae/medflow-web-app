@@ -59,23 +59,7 @@ export function renderAdministracion(container) {
   state.administracion_contabilidad = state.administracion_contabilidad || [];
   state.administracion_rrhh = state.administracion_rrhh || [];
   state.administracion_caja = state.administracion_caja || [];
-
-  // Crear saldo inicial ficticio en Caja y Bancos si el libro diario está vacío
-  if (state.administracion_contabilidad.length === 0) {
-    const entryId = 'PART-APERTURA-' + Date.now();
-    state.administracion_contabilidad.push({
-      id: entryId,
-      date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), // Hace 10 días
-      concept: 'Partida de Apertura y Aporte de Capital Social S.A.',
-      totalDebits: 250000.00,
-      totalCredits: 250000.00,
-      details: [
-        { account: 'Caja y Bancos', type: 'Debe', amount: 250000.00 },
-        { account: 'Capital Autorizado', type: 'Haber', amount: 250000.00 }
-      ]
-    });
-    saveAppState(state);
-  }
+  state.administracion_bancos = state.administracion_bancos || [];
 
   // 2. Renderizar Estructura del Módulo
   container.innerHTML = `
@@ -596,6 +580,7 @@ function renderContabilidadTab(container, state) {
     <!-- Sub-Tabs de Contabilidad -->
     <div style="display: flex; gap: 10px; margin-bottom: 1.25rem; font-size: 0.85rem;">
       <button class="btn ${activeContabilidadSubTab === 'diario' ? 'btn-primary' : 'btn-secondary'}" id="contabilidad-subtab-diario" style="padding: 6px 12px;">📖 Libro Diario</button>
+      <button class="btn ${activeContabilidadSubTab === 'bancos' ? 'btn-primary' : 'btn-secondary'}" id="contabilidad-subtab-bancos" style="padding: 6px 12px;">🏦 Bancos y Cuentas</button>
       <button class="btn ${activeContabilidadSubTab === 'impuestos' ? 'btn-primary' : 'btn-secondary'}" id="contabilidad-subtab-impuestos" style="padding: 6px 12px;">🇬🇹 Impuestos e IGSS (SAT)</button>
     </div>
 
@@ -605,12 +590,15 @@ function renderContabilidadTab(container, state) {
   `;
 
   document.getElementById('contabilidad-subtab-diario').addEventListener('click', () => { activeContabilidadSubTab = 'diario'; renderContabilidadTab(container, state); });
+  document.getElementById('contabilidad-subtab-bancos').addEventListener('click', () => { activeContabilidadSubTab = 'bancos'; renderContabilidadTab(container, state); });
   document.getElementById('contabilidad-subtab-impuestos').addEventListener('click', () => { activeContabilidadSubTab = 'impuestos'; renderContabilidadTab(container, state); });
 
   const subArea = document.getElementById('contabilidad-subtab-content');
 
   if (activeContabilidadSubTab === 'diario') {
     renderLibroDiario(subArea, state);
+  } else if (activeContabilidadSubTab === 'bancos') {
+    renderBancosConciliacion(subArea, state);
   } else if (activeContabilidadSubTab === 'impuestos') {
     renderImpuestosSAT(subArea, state);
   }
@@ -1427,8 +1415,309 @@ function renderRrhhNomina(container, state) {
 
       saveAppState(state);
 
-      alert(`✅ Nómina de ${month} generada. Se registraron los pagos pendientes en Caja y se añadió la partida doble de provisión en Contabilidad.`);
       renderRrhhNomina(container, state);
+    });
+  }
+}
+
+export function renderBancosConciliacion(container, state) {
+  const accounts = state.administracion_bancos || [];
+
+  // Helper para calcular saldo actual de una cuenta bancaria
+  const getAccountCalculatedBalance = (acc) => {
+    let balance = parseFloat(acc.initialBalance) || 0;
+    (acc.transactions || []).forEach(tx => {
+      if (tx.type === 'Deposito') {
+        balance += parseFloat(tx.amount) || 0;
+      } else if (tx.type === 'Transferencia' || tx.type === 'Retiro') {
+        balance -= parseFloat(tx.amount) || 0;
+      }
+    });
+    return balance;
+  };
+
+  container.innerHTML = `
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;">
+      
+      <!-- Cuentas Bancarias y Apertura -->
+      <div style="display: flex; flex-direction: column; gap: 20px;">
+        
+        <!-- Formulario Apertura de Cuenta -->
+        <div class="glass-card" style="padding: 1.25rem;">
+          <h3 style="font-size: 1.05rem; color: var(--accent-primary); margin-bottom: 1rem; font-family: var(--font-heading);">🏦 Apertura de Cuenta Bancaria</h3>
+          <form id="bank-account-form" style="display: flex; flex-direction: column; gap: 12px;">
+            <div class="form-row" style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 10px;">
+              <div class="form-group">
+                <label>Nombre del Banco</label>
+                <input type="text" id="b-bank-name" required placeholder="Banco Industrial, Banrural, BAC...">
+              </div>
+              <div class="form-group">
+                <label>Tipo de Cuenta</label>
+                <select id="b-acc-type" required style="width:100%; padding:8px; background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border-color); border-radius:4px;">
+                  <option value="Monetaria">Monetaria</option>
+                  <option value="Ahorro">Ahorro</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row" style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 10px;">
+              <div class="form-group">
+                <label>Número de Cuenta</label>
+                <input type="text" id="b-acc-num" required placeholder="XXXX-XXXX-XXXX">
+              </div>
+              <div class="form-group">
+                <label>Saldo Inicial (Q)</label>
+                <input type="number" id="b-initial-balance" required min="0.00" step="100.00" value="0.00">
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%; padding: 8px;">
+              ✨ Aperturar Cuenta
+            </button>
+          </form>
+        </div>
+
+        <!-- Formulario Registrar Depósito / Transferencia -->
+        <div class="glass-card" style="padding: 1.25rem;">
+          <h3 style="font-size: 1.05rem; color: var(--accent-primary); margin-bottom: 1rem; font-family: var(--font-heading);">💸 Transacciones Bancarias (Depósitos / Retiros)</h3>
+          <form id="bank-transaction-form" style="display: flex; flex-direction: column; gap: 12px;">
+            <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div class="form-group">
+                <label>Tipo de Transacción</label>
+                <select id="tx-type" required style="width:100%; padding:8px; background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border-color); border-radius:4px;">
+                  <option value="Deposito">📥 Depósito / Ingreso</option>
+                  <option value="Transferencia">📤 Transferencia / Retiro</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Cuenta de Origen/Destino</label>
+                <select id="tx-account-id" required style="width:100%; padding:8px; background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border-color); border-radius:4px;">
+                  ${accounts.length === 0 
+                    ? `<option value="" disabled selected>Debe aperturar una cuenta primero</option>` 
+                    : accounts.map(a => `<option value="${a.id}">${a.bankName} - ${a.number}</option>`).join('')
+                  }
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row" style="display: grid; grid-template-columns: 0.8fr 1.2fr; gap: 10px;">
+              <div class="form-group">
+                <label>Monto (Q)</label>
+                <input type="number" id="tx-amount" required min="0.01" step="0.01" value="100.00">
+              </div>
+              <div class="form-group">
+                <label>Contrapartida Contable (Contra-cuenta)</label>
+                <select id="tx-contra-account" required style="width:100%; padding:8px; background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border-color); border-radius:4px;">
+                  <option value="Capital Autorizado">Capital Autorizado / Aporte de Socios</option>
+                  <option value="Gastos Financieros (Comisiones)">Gastos Financieros (Comisiones Bancarias)</option>
+                  <option value="Servicios de Agua/Luz/Internet">Servicios de Agua/Luz/Internet</option>
+                  <option value="Otros Ingresos">Otros Ingresos / Rendimientos</option>
+                  <option value="Cuentas por Pagar (Proveedores)">Cuentas por Pagar (Proveedores)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Concepto / Descripción</label>
+              <input type="text" id="tx-concept" required placeholder="Ej. Aporte capital inicial, Pago de internet, Comisión mensual...">
+            </div>
+
+            <button type="submit" class="btn btn-success" style="width: 100%; padding: 8px;" ${accounts.length === 0 ? 'disabled' : ''}>
+              📥 Registrar Transacción Bancaria
+            </button>
+          </form>
+        </div>
+
+      </div>
+
+      <!-- Resumen y Saldos de Cuentas -->
+      <div class="glass-card" style="padding: 1.25rem;">
+        <h3 style="font-size: 1.05rem; color: var(--accent-primary); margin-bottom: 1rem; font-family: var(--font-heading);">📊 Resumen de Saldos Bancarios</h3>
+        
+        <div style="overflow-x: auto; margin-bottom: 1.5rem;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.82rem;">
+            <thead>
+              <tr style="border-bottom: 2px solid var(--border-color); text-align: left; color: var(--text-muted);">
+                <th style="padding: 6px;">Banco / Cuenta</th>
+                <th style="padding: 6px; text-align: right;">Inicial</th>
+                <th style="padding: 6px; text-align: right;">Saldos</th>
+                <th style="padding: 6px; text-align: right;">Saldo Actual</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${accounts.length === 0 
+                ? `<tr><td colspan="4" style="text-align: center; padding: 20px; color: var(--text-muted); font-style: italic;">No hay cuentas registradas.</td></tr>`
+                : accounts.map(a => {
+                    const currentBal = getAccountCalculatedBalance(a);
+                    let depositsSum = 0;
+                    let withdrawalsSum = 0;
+                    (a.transactions || []).forEach(tx => {
+                      if (tx.type === 'Deposito') depositsSum += tx.amount;
+                      else withdrawalsSum += tx.amount;
+                    });
+                    return `
+                      <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                        <td style="padding: 6px;">
+                          <strong>${a.bankName}</strong><br>
+                          <span style="font-size: 0.72rem; color: var(--text-muted);">${a.type} No. ${a.number}</span>
+                        </td>
+                        <td style="padding: 6px; text-align: right; font-family: var(--font-mono);">Q${parseFloat(a.initialBalance).toFixed(2)}</td>
+                        <td style="padding: 6px; text-align: right; font-size: 0.72rem; color: var(--text-muted); line-height: 1.3;">
+                          <span style="color: var(--accent-success);">+Q${depositsSum.toFixed(2)}</span><br>
+                          <span style="color: var(--accent-danger);">-Q${withdrawalsSum.toFixed(2)}</span>
+                        </td>
+                        <td style="padding: 6px; text-align: right; font-family: var(--font-mono); font-weight: bold; color: var(--accent-secondary);">Q${currentBal.toFixed(2)}</td>
+                      </tr>
+                    `;
+                  }).join('')
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <h3 style="font-size: 1.05rem; color: var(--accent-primary); margin-bottom: 0.75rem; font-family: var(--font-heading);">📋 Historial Reciente de Operaciones</h3>
+        <div style="max-height: 220px; overflow-y: auto; font-size: 0.78rem; display: flex; flex-direction: column; gap: 6px;">
+          ${accounts.flatMap(a => (a.transactions || []).map(tx => ({ ...tx, bankName: a.bankName, number: a.number }))).length === 0
+            ? `<div style="text-align: center; color: var(--text-muted); font-style: italic; padding: 10px 0;">No hay transacciones registradas.</div>`
+            : accounts.flatMap(a => (a.transactions || []).map(tx => ({ ...tx, bankName: a.bankName, number: a.number })))
+                .sort((x, y) => new Date(y.date) - new Date(x.date))
+                .slice(0, 10)
+                .map(tx => `
+                  <div style="background: rgba(255,255,255,0.02); padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                      <strong>${tx.bankName} (${tx.number.slice(-4)})</strong>: ${tx.concept}<br>
+                      <span style="font-size: 0.7rem; color: var(--text-muted);">${new Date(tx.date).toLocaleString('es-GT')} | Contrapartida: ${tx.contraAccount}</span>
+                    </div>
+                    <strong style="color: ${tx.type === 'Deposito' ? 'var(--accent-success)' : 'var(--accent-danger)'};">
+                      ${tx.type === 'Deposito' ? '+' : '-'}Q${parseFloat(tx.amount).toFixed(2)}
+                    </strong>
+                  </div>
+                `).join('')
+          }
+        </div>
+
+      </div>
+
+    </div>
+  `;
+
+  // Bind Submit Bank Account Form
+  const accountForm = document.getElementById('bank-account-form');
+  if (accountForm) {
+    accountForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      
+      const bankName = document.getElementById('b-bank-name').value;
+      const type = document.getElementById('b-acc-type').value;
+      const number = document.getElementById('b-acc-num').value;
+      const initialBalance = parseFloat(document.getElementById('b-initial-balance').value) || 0;
+
+      // Validar si ya existe el número de cuenta
+      if (accounts.some(a => a.number === number)) {
+        alert("⚠️ Ya existe una cuenta bancaria registrada con ese número.");
+        return;
+      }
+
+      const newAccount = {
+        id: 'bank-acc-' + Date.now(),
+        bankName,
+        type,
+        number,
+        initialBalance,
+        transactions: []
+      };
+
+      state.administracion_bancos.push(newAccount);
+
+      // Si tiene saldo inicial, generar la partida contable de apertura
+      if (initialBalance > 0) {
+        const journalEntry = {
+          id: 'PART-APERTURA-' + Date.now(),
+          date: new Date().toISOString(),
+          concept: `Partida de Apertura - Creación de cuenta ${type} en ${bankName} No. ${number}`,
+          totalDebits: initialBalance,
+          totalCredits: initialBalance,
+          details: [
+            { account: 'Caja y Bancos', type: 'Debe', amount: initialBalance },
+            { account: 'Capital Autorizado', type: 'Haber', amount: initialBalance }
+          ]
+        };
+        state.administracion_contabilidad.unshift(journalEntry);
+      }
+
+      saveAppState(state);
+      alert(`✅ Cuenta bancaria aperturada con éxito en ${bankName}.`);
+      renderBancosConciliacion(container, state);
+    });
+  }
+
+  // Bind Submit Bank Transaction Form
+  const transactionForm = document.getElementById('bank-transaction-form');
+  if (transactionForm) {
+    transactionForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+
+      const type = document.getElementById('tx-type').value;
+      const accountId = document.getElementById('tx-account-id').value;
+      const amount = parseFloat(document.getElementById('tx-amount').value) || 0;
+      const contraAccount = document.getElementById('tx-contra-account').value;
+      const concept = document.getElementById('tx-concept').value;
+
+      if (!accountId) {
+        alert("Debe seleccionar una cuenta bancaria.");
+        return;
+      }
+      if (amount <= 0) {
+        alert("El monto de la transacción debe ser mayor a cero.");
+        return;
+      }
+
+      const selectedAcc = state.administracion_bancos.find(a => a.id === accountId);
+      
+      // Si es un retiro/transferencia, verificar que haya fondos suficientes
+      if (type === 'Transferencia') {
+        const currentBal = getAccountCalculatedBalance(selectedAcc);
+        if (amount > currentBal) {
+          alert(`⚠️ Saldo insuficiente en la cuenta bancaria. Saldo actual: Q${currentBal.toFixed(2)}.`);
+          return;
+        }
+      }
+
+      const newTx = {
+        id: 'tx-bank-' + Date.now(),
+        date: new Date().toISOString(),
+        type,
+        amount,
+        contraAccount,
+        concept
+      };
+
+      selectedAcc.transactions = selectedAcc.transactions || [];
+      selectedAcc.transactions.unshift(newTx);
+
+      // Registrar partida contable de partida doble
+      const journalEntry = {
+        id: 'PART-TX-BANCO-' + Date.now(),
+        date: new Date().toISOString(),
+        concept: `${type === 'Deposito' ? 'Depósito Bancario' : 'Transferencia Bancaria'} - ${concept} (Cuenta No: ${selectedAcc.number})`,
+        totalDebits: amount,
+        totalCredits: amount,
+        details: []
+      };
+
+      if (type === 'Deposito') {
+        journalEntry.details.push({ account: 'Caja y Bancos', type: 'Debe', amount });
+        journalEntry.details.push({ account: contraAccount, type: 'Haber', amount });
+      } else {
+        journalEntry.details.push({ account: contraAccount, type: 'Debe', amount });
+        journalEntry.details.push({ account: 'Caja y Bancos', type: 'Haber', amount });
+      }
+
+      state.administracion_contabilidad.unshift(journalEntry);
+      
+      saveAppState(state);
+      alert("✅ Transacción bancaria registrada exitosamente y partida de diario generada.");
+      renderBancosConciliacion(container, state);
     });
   }
 }
