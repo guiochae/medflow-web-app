@@ -1012,6 +1012,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 1. Iniciar Escuchadores en Tiempo Real de Firebase Firestore
   initRealtimeFirestore((initialState) => {
+    migrateLaboratoryTestsCategories(initialState);
     lastSyncedState = JSON.parse(JSON.stringify(initialState));
     // Suscribir render a cambios en tiempo real
     subscribeToStateUpdates((updatedState) => {
@@ -1093,3 +1094,239 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+export function migrateLaboratoryTestsCategories(state) {
+  if (!state || !state.laboratoryTests || !Array.isArray(state.laboratoryTests)) return;
+
+  const LAB_CATEGORY_MAP = {
+    // 1. HEMATOLOGIA
+    "HEMATOLOGÍA COMPLETA (HEMOGRAMA)": "Hematología",
+    "HEMOGLOBINA / HEMATOCRITO": "Hematología",
+    "REC. GLÓBULOS BLANCOS / FÓRMULA DIFERENCIAL": "Hematología",
+    "VELOCIDAD DE ERITROSEDIMENTACIÓN (VES)": "Hematología",
+    "REC. DE GLÓBULOS ROJOS (ERITROCITOS)": "Hematología",
+    "REC. DE RETICULOCITOS": "Hematología",
+    "REC. DE EOSINÓFILOS ABSOLUTOS": "Hematología",
+    "GOTA GRUESA (HEMOPARÁSITOS)": "Hematología",
+    "FROTE PERIFÉRICO (FSP)": "Hematología",
+    "GRUPO SANGUÍNEO / FACTOR RH": "Hematología",
+    "COOMBS DIRECTO / INDIRECTO": "Hematología",
+    "NIVELES DE VITAMINA B12": "Hematología",
+    "NIVELES DE ÁCIDO FÓLICO (FOLATOS)": "Hematología",
+
+    // 2. QUIMICA SANGUINEA
+    "GLUCOSA PRE (EN AYUNAS)": "Química Sanguínea",
+    "GLUCOSA POST (POSTPRANDIAL 2H)": "Química Sanguínea",
+    "HEMOGLOBINA GLICOSILADA (HBA1C)": "Química Sanguínea",
+    "COLESTEROL TOTAL": "Química Sanguínea",
+    "TRIGLICÉRIDOS": "Química Sanguínea",
+    "COLESTEROL HDL (BUENO)": "Química Sanguínea",
+    "COLESTEROL LDL (MALO)": "Química Sanguínea",
+    "COLESTEROL VLDL": "Química Sanguínea",
+    "ÁCIDO ÚRICO": "Química Sanguínea",
+    "CREATININA": "Química Sanguínea",
+    "NITRÓGENO DE UREA (BUN)": "Química Sanguínea",
+    "PROTEÍNAS TOTALES": "Química Sanguínea",
+    "ALBÚMINA": "Química Sanguínea",
+    "RELACIÓN A/G (ALBÚMINA/GLOBULINA)": "Química Sanguínea",
+    "BILIRRUBINA TOTAL": "Química Sanguínea",
+    "BILIRRUBINA DIRECTA (CONJUGADA)": "Química Sanguínea",
+    "BILIRRUBINA INDIRECTA (NO CONJUGADA)": "Química Sanguínea",
+    "NIVELES DE AMONIO": "Química Sanguínea",
+    "NIVELES DE FERRITINA": "Química Sanguínea",
+
+    // 3. COAGULACIÓN
+    "TIEMPO DE PROTROMBINA": "Coagulación",
+    "T. DE TROMBOPLASTINA PARCIAL": "Coagulación",
+    "RECUENTO DE PLAQUETAS": "Coagulación",
+    "FIBRINOGENO": "Coagulación",
+    "DIMERO D": "Coagulación",
+    "TIEMPO DE SANGRIA": "Coagulación",
+    "TIEMPO DE COAGULACIÓN": "Coagulación",
+
+    // 4. COPROLOGÍA
+    "HECES": "Coprología",
+    "ENEMA SALINO": "Coprología",
+    "SANGRE OCULTA": "Coprología",
+    "ROTAVIRUS": "Coprología",
+    "H. PYLORI EN HECES": "Coprología",
+    "AZÚCARES REDUCTORES": "Coprología",
+
+    // 5. UROLOGIA
+    "ORINA COMPLETA (GENERAL)": "Urología",
+    "ÁCIDO ÚRICO / ORINA 24 HRS": "Urología",
+    "ALBÚMINA / ORINA DE 24 HRS (MICROALBUMINURIA)": "Urología",
+    "CREATININA / ORINA DE 24 HRS": "Urología",
+    "BUN / ORINA DE 24 HRS (UREA EN ORINA)": "Urología",
+    "PROTEÍNAS TOTALES / ORINA 24 HRS": "Urología",
+    "PRUEBA DE EMBARAZO / ORINA": "Urología",
+
+    // 6. HORMONAS
+    "T3 (TRIIODOTIRONINA TOTAL)": "Hormonas",
+    "T4 (TIROXINA TOTAL)": "Hormonas",
+    "TSH": "Hormonas",
+    "TSH ULTRASENSIBLE": "Hormonas",
+    "T4 LIBRE": "Hormonas",
+    "LH": "Hormonas",
+    "FSH": "Hormonas",
+    "PROLACTINA": "Hormonas",
+    "ESTRADIOL": "Hormonas",
+    "PROGESTERONA": "Hormonas",
+    "HCG CUANTITATIVA": "Hormonas",
+    "HCG CUALITATIVA": "Hormonas",
+    "TESTOSTERONA TOTAL": "Hormonas",
+    "INSULINA PRE (EN AYUNAS)": "Hormonas",
+    "INSULINA POST (POSTPRANDIAL)": "Hormonas",
+    "CORTISOL": "Hormonas",
+    "PARATORMONA (PTH INTACTA)": "Hormonas",
+
+    // 7. ENZIMAS
+    "TGO (AST)": "Enzimas",
+    "TGP (ALT)": "Enzimas",
+    "GGT": "Enzimas",
+    "FOSFATASA ALCALINA": "Enzimas",
+    "AMILASA": "Enzimas",
+    "LIPASA": "Enzimas",
+    "DESHIDROGENASA LÁCTICA": "Enzimas",
+    "CK TOTAL": "Enzimas",
+    "CK MB": "Enzimas",
+    "COLINESTERASA": "Enzimas",
+    "TROPONINA I": "Enzimas",
+    "ALDOLASA": "Enzimas",
+
+    // 8. ELECTROLITOS
+    "SODIO": "Electrólitos",
+    "POTASIO": "Electrólitos",
+    "CLORURO": "Electrólitos",
+    "CALCIO": "Electrólitos",
+    "FÓSFORO": "Electrólitos",
+    "MAGNESIO": "Electrólitos",
+    "HIERRO": "Electrólitos",
+
+    // 9. INMUNOLOGIA
+    "CARDIOLIPINA (VDRL / RPR)": "Inmunología",
+    "ANTI ESTREPTOLISINA O (ASO)": "Inmunología",
+    "FACTOR REUMATOIDEO (FR)": "Inmunología",
+    "PROTEÍNA C REACTIVA (PCR)": "Inmunología",
+    "PCR ULTRASENSIBLE (CARDIO)": "Inmunología",
+    "INMUNOGLOBULINA IGE TOTAL": "Inmunología",
+    "COMPLEMENTO C3 / C4": "Inmunología",
+    "FANA (ANTICUERPOS ANTINUCLEARES)": "Inmunología",
+    "ANTI DNA (DOBLE CADENA)": "Inmunología",
+    "BNP (PÉPTIDO NATRIURÉTICO B)": "Inmunología",
+    "ANTI SMITH (ANTI-SM)": "Inmunología",
+    "AC. ANTI PÉPTIDO CÍCLICO CITRULINADO": "Inmunología",
+
+    // 10. INFECCIOSAS
+    "VIH (ANTICUERPOS / AG P24)": "Infecciosas",
+    "RECUENTO LINFOCITOS CD4": "Infecciosas",
+    "RECUENTO LINFOCITOS CD8": "Infecciosas",
+    "CARGA VIRAL VIH": "Infecciosas",
+    "HEPATITIS A (ANTI-HAV IGM)": "Infecciosas",
+    "HEPATITIS B (HBSAG / ANTI-HBC)": "Infecciosas",
+    "HEPATITIS C (ANTI-HCV)": "Infecciosas",
+    "DENGUE (NS1 AG / IGM / IGG)": "Infecciosas",
+    "TORCH IGM": "Infecciosas",
+    "TOXOPLASMA IGM": "Infecciosas",
+    "RUBÉOLA IGM": "Infecciosas",
+    "CITOMEGALOVIRUS IGM": "Infecciosas",
+    "HERPES IGM (HSV 1/2)": "Infecciosas",
+    "MONOTEST (MONONUCLEOSIS)": "Infecciosas",
+    "CHAGAS IGG": "Infecciosas",
+    "HELICOBACTER PYLORI IGM": "Infecciosas",
+    "LEISHMANIA IGM": "Infecciosas",
+    "LEPTOSPIROSIS (IGM/IGG)": "Infecciosas",
+    "AC. ANTI TREPONEMA (FTA-ABS/TPHA)": "Infecciosas",
+
+    // 11. MARCADORES TUMORALES
+    "ALFAFETO PROTEÍNA (AFP)": "Marcadores Tumorales",
+    "ANTÍGENO CARCINOEMBRIONARIO (CEA)": "Marcadores Tumorales",
+    "CA 19-9 (PANCREÁTICO/GI)": "Marcadores Tumorales",
+    "CA 125 (OVÁRICO)": "Marcadores Tumorales",
+    "CA 15-3 (MAMARIO)": "Marcadores Tumorales",
+    "ANTÍGENO PROSTÁTICO ESPECÍFICO TOTAL": "Marcadores Tumorales",
+    "ANTÍGENO PROSTÁTICO ESPECÍFICO LIBRE": "Marcadores Tumorales",
+    "RELACIÓN PSA T/L (PSA LIBRE/TOTAL)": "Marcadores Tumorales",
+
+    // 12. MICROBIOLOGIA
+    "UROCULTIVO": "Microbiología",
+    "OROCULTIVO (CULTIVO FARÍNGEO)": "Microbiología",
+    "COPROCULTIVO": "Microbiología",
+    "OTOCULTIVO": "Microbiología",
+    "CULTIVO / SECRECIONES VARIAS": "Microbiología",
+    "ZIEHL NEELSEN (BACILOSCOPIA BAAR)": "Microbiología",
+    "HEMOCULTIVO": "Microbiología",
+    "FROTE GRAM": "Microbiología",
+    "FROTE GIEMSA": "Microbiología",
+    "KOH (EXAMEN DIRECTO HONGOS)": "Microbiología",
+    "CHLAMYDIA TRACHOMATIS (SEC. VAGINAL)": "Microbiología",
+
+    // 13. DROGAS
+    "PANEL MULTIDROGAS": "Drogas",
+    "ÁCIDO VALPROICO": "Drogas",
+    "BARBITÚRICOS": "Drogas",
+    "ALCOHOL": "Drogas",
+    "BENZODIACEPINAS": "Drogas",
+    "COCAÍNA": "Drogas",
+    "MARIHUANA": "Drogas",
+
+    // 14. VARIOS
+    "PATOLOGÍA (BIOPSIA / HISTOPATOLÓGICO)": "Varios",
+    "SENSIBILIDAD / PENICILINA (PRUEBA CUTÁNEA)": "Varios",
+    "ESPERMOGRAMA": "Varios",
+    "PAPANICOLAOU (CITOLOGÍA CERVICOVAGINAL)": "Varios",
+    "EOSINÓFILOS EN MOCO NASAL": "Varios",
+    "PRUEBA DE PATERNIDAD (ADN STRs)": "Varios",
+    "ANÁLISIS DE LÍQUIDO PERITONEAL": "Varios",
+    "ANÁLISIS DE LÍQUIDO PLEURAL": "Varios",
+    "ANÁLISIS DE LÍQUIDO SINOVIAL": "Varios",
+
+    // 15. OTRAS PRUEBAS
+    "PRUEBAS ESPECIALES / ADICIONALES": "Otras Pruebas"
+  };
+
+  const normalize = (str) => {
+    if (!str) return '';
+    return str.toString()
+      .trim()
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[\s\-\/\(\)]+/g, " ");
+  };
+
+  const normalizedMap = {};
+  for (const [key, val] of Object.entries(LAB_CATEGORY_MAP)) {
+    normalizedMap[normalize(key)] = val;
+  }
+
+  let modified = false;
+  state.laboratoryTests.forEach(test => {
+    if (!test || !test.name) return;
+    const currentCat = (test.category || '').trim();
+    if (currentCat === '' || currentCat.toLowerCase() === 'general') {
+      const normName = normalize(test.name);
+      let matchedCategory = normalizedMap[normName];
+
+      if (!matchedCategory) {
+        for (const [normKey, categoryName] of Object.entries(normalizedMap)) {
+          if (normName.includes(normKey) || normKey.includes(normName)) {
+            matchedCategory = categoryName;
+            break;
+          }
+        }
+      }
+
+      if (matchedCategory) {
+        test.category = matchedCategory;
+        modified = true;
+      }
+    }
+  });
+
+  if (modified) {
+    console.log("Categorías de exámenes de laboratorio actualizadas en estado.");
+    saveAppState(state);
+  }
+}
+

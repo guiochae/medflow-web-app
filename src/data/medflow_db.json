@@ -258,9 +258,9 @@
           "pulse": 150,
           "oximetry": 99,
           "temp": 37.2,
-          "weight": 18.0,
+          "weight": 18,
           "height": 1.3,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -276,8 +276,8 @@
           "diagnosis": "I10 - Hipertensión arterial primaria",
           "treatment": "Losartán 50mg c/24h, Dieta baja en sodio, Control en 30 días.",
           "vitalsSummary": "PA: 0 | FC: 150 bpm | T: 37.2°C",
-          "cost": 300.0,
-          "fee": 300.0,
+          "cost": 300,
+          "fee": 300,
           "symptoms": "Chequeo General Preventivo",
           "diagnosisCodes": [
             "I10"
@@ -311,7 +311,7 @@
           "specialty": "Medicina General",
           "reason": "Chequeo General Preventivo",
           "status": "Confirmada",
-          "cost": 250.0
+          "cost": 250
         }
       ],
       "prescriptions": [
@@ -341,15 +341,15 @@
           "client": "LIAM ADAN RUIZ LOPEZ",
           "nit": "1314151254",
           "concept": "Consulta Médica de Especialidad",
-          "subtotal": 425.0,
-          "iva": 51.0,
-          "total": 476.0,
+          "subtotal": 425,
+          "iva": 51,
+          "total": 476,
           "paymentMethod": "Efectivo",
           "status": "Pagada",
           "details": [
             {
               "concept": "Consulta Médica de Especialidad",
-              "total": 425.0
+              "total": 425
             }
           ]
         }
@@ -379,7 +379,7 @@
           "temp": 36.7,
           "weight": 73.9,
           "height": 1.54,
-          "glucose": 123.0,
+          "glucose": 123,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -395,8 +395,8 @@
           "diagnosis": "E11.9 - Diabetes mellitus tipo 2 sin complicaciones",
           "treatment": "Amoxicilina 500mg c/8h x 7 días, Paracetamol 500mg c/8h, Reposo 48h.",
           "vitalsSummary": "PA: 121/68 | FC: 65 bpm | T: 36.7°C",
-          "cost": 350.0,
-          "fee": 350.0,
+          "cost": 350,
+          "fee": 350,
           "symptoms": "Consulta Cardiología por Hipertensión",
           "diagnosisCodes": [
             "E11.9"
@@ -430,7 +430,7 @@
           "specialty": "Medicina General",
           "reason": "Consulta Cardiología por Hipertensión",
           "status": "Completada",
-          "cost": 250.0
+          "cost": 250
         }
       ],
       "prescriptions": [
@@ -460,15 +460,15 @@
           "client": "GUADALUPE HERNANDEZ MELENDREZ",
           "nit": "1594095512",
           "concept": "Honorarios Médicos Quirúrgicos",
-          "subtotal": 500.0,
-          "iva": 60.0,
-          "total": 560.0,
+          "subtotal": 500,
+          "iva": 60,
+          "total": 560,
           "paymentMethod": "Tarjeta de Crédito",
           "status": "Pagada",
           "details": [
             {
               "concept": "Honorarios Médicos Quirúrgicos",
-              "total": 500.0
+              "total": 500
             }
           ]
         }
@@ -498,7 +498,7 @@
           "temp": 36.7,
           "weight": 93.8,
           "height": 1.49,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -514,8 +514,8 @@
           "diagnosis": "J06.9 - Infección aguda de las vías respiratorias superiores",
           "treatment": "Losartán 50mg c/24h, Dieta baja en sodio, Control en 30 días.",
           "vitalsSummary": "PA: 99/66 | FC: 86 bpm | T: 36.7°C",
-          "cost": 250.0,
-          "fee": 250.0,
+          "cost": 250,
+          "fee": 250,
           "symptoms": "Dolor Abdominal Agudo",
           "diagnosisCodes": [
             "J06.9"
@@ -549,7 +549,7 @@
           "specialty": "Medicina General",
           "reason": "Dolor Abdominal Agudo",
           "status": "En Espera",
-          "cost": 250.0
+          "cost": 250
         }
       ],
       "prescriptions": [
@@ -579,15 +579,15 @@
           "client": "HEREDIA VALENTINA PEREZ RAMIREZ",
           "nit": "1650015261",
           "concept": "Servicio de Hospitalización y Encamamiento",
-          "subtotal": 575.0,
-          "iva": 69.0,
-          "total": 644.0,
+          "subtotal": 575,
+          "iva": 69,
+          "total": 644,
           "paymentMethod": "Transferencia Bancaria",
           "status": "Pagada",
           "details": [
             {
               "concept": "Servicio de Hospitalización y Encamamiento",
-              "total": 575.0
+              "total": 575
             }
           ]
         }
@@ -615,9 +615,9 @@
           "pulse": 125,
           "oximetry": 97,
           "temp": 38.7,
-          "weight": 70.0,
+          "weight": 70,
           "height": 1.7,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -633,8 +633,8 @@
           "diagnosis": "K29.7 - Gastritis no especificada",
           "treatment": "Amoxicilina 500mg c/8h x 7 días, Paracetamol 500mg c/8h, Reposo 48h.",
           "vitalsSummary": "PA: 109/66 | FC: 125 bpm | T: 38.7°C",
-          "cost": 300.0,
-          "fee": 300.0,
+          "cost": 300,
+          "fee": 300,
           "symptoms": "Control Postoperatorio",
           "diagnosisCodes": [
             "K29.7"
@@ -668,7 +668,7 @@
           "specialty": "Medicina General",
           "reason": "Control Postoperatorio",
           "status": "Completada",
-          "cost": 250.0
+          "cost": 250
         }
       ],
       "prescriptions": [
@@ -698,15 +698,15 @@
           "client": "LIDIA MARISOL XOL COC",
           "nit": "1650015261",
           "concept": "Venta de Medicamentos de Farmacia",
-          "subtotal": 650.0,
-          "iva": 78.0,
-          "total": 728.0,
+          "subtotal": 650,
+          "iva": 78,
+          "total": 728,
           "paymentMethod": "Seguro Médico",
           "status": "Pagada",
           "details": [
             {
               "concept": "Venta de Medicamentos de Farmacia",
-              "total": 650.0
+              "total": 650
             }
           ]
         }
@@ -736,7 +736,7 @@
           "temp": 35.4,
           "weight": 32.2,
           "height": 1.29,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -752,8 +752,8 @@
           "diagnosis": "M54.5 - Lumbalgia no especificada",
           "treatment": "Losartán 50mg c/24h, Dieta baja en sodio, Control en 30 días.",
           "vitalsSummary": "PA: 0/0 | FC: 84 bpm | T: 35.4°C",
-          "cost": 350.0,
-          "fee": 350.0,
+          "cost": 350,
+          "fee": 350,
           "symptoms": "Evaluación Pediatría",
           "diagnosisCodes": [
             "M54.5"
@@ -787,7 +787,7 @@
           "specialty": "Medicina General",
           "reason": "Evaluación Pediatría",
           "status": "Cancelada",
-          "cost": 250.0
+          "cost": 250
         }
       ],
       "prescriptions": [
@@ -817,15 +817,15 @@
           "client": "DARLYN ANYELITA CUZ COC",
           "nit": "1650015261",
           "concept": "Estudios de Laboratorio Clínico",
-          "subtotal": 725.0,
-          "iva": 87.0,
-          "total": 812.0,
+          "subtotal": 725,
+          "iva": 87,
+          "total": 812,
           "paymentMethod": "Efectivo",
           "status": "Pagada",
           "details": [
             {
               "concept": "Estudios de Laboratorio Clínico",
-              "total": 725.0
+              "total": 725
             }
           ]
         }
@@ -855,7 +855,7 @@
           "temp": 36.3,
           "weight": 33.8,
           "height": 1.34,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -871,8 +871,8 @@
           "diagnosis": "J20.9 - Bronquitis aguda no especificada",
           "treatment": "Amoxicilina 500mg c/8h x 7 días, Paracetamol 500mg c/8h, Reposo 48h.",
           "vitalsSummary": "PA: 120/80 | FC: 75 bpm | T: 36.3°C",
-          "cost": 250.0,
-          "fee": 250.0,
+          "cost": 250,
+          "fee": 250,
           "symptoms": "Dermatitis y Alergia Cutánea",
           "diagnosisCodes": [
             "J20.9"
@@ -906,7 +906,7 @@
           "specialty": "Medicina Interna",
           "reason": "Dermatitis y Alergia Cutánea",
           "status": "Confirmada",
-          "cost": 300.0
+          "cost": 300
         }
       ],
       "prescriptions": [
@@ -936,15 +936,15 @@
           "client": "JOSUE ALBERTO SOLA FLORIAN",
           "nit": "1650015261",
           "concept": "Estudios de Imagenología / RX",
-          "subtotal": 800.0,
-          "iva": 96.0,
-          "total": 896.0,
+          "subtotal": 800,
+          "iva": 96,
+          "total": 896,
           "paymentMethod": "Tarjeta de Crédito",
           "status": "Pendiente",
           "details": [
             {
               "concept": "Estudios de Imagenología / RX",
-              "total": 800.0
+              "total": 800
             }
           ]
         }
@@ -972,9 +972,9 @@
           "pulse": 78,
           "oximetry": 98,
           "temp": 36.6,
-          "weight": 70.0,
+          "weight": 70,
           "height": 1.7,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -990,8 +990,8 @@
           "diagnosis": "N39.0 - Infección del tracto urinario, sitio no especificado",
           "treatment": "Losartán 50mg c/24h, Dieta baja en sodio, Control en 30 días.",
           "vitalsSummary": "PA: 145/78 | FC: 78 bpm | T: 36.6°C",
-          "cost": 300.0,
-          "fee": 300.0,
+          "cost": 300,
+          "fee": 300,
           "symptoms": "Dolor Lumbar Crónico",
           "diagnosisCodes": [
             "N39.0"
@@ -1025,7 +1025,7 @@
           "specialty": "Medicina Interna",
           "reason": "Dolor Lumbar Crónico",
           "status": "Completada",
-          "cost": 300.0
+          "cost": 300
         }
       ],
       "prescriptions": [
@@ -1055,15 +1055,15 @@
           "client": "IRBEN ORLANDO MAZARIEGOS",
           "nit": "1650015261",
           "concept": "Consulta Médica de Especialidad",
-          "subtotal": 875.0,
-          "iva": 105.0,
-          "total": 980.0,
+          "subtotal": 875,
+          "iva": 105,
+          "total": 980,
           "paymentMethod": "Transferencia Bancaria",
           "status": "Pagada",
           "details": [
             {
               "concept": "Consulta Médica de Especialidad",
-              "total": 875.0
+              "total": 875
             }
           ]
         }
@@ -1093,7 +1093,7 @@
           "temp": 36.6,
           "weight": 29.5,
           "height": 1.26,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -1109,8 +1109,8 @@
           "diagnosis": "I10 - Hipertensión arterial primaria",
           "treatment": "Amoxicilina 500mg c/8h x 7 días, Paracetamol 500mg c/8h, Reposo 48h.",
           "vitalsSummary": "PA: 120/80 | FC: 81 bpm | T: 36.6°C",
-          "cost": 350.0,
-          "fee": 350.0,
+          "cost": 350,
+          "fee": 350,
           "symptoms": "Evaluación Oftalmológica",
           "diagnosisCodes": [
             "I10"
@@ -1144,7 +1144,7 @@
           "specialty": "Medicina Interna",
           "reason": "Evaluación Oftalmológica",
           "status": "En Espera",
-          "cost": 300.0
+          "cost": 300
         }
       ],
       "prescriptions": [
@@ -1174,15 +1174,15 @@
           "client": "BRAYAN ANDRES FERNANDEZ",
           "nit": "1650015261",
           "concept": "Honorarios Médicos Quirúrgicos",
-          "subtotal": 950.0,
-          "iva": 114.0,
-          "total": 1064.0,
+          "subtotal": 950,
+          "iva": 114,
+          "total": 1064,
           "paymentMethod": "Seguro Médico",
           "status": "Pagada",
           "details": [
             {
               "concept": "Honorarios Médicos Quirúrgicos",
-              "total": 950.0
+              "total": 950
             }
           ]
         }
@@ -1210,9 +1210,9 @@
           "pulse": 74,
           "oximetry": 98,
           "temp": 36.7,
-          "weight": 89.0,
+          "weight": 89,
           "height": 1.59,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -1228,8 +1228,8 @@
           "diagnosis": "E11.9 - Diabetes mellitus tipo 2 sin complicaciones",
           "treatment": "Losartán 50mg c/24h, Dieta baja en sodio, Control en 30 días.",
           "vitalsSummary": "PA: 154/56 | FC: 74 bpm | T: 36.7°C",
-          "cost": 250.0,
-          "fee": 250.0,
+          "cost": 250,
+          "fee": 250,
           "symptoms": "Control de Diabetes Mellitus",
           "diagnosisCodes": [
             "E11.9"
@@ -1263,7 +1263,7 @@
           "specialty": "Medicina General",
           "reason": "Control de Diabetes Mellitus",
           "status": "Completada",
-          "cost": 250.0
+          "cost": 250
         }
       ],
       "prescriptions": [
@@ -1293,15 +1293,15 @@
           "client": "FEDERICO TIUL COC",
           "nit": "1731298111",
           "concept": "Servicio de Hospitalización y Encamamiento",
-          "subtotal": 1025.0,
-          "iva": 123.0,
-          "total": 1148.0,
+          "subtotal": 1025,
+          "iva": 123,
+          "total": 1148,
           "paymentMethod": "Efectivo",
           "status": "Pagada",
           "details": [
             {
               "concept": "Servicio de Hospitalización y Encamamiento",
-              "total": 1025.0
+              "total": 1025
             }
           ]
         }
@@ -1331,7 +1331,7 @@
           "temp": 36.8,
           "weight": 72.8,
           "height": 1.65,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -1347,8 +1347,8 @@
           "diagnosis": "J06.9 - Infección aguda de las vías respiratorias superiores",
           "treatment": "Amoxicilina 500mg c/8h x 7 días, Paracetamol 500mg c/8h, Reposo 48h.",
           "vitalsSummary": "PA: 120/80 | FC: 83 bpm | T: 36.8°C",
-          "cost": 300.0,
-          "fee": 300.0,
+          "cost": 300,
+          "fee": 300,
           "symptoms": "Chequeo General Preventivo",
           "diagnosisCodes": [
             "J06.9"
@@ -1382,7 +1382,7 @@
           "specialty": "Medicina General",
           "reason": "Chequeo General Preventivo",
           "status": "Cancelada",
-          "cost": 250.0
+          "cost": 250
         }
       ],
       "prescriptions": [
@@ -1412,15 +1412,15 @@
           "client": "BLANCA LUZ ARANA",
           "nit": "1774335310",
           "concept": "Venta de Medicamentos de Farmacia",
-          "subtotal": 1100.0,
-          "iva": 132.0,
-          "total": 1232.0,
+          "subtotal": 1100,
+          "iva": 132,
+          "total": 1232,
           "paymentMethod": "Tarjeta de Crédito",
           "status": "Pagada",
           "details": [
             {
               "concept": "Venta de Medicamentos de Farmacia",
-              "total": 1100.0
+              "total": 1100
             }
           ]
         }
@@ -1450,7 +1450,7 @@
           "temp": 36.3,
           "weight": 73.2,
           "height": 1.6,
-          "glucose": 170.0,
+          "glucose": 170,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -1466,8 +1466,8 @@
           "diagnosis": "K29.7 - Gastritis no especificada",
           "treatment": "Losartán 50mg c/24h, Dieta baja en sodio, Control en 30 días.",
           "vitalsSummary": "PA: 123/82 | FC: 67 bpm | T: 36.3°C",
-          "cost": 350.0,
-          "fee": 350.0,
+          "cost": 350,
+          "fee": 350,
           "symptoms": "Consulta Cardiología por Hipertensión",
           "diagnosisCodes": [
             "K29.7"
@@ -1501,7 +1501,7 @@
           "specialty": "Medicina General",
           "reason": "Consulta Cardiología por Hipertensión",
           "status": "Confirmada",
-          "cost": 250.0
+          "cost": 250
         }
       ],
       "prescriptions": [
@@ -1531,15 +1531,15 @@
           "client": "JUAN CHOC CAAL",
           "nit": "1780071291",
           "concept": "Estudios de Laboratorio Clínico",
-          "subtotal": 1175.0,
-          "iva": 141.0,
-          "total": 1316.0,
+          "subtotal": 1175,
+          "iva": 141,
+          "total": 1316,
           "paymentMethod": "Transferencia Bancaria",
           "status": "Pagada",
           "details": [
             {
               "concept": "Estudios de Laboratorio Clínico",
-              "total": 1175.0
+              "total": 1175
             }
           ]
         }
@@ -1569,7 +1569,7 @@
           "temp": 36.2,
           "weight": 59.2,
           "height": 1.41,
-          "glucose": 108.0,
+          "glucose": 108,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -1585,8 +1585,8 @@
           "diagnosis": "M54.5 - Lumbalgia no especificada",
           "treatment": "Amoxicilina 500mg c/8h x 7 días, Paracetamol 500mg c/8h, Reposo 48h.",
           "vitalsSummary": "PA: 138/78 | FC: 85 bpm | T: 36.2°C",
-          "cost": 250.0,
-          "fee": 250.0,
+          "cost": 250,
+          "fee": 250,
           "symptoms": "Dolor Abdominal Agudo",
           "diagnosisCodes": [
             "M54.5"
@@ -1620,7 +1620,7 @@
           "specialty": "Medicina General",
           "reason": "Dolor Abdominal Agudo",
           "status": "Completada",
-          "cost": 250.0
+          "cost": 250
         }
       ],
       "prescriptions": [
@@ -1650,15 +1650,15 @@
           "client": "MATILDE CHUB MAAS",
           "nit": "1782423491",
           "concept": "Estudios de Imagenología / RX",
-          "subtotal": 1250.0,
-          "iva": 150.0,
-          "total": 1400.0,
+          "subtotal": 1250,
+          "iva": 150,
+          "total": 1400,
           "paymentMethod": "Seguro Médico",
           "status": "Pendiente",
           "details": [
             {
               "concept": "Estudios de Imagenología / RX",
-              "total": 1250.0
+              "total": 1250
             }
           ]
         }
@@ -1685,10 +1685,10 @@
           "bp_diastolic": 80,
           "pulse": 93,
           "oximetry": 100,
-          "temp": 37.0,
+          "temp": 37,
           "weight": 23.7,
           "height": 1.11,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -1704,8 +1704,8 @@
           "diagnosis": "J20.9 - Bronquitis aguda no especificada",
           "treatment": "Losartán 50mg c/24h, Dieta baja en sodio, Control en 30 días.",
           "vitalsSummary": "PA: 0/0 | FC: 93 bpm | T: 37°C",
-          "cost": 300.0,
-          "fee": 300.0,
+          "cost": 300,
+          "fee": 300,
           "symptoms": "Control Postoperatorio",
           "diagnosisCodes": [
             "J20.9"
@@ -1739,7 +1739,7 @@
           "specialty": "Medicina General",
           "reason": "Control Postoperatorio",
           "status": "En Espera",
-          "cost": 250.0
+          "cost": 250
         }
       ],
       "prescriptions": [
@@ -1769,15 +1769,15 @@
           "client": "DILAN MARCELINONAJARRO TIUL",
           "nit": "1782423491",
           "concept": "Consulta Médica de Especialidad",
-          "subtotal": 1325.0,
-          "iva": 159.0,
-          "total": 1484.0,
+          "subtotal": 1325,
+          "iva": 159,
+          "total": 1484,
           "paymentMethod": "Efectivo",
           "status": "Pagada",
           "details": [
             {
               "concept": "Consulta Médica de Especialidad",
-              "total": 1325.0
+              "total": 1325
             }
           ]
         }
@@ -1806,8 +1806,8 @@
           "oximetry": 98,
           "temp": 38.5,
           "weight": 8.7,
-          "height": 70.0,
-          "glucose": 0.0,
+          "height": 70,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -1823,8 +1823,8 @@
           "diagnosis": "N39.0 - Infección del tracto urinario, sitio no especificado",
           "treatment": "Amoxicilina 500mg c/8h x 7 días, Paracetamol 500mg c/8h, Reposo 48h.",
           "vitalsSummary": "PA: 0/0 | FC: 114 bpm | T: 38.5°C",
-          "cost": 350.0,
-          "fee": 350.0,
+          "cost": 350,
+          "fee": 350,
           "symptoms": "Evaluación Pediatría",
           "diagnosisCodes": [
             "N39.0"
@@ -1858,7 +1858,7 @@
           "specialty": "Medicina Interna",
           "reason": "Evaluación Pediatría",
           "status": "Completada",
-          "cost": 300.0
+          "cost": 300
         }
       ],
       "prescriptions": [
@@ -1888,15 +1888,15 @@
           "client": "GENESIS CAMILA MAQUIN",
           "nit": "1782423491",
           "concept": "Honorarios Médicos Quirúrgicos",
-          "subtotal": 1400.0,
-          "iva": 168.0,
-          "total": 1568.0,
+          "subtotal": 1400,
+          "iva": 168,
+          "total": 1568,
           "paymentMethod": "Tarjeta de Crédito",
           "status": "Pagada",
           "details": [
             {
               "concept": "Honorarios Médicos Quirúrgicos",
-              "total": 1400.0
+              "total": 1400
             }
           ]
         }
@@ -1926,7 +1926,7 @@
           "temp": 38.1,
           "weight": 56.8,
           "height": 1.4,
-          "glucose": 370.0,
+          "glucose": 370,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -1942,8 +1942,8 @@
           "diagnosis": "I10 - Hipertensión arterial primaria",
           "treatment": "Losartán 50mg c/24h, Dieta baja en sodio, Control en 30 días.",
           "vitalsSummary": "PA: 167/85 | FC: 102 bpm | T: 38.1°C",
-          "cost": 250.0,
-          "fee": 250.0,
+          "cost": 250,
+          "fee": 250,
           "symptoms": "Dermatitis y Alergia Cutánea",
           "diagnosisCodes": [
             "I10"
@@ -1977,7 +1977,7 @@
           "specialty": "Medicina Interna",
           "reason": "Dermatitis y Alergia Cutánea",
           "status": "Cancelada",
-          "cost": 300.0
+          "cost": 300
         }
       ],
       "prescriptions": [
@@ -2007,15 +2007,15 @@
           "client": "JULIANA CHUBAJÀ RODRÌGUEZ",
           "nit": "1829165961",
           "concept": "Servicio de Hospitalización y Encamamiento",
-          "subtotal": 1475.0,
-          "iva": 177.0,
-          "total": 1652.0,
+          "subtotal": 1475,
+          "iva": 177,
+          "total": 1652,
           "paymentMethod": "Transferencia Bancaria",
           "status": "Pagada",
           "details": [
             {
               "concept": "Servicio de Hospitalización y Encamamiento",
-              "total": 1475.0
+              "total": 1475
             }
           ]
         }
@@ -2042,10 +2042,10 @@
           "bp_diastolic": 72,
           "pulse": 87,
           "oximetry": 98,
-          "temp": 36.0,
+          "temp": 36,
           "weight": 75.5,
           "height": 1.66,
-          "glucose": 218.0,
+          "glucose": 218,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -2061,8 +2061,8 @@
           "diagnosis": "E11.9 - Diabetes mellitus tipo 2 sin complicaciones",
           "treatment": "Amoxicilina 500mg c/8h x 7 días, Paracetamol 500mg c/8h, Reposo 48h.",
           "vitalsSummary": "PA: 102/72 | FC: 87 bpm | T: 36.°C",
-          "cost": 300.0,
-          "fee": 300.0,
+          "cost": 300,
+          "fee": 300,
           "symptoms": "Dolor Lumbar Crónico",
           "diagnosisCodes": [
             "E11.9"
@@ -2096,7 +2096,7 @@
           "specialty": "Medicina Interna",
           "reason": "Dolor Lumbar Crónico",
           "status": "Confirmada",
-          "cost": 300.0
+          "cost": 300
         }
       ],
       "prescriptions": [
@@ -2126,15 +2126,15 @@
           "client": "JOSE MAURICIO CAAL MAAZ",
           "nit": "1993464961",
           "concept": "Venta de Medicamentos de Farmacia",
-          "subtotal": 1550.0,
-          "iva": 186.0,
-          "total": 1736.0,
+          "subtotal": 1550,
+          "iva": 186,
+          "total": 1736,
           "paymentMethod": "Seguro Médico",
           "status": "Pagada",
           "details": [
             {
               "concept": "Venta de Medicamentos de Farmacia",
-              "total": 1550.0
+              "total": 1550
             }
           ]
         }
@@ -2163,8 +2163,8 @@
           "oximetry": 98,
           "temp": 36.3,
           "weight": 13.9,
-          "height": 90.0,
-          "glucose": 0.0,
+          "height": 90,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -2180,8 +2180,8 @@
           "diagnosis": "J06.9 - Infección aguda de las vías respiratorias superiores",
           "treatment": "Losartán 50mg c/24h, Dieta baja en sodio, Control en 30 días.",
           "vitalsSummary": "PA: 120/80 | FC: 120 bpm | T: 36.3°C",
-          "cost": 350.0,
-          "fee": 350.0,
+          "cost": 350,
+          "fee": 350,
           "symptoms": "Evaluación Oftalmológica",
           "diagnosisCodes": [
             "J06.9"
@@ -2215,7 +2215,7 @@
           "specialty": "Medicina General",
           "reason": "Evaluación Oftalmológica",
           "status": "Completada",
-          "cost": 250.0
+          "cost": 250
         }
       ],
       "prescriptions": [
@@ -2245,15 +2245,15 @@
           "client": "WENDY MARIBEL TOC CHOCOOJ",
           "nit": "2025652582",
           "concept": "Estudios de Laboratorio Clínico",
-          "subtotal": 1625.0,
-          "iva": 195.0,
-          "total": 1820.0,
+          "subtotal": 1625,
+          "iva": 195,
+          "total": 1820,
           "paymentMethod": "Efectivo",
           "status": "Pagada",
           "details": [
             {
               "concept": "Estudios de Laboratorio Clínico",
-              "total": 1625.0
+              "total": 1625
             }
           ]
         }
@@ -2283,7 +2283,7 @@
           "temp": 36.5,
           "weight": 128.5,
           "height": 1.74,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -2299,8 +2299,8 @@
           "diagnosis": "K29.7 - Gastritis no especificada",
           "treatment": "Amoxicilina 500mg c/8h x 7 días, Paracetamol 500mg c/8h, Reposo 48h.",
           "vitalsSummary": "PA: 152/91 | FC: 72 bpm | T: 36.5°C",
-          "cost": 250.0,
-          "fee": 250.0,
+          "cost": 250,
+          "fee": 250,
           "symptoms": "Control de Diabetes Mellitus",
           "diagnosisCodes": [
             "K29.7"
@@ -2334,7 +2334,7 @@
           "specialty": "Medicina General",
           "reason": "Control de Diabetes Mellitus",
           "status": "En Espera",
-          "cost": 250.0
+          "cost": 250
         }
       ],
       "prescriptions": [
@@ -2364,15 +2364,15 @@
           "client": "CARLOS HUMBERTO DEBROY CADENAS",
           "nit": "2183298220",
           "concept": "Estudios de Imagenología / RX",
-          "subtotal": 1700.0,
-          "iva": 204.0,
-          "total": 1904.0,
+          "subtotal": 1700,
+          "iva": 204,
+          "total": 1904,
           "paymentMethod": "Tarjeta de Crédito",
           "status": "Pendiente",
           "details": [
             {
               "concept": "Estudios de Imagenología / RX",
-              "total": 1700.0
+              "total": 1700
             }
           ]
         }
@@ -2400,9 +2400,9 @@
           "pulse": 86,
           "oximetry": 98,
           "temp": 36.3,
-          "weight": 70.0,
+          "weight": 70,
           "height": 1.69,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -2418,8 +2418,8 @@
           "diagnosis": "M54.5 - Lumbalgia no especificada",
           "treatment": "Losartán 50mg c/24h, Dieta baja en sodio, Control en 30 días.",
           "vitalsSummary": "PA: 135/82 | FC: 86 bpm | T: 36.3°C",
-          "cost": 300.0,
-          "fee": 300.0,
+          "cost": 300,
+          "fee": 300,
           "symptoms": "Chequeo General Preventivo",
           "diagnosisCodes": [
             "M54.5"
@@ -2453,7 +2453,7 @@
           "specialty": "Medicina General",
           "reason": "Chequeo General Preventivo",
           "status": "Completada",
-          "cost": 250.0
+          "cost": 250
         }
       ],
       "prescriptions": [
@@ -2500,9 +2500,9 @@
           "pulse": 85,
           "oximetry": 99,
           "temp": 35.7,
-          "weight": 53.0,
+          "weight": 53,
           "height": 1.51,
-          "glucose": 469.0,
+          "glucose": 469,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -2518,8 +2518,8 @@
           "diagnosis": "J20.9 - Bronquitis aguda no especificada",
           "treatment": "Amoxicilina 500mg c/8h x 7 días, Paracetamol 500mg c/8h, Reposo 48h.",
           "vitalsSummary": "PA: 176/70 | FC: 85 bpm | T: 35.7°C",
-          "cost": 350.0,
-          "fee": 350.0,
+          "cost": 350,
+          "fee": 350,
           "symptoms": "Consulta Cardiología por Hipertensión",
           "diagnosisCodes": [
             "J20.9"
@@ -2553,7 +2553,7 @@
           "specialty": "Medicina General",
           "reason": "Consulta Cardiología por Hipertensión",
           "status": "Cancelada",
-          "cost": 250.0
+          "cost": 250
         }
       ],
       "prescriptions": [
@@ -2602,7 +2602,7 @@
           "temp": 37.9,
           "weight": 82.8,
           "height": 1.52,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -2619,7 +2619,7 @@
           "specialty": "Medicina General",
           "reason": "Dolor Abdominal Agudo",
           "status": "Confirmada",
-          "cost": 250.0
+          "cost": 250
         }
       ],
       "prescriptions": [],
@@ -2651,7 +2651,7 @@
           "temp": 37.1,
           "weight": 48.2,
           "height": 1.35,
-          "glucose": 201.0,
+          "glucose": 201,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -2668,7 +2668,7 @@
           "specialty": "Medicina Interna",
           "reason": "Control Postoperatorio",
           "status": "Completada",
-          "cost": 300.0
+          "cost": 300
         }
       ],
       "prescriptions": [],
@@ -2700,7 +2700,7 @@
           "temp": 36.1,
           "weight": 83.9,
           "height": 1.5,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -2717,7 +2717,7 @@
           "specialty": "Medicina Interna",
           "reason": "Evaluación Pediatría",
           "status": "En Espera",
-          "cost": 300.0
+          "cost": 300
         }
       ],
       "prescriptions": [],
@@ -2749,7 +2749,7 @@
           "temp": 35.9,
           "weight": 69.5,
           "height": 1.56,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -2766,7 +2766,7 @@
           "specialty": "Medicina Interna",
           "reason": "Dermatitis y Alergia Cutánea",
           "status": "Completada",
-          "cost": 300.0
+          "cost": 300
         }
       ],
       "prescriptions": [],
@@ -2796,9 +2796,9 @@
           "pulse": 67,
           "oximetry": 97,
           "temp": 36.2,
-          "weight": 62.0,
+          "weight": 62,
           "height": 1.53,
-          "glucose": 292.0,
+          "glucose": 292,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -2815,7 +2815,7 @@
           "specialty": "Medicina General",
           "reason": "Dolor Lumbar Crónico",
           "status": "Cancelada",
-          "cost": 250.0
+          "cost": 250
         }
       ],
       "prescriptions": [],
@@ -2847,7 +2847,7 @@
           "temp": 36.2,
           "weight": 48.2,
           "height": 1.47,
-          "glucose": 190.0,
+          "glucose": 190,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -2882,7 +2882,7 @@
           "temp": 36.4,
           "weight": 78.7,
           "height": 1.152,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -2915,9 +2915,9 @@
           "pulse": 73,
           "oximetry": 98,
           "temp": 36.5,
-          "weight": 0.0,
-          "height": 0.0,
-          "glucose": 0.0,
+          "weight": 0,
+          "height": 0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -2950,9 +2950,9 @@
           "pulse": 99,
           "oximetry": 94,
           "temp": 37.5,
-          "weight": 0.0,
-          "height": 0.0,
-          "glucose": 95.0,
+          "weight": 0,
+          "height": 0,
+          "glucose": 95,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -2987,7 +2987,7 @@
           "temp": 36.7,
           "weight": 76.6,
           "height": 1.42,
-          "glucose": 115.0,
+          "glucose": 115,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3019,10 +3019,10 @@
           "bp_diastolic": 77,
           "pulse": 80,
           "oximetry": 98,
-          "temp": 36.0,
+          "temp": 36,
           "weight": 66.4,
           "height": 1.68,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3054,10 +3054,10 @@
           "bp_diastolic": 64,
           "pulse": 70,
           "oximetry": 97,
-          "temp": 37.0,
-          "weight": 70.0,
+          "temp": 37,
+          "weight": 70,
           "height": 1.7,
-          "glucose": 128.0,
+          "glucose": 128,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3092,7 +3092,7 @@
           "temp": 36.7,
           "weight": 61.3,
           "height": 1.54,
-          "glucose": 95.0,
+          "glucose": 95,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3127,7 +3127,7 @@
           "temp": 36.4,
           "weight": 56.7,
           "height": 1.39,
-          "glucose": 159.0,
+          "glucose": 159,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3160,9 +3160,9 @@
           "pulse": 79,
           "oximetry": 99,
           "temp": 36.5,
-          "weight": 70.0,
+          "weight": 70,
           "height": 1.55,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3197,7 +3197,7 @@
           "temp": 36.3,
           "weight": 59.8,
           "height": 1.51,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3230,9 +3230,9 @@
           "pulse": 80,
           "oximetry": 98,
           "temp": 37.5,
-          "weight": 25.0,
+          "weight": 25,
           "height": 1.27,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3265,9 +3265,9 @@
           "pulse": 73,
           "oximetry": 98,
           "temp": 37.5,
-          "weight": 64.0,
+          "weight": 64,
           "height": 1.56,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3301,8 +3301,8 @@
           "oximetry": 98,
           "temp": 36.2,
           "weight": 7.1,
-          "height": 67.0,
-          "glucose": 0.0,
+          "height": 67,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3335,9 +3335,9 @@
           "pulse": 69,
           "oximetry": 98,
           "temp": 36.1,
-          "weight": 55.0,
+          "weight": 55,
           "height": 1.43,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3372,7 +3372,7 @@
           "temp": 36.5,
           "weight": 66.8,
           "height": 1.44,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3405,9 +3405,9 @@
           "pulse": 60,
           "oximetry": 100,
           "temp": 36.6,
-          "weight": 63.0,
+          "weight": 63,
           "height": 1.59,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3442,7 +3442,7 @@
           "temp": 36.5,
           "weight": 130.1,
           "height": 1.73,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3477,7 +3477,7 @@
           "temp": 36.5,
           "weight": 44.1,
           "height": 1.45,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3512,7 +3512,7 @@
           "temp": 36.6,
           "weight": 66.7,
           "height": 1.42,
-          "glucose": 118.0,
+          "glucose": 118,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3547,7 +3547,7 @@
           "temp": 36.2,
           "weight": 33.5,
           "height": 1.33,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3582,7 +3582,7 @@
           "temp": 36.5,
           "weight": 50.5,
           "height": 1.63,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3615,9 +3615,9 @@
           "pulse": 84,
           "oximetry": 98,
           "temp": 39.4,
-          "weight": 0.0,
-          "height": 0.0,
-          "glucose": 136.0,
+          "weight": 0,
+          "height": 0,
+          "glucose": 136,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3651,8 +3651,8 @@
           "oximetry": 96,
           "temp": 36.9,
           "weight": 11.5,
-          "height": 77.0,
-          "glucose": 0.0,
+          "height": 77,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3687,7 +3687,7 @@
           "temp": 36.2,
           "weight": 25.6,
           "height": 1.22,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3722,7 +3722,7 @@
           "temp": 36.2,
           "weight": 63.6,
           "height": 1.59,
-          "glucose": 0.0,
+          "glucose": 0,
           "notes": "Signos vitales registrados en la migración de base de datos"
         }
       ],
@@ -3742,8 +3742,8 @@
       "category": "Farmacia",
       "stock": 150,
       "minStock": 10,
-      "costPrice": 15.0,
-      "price": 21.0,
+      "costPrice": 15,
+      "price": 21,
       "lote": "L-MED-1001",
       "vencimiento": "2027-12-31",
       "status": "OK",
@@ -3757,8 +3757,8 @@
       "category": "Farmacia",
       "stock": 35,
       "minStock": 10,
-      "costPrice": 15.0,
-      "price": 21.0,
+      "costPrice": 15,
+      "price": 21,
       "lote": "L-MED-1002",
       "vencimiento": "2027-05-15",
       "status": "OK",
@@ -3772,8 +3772,8 @@
       "category": "Farmacia",
       "stock": 180,
       "minStock": 10,
-      "costPrice": 15.0,
-      "price": 21.0,
+      "costPrice": 15,
+      "price": 21,
       "lote": "L-MED-1003",
       "vencimiento": "2027-10-10",
       "status": "OK",
@@ -3787,8 +3787,8 @@
       "category": "Farmacia",
       "stock": 80,
       "minStock": 10,
-      "costPrice": 15.0,
-      "price": 21.0,
+      "costPrice": 15,
+      "price": 21,
       "lote": "L-MED-1004",
       "vencimiento": "2026-11-20",
       "status": "OK",
@@ -3802,8 +3802,8 @@
       "category": "Farmacia",
       "stock": 90,
       "minStock": 10,
-      "costPrice": 15.0,
-      "price": 21.0,
+      "costPrice": 15,
+      "price": 21,
       "lote": "L-MED-1005",
       "vencimiento": "2026-09-30",
       "status": "OK",
@@ -3817,8 +3817,8 @@
       "category": "Farmacia",
       "stock": 250,
       "minStock": 10,
-      "costPrice": 15.0,
-      "price": 21.0,
+      "costPrice": 15,
+      "price": 21,
       "lote": "L-MED-1006",
       "vencimiento": "2028-02-28",
       "status": "OK",
@@ -3832,8 +3832,8 @@
       "category": "Farmacia",
       "stock": 300,
       "minStock": 10,
-      "costPrice": 15.0,
-      "price": 21.0,
+      "costPrice": 15,
+      "price": 21,
       "lote": "L-MED-1007",
       "vencimiento": "2028-06-30",
       "status": "OK",
@@ -3847,8 +3847,8 @@
       "category": "Farmacia",
       "stock": 60,
       "minStock": 10,
-      "costPrice": 15.0,
-      "price": 21.0,
+      "costPrice": 15,
+      "price": 21,
       "lote": "L-MED-1008",
       "vencimiento": "2027-04-15",
       "status": "OK",
@@ -3862,8 +3862,8 @@
       "category": "Farmacia",
       "stock": 220,
       "minStock": 10,
-      "costPrice": 15.0,
-      "price": 21.0,
+      "costPrice": 15,
+      "price": 21,
       "lote": "L-MED-1009",
       "vencimiento": "2027-08-30",
       "status": "OK",
@@ -3877,8 +3877,8 @@
       "category": "Farmacia",
       "stock": 15,
       "minStock": 10,
-      "costPrice": 15.0,
-      "price": 21.0,
+      "costPrice": 15,
+      "price": 21,
       "lote": "L-MED-1010",
       "vencimiento": "2027-03-25",
       "status": "OK",
@@ -3892,8 +3892,8 @@
       "category": "Farmacia",
       "stock": 120,
       "minStock": 10,
-      "costPrice": 15.0,
-      "price": 21.0,
+      "costPrice": 15,
+      "price": 21,
       "lote": "L-MED-1011",
       "vencimiento": "2028-01-20",
       "status": "OK",
@@ -3907,8 +3907,8 @@
       "category": "Farmacia",
       "stock": 70,
       "minStock": 10,
-      "costPrice": 15.0,
-      "price": 21.0,
+      "costPrice": 15,
+      "price": 21,
       "lote": "L-MED-1012",
       "vencimiento": "2026-10-05",
       "status": "OK",
@@ -3922,7 +3922,7 @@
       "category": "Bodega General",
       "stock": 200,
       "minStock": 20,
-      "costPrice": 25.0,
+      "costPrice": 25,
       "price": 31.25,
       "lote": "L-MED-1013",
       "vencimiento": "2027-12-31",
@@ -3937,7 +3937,7 @@
       "category": "Bodega General",
       "stock": 15,
       "minStock": 20,
-      "costPrice": 25.0,
+      "costPrice": 25,
       "price": 31.25,
       "lote": "L-MED-1014",
       "vencimiento": "2027-12-31",
@@ -3952,7 +3952,7 @@
       "category": "Bodega General",
       "stock": 500,
       "minStock": 20,
-      "costPrice": 25.0,
+      "costPrice": 25,
       "price": 31.25,
       "lote": "L-MED-1015",
       "vencimiento": "2027-12-31",
@@ -3967,7 +3967,7 @@
       "category": "Bodega General",
       "stock": 8,
       "minStock": 20,
-      "costPrice": 25.0,
+      "costPrice": 25,
       "price": 31.25,
       "lote": "L-MED-1016",
       "vencimiento": "2027-12-31",
@@ -3988,7 +3988,7 @@
       "specialty": "Medicina General",
       "reason": "Chequeo General Preventivo",
       "status": "Confirmada",
-      "cost": 250.0
+      "cost": 250
     },
     {
       "id": "CIT-0002",
@@ -4001,7 +4001,7 @@
       "specialty": "Medicina General",
       "reason": "Consulta Cardiología por Hipertensión",
       "status": "Completada",
-      "cost": 250.0
+      "cost": 250
     },
     {
       "id": "CIT-0003",
@@ -4014,7 +4014,7 @@
       "specialty": "Medicina General",
       "reason": "Dolor Abdominal Agudo",
       "status": "En Espera",
-      "cost": 250.0
+      "cost": 250
     },
     {
       "id": "CIT-0004",
@@ -4027,7 +4027,7 @@
       "specialty": "Medicina General",
       "reason": "Control Postoperatorio",
       "status": "Completada",
-      "cost": 250.0
+      "cost": 250
     },
     {
       "id": "CIT-0005",
@@ -4040,7 +4040,7 @@
       "specialty": "Medicina General",
       "reason": "Evaluación Pediatría",
       "status": "Cancelada",
-      "cost": 250.0
+      "cost": 250
     },
     {
       "id": "CIT-0006",
@@ -4053,7 +4053,7 @@
       "specialty": "Medicina Interna",
       "reason": "Dermatitis y Alergia Cutánea",
       "status": "Confirmada",
-      "cost": 300.0
+      "cost": 300
     },
     {
       "id": "CIT-0007",
@@ -4066,7 +4066,7 @@
       "specialty": "Medicina Interna",
       "reason": "Dolor Lumbar Crónico",
       "status": "Completada",
-      "cost": 300.0
+      "cost": 300
     },
     {
       "id": "CIT-0008",
@@ -4079,7 +4079,7 @@
       "specialty": "Medicina Interna",
       "reason": "Evaluación Oftalmológica",
       "status": "En Espera",
-      "cost": 300.0
+      "cost": 300
     },
     {
       "id": "CIT-0009",
@@ -4092,7 +4092,7 @@
       "specialty": "Medicina General",
       "reason": "Control de Diabetes Mellitus",
       "status": "Completada",
-      "cost": 250.0
+      "cost": 250
     },
     {
       "id": "CIT-0010",
@@ -4105,7 +4105,7 @@
       "specialty": "Medicina General",
       "reason": "Chequeo General Preventivo",
       "status": "Cancelada",
-      "cost": 250.0
+      "cost": 250
     },
     {
       "id": "CIT-0011",
@@ -4118,7 +4118,7 @@
       "specialty": "Medicina General",
       "reason": "Consulta Cardiología por Hipertensión",
       "status": "Confirmada",
-      "cost": 250.0
+      "cost": 250
     },
     {
       "id": "CIT-0012",
@@ -4131,7 +4131,7 @@
       "specialty": "Medicina General",
       "reason": "Dolor Abdominal Agudo",
       "status": "Completada",
-      "cost": 250.0
+      "cost": 250
     },
     {
       "id": "CIT-0013",
@@ -4144,7 +4144,7 @@
       "specialty": "Medicina General",
       "reason": "Control Postoperatorio",
       "status": "En Espera",
-      "cost": 250.0
+      "cost": 250
     },
     {
       "id": "CIT-0014",
@@ -4157,7 +4157,7 @@
       "specialty": "Medicina Interna",
       "reason": "Evaluación Pediatría",
       "status": "Completada",
-      "cost": 300.0
+      "cost": 300
     },
     {
       "id": "CIT-0015",
@@ -4170,7 +4170,7 @@
       "specialty": "Medicina Interna",
       "reason": "Dermatitis y Alergia Cutánea",
       "status": "Cancelada",
-      "cost": 300.0
+      "cost": 300
     },
     {
       "id": "CIT-0016",
@@ -4183,7 +4183,7 @@
       "specialty": "Medicina Interna",
       "reason": "Dolor Lumbar Crónico",
       "status": "Confirmada",
-      "cost": 300.0
+      "cost": 300
     },
     {
       "id": "CIT-0017",
@@ -4196,7 +4196,7 @@
       "specialty": "Medicina General",
       "reason": "Evaluación Oftalmológica",
       "status": "Completada",
-      "cost": 250.0
+      "cost": 250
     },
     {
       "id": "CIT-0018",
@@ -4209,7 +4209,7 @@
       "specialty": "Medicina General",
       "reason": "Control de Diabetes Mellitus",
       "status": "En Espera",
-      "cost": 250.0
+      "cost": 250
     },
     {
       "id": "CIT-0019",
@@ -4222,7 +4222,7 @@
       "specialty": "Medicina General",
       "reason": "Chequeo General Preventivo",
       "status": "Completada",
-      "cost": 250.0
+      "cost": 250
     },
     {
       "id": "CIT-0020",
@@ -4235,7 +4235,7 @@
       "specialty": "Medicina General",
       "reason": "Consulta Cardiología por Hipertensión",
       "status": "Cancelada",
-      "cost": 250.0
+      "cost": 250
     },
     {
       "id": "CIT-0021",
@@ -4248,7 +4248,7 @@
       "specialty": "Medicina General",
       "reason": "Dolor Abdominal Agudo",
       "status": "Confirmada",
-      "cost": 250.0
+      "cost": 250
     },
     {
       "id": "CIT-0022",
@@ -4261,7 +4261,7 @@
       "specialty": "Medicina Interna",
       "reason": "Control Postoperatorio",
       "status": "Completada",
-      "cost": 300.0
+      "cost": 300
     },
     {
       "id": "CIT-0023",
@@ -4274,7 +4274,7 @@
       "specialty": "Medicina Interna",
       "reason": "Evaluación Pediatría",
       "status": "En Espera",
-      "cost": 300.0
+      "cost": 300
     },
     {
       "id": "CIT-0024",
@@ -4287,7 +4287,7 @@
       "specialty": "Medicina Interna",
       "reason": "Dermatitis y Alergia Cutánea",
       "status": "Completada",
-      "cost": 300.0
+      "cost": 300
     },
     {
       "id": "CIT-0025",
@@ -4300,7 +4300,7 @@
       "specialty": "Medicina General",
       "reason": "Dolor Lumbar Crónico",
       "status": "Cancelada",
-      "cost": 250.0
+      "cost": 250
     }
   ],
   "pharmacySales": [
@@ -4309,7 +4309,7 @@
       "date": "03/07/2026",
       "type": "receta",
       "patientName": "LIAM ADAN RUIZ LOPEZ",
-      "total": 476.0,
+      "total": 476,
       "items": [
         {
           "name": "Consulta Médica de Especialidad",
@@ -4322,7 +4322,7 @@
       "date": "04/07/2026",
       "type": "receta",
       "patientName": "GUADALUPE HERNANDEZ MELENDREZ",
-      "total": 560.0,
+      "total": 560,
       "items": [
         {
           "name": "Honorarios Médicos Quirúrgicos",
@@ -4335,7 +4335,7 @@
       "date": "05/07/2026",
       "type": "receta",
       "patientName": "HEREDIA VALENTINA PEREZ RAMIREZ",
-      "total": 644.0,
+      "total": 644,
       "items": [
         {
           "name": "Servicio de Hospitalización y Encamamiento",
@@ -4348,7 +4348,7 @@
       "date": "06/07/2026",
       "type": "receta",
       "patientName": "LIDIA MARISOL XOL COC",
-      "total": 728.0,
+      "total": 728,
       "items": [
         {
           "name": "Venta de Medicamentos de Farmacia",
@@ -4361,7 +4361,7 @@
       "date": "07/07/2026",
       "type": "receta",
       "patientName": "DARLYN ANYELITA CUZ COC",
-      "total": 812.0,
+      "total": 812,
       "items": [
         {
           "name": "Estudios de Laboratorio Clínico",
@@ -4374,7 +4374,7 @@
       "date": "08/07/2026",
       "type": "receta",
       "patientName": "JOSUE ALBERTO SOLA FLORIAN",
-      "total": 896.0,
+      "total": 896,
       "items": [
         {
           "name": "Estudios de Imagenología / RX",
@@ -4387,7 +4387,7 @@
       "date": "09/07/2026",
       "type": "receta",
       "patientName": "IRBEN ORLANDO MAZARIEGOS",
-      "total": 980.0,
+      "total": 980,
       "items": [
         {
           "name": "Consulta Médica de Especialidad",
@@ -4400,7 +4400,7 @@
       "date": "10/07/2026",
       "type": "receta",
       "patientName": "BRAYAN ANDRES FERNANDEZ",
-      "total": 1064.0,
+      "total": 1064,
       "items": [
         {
           "name": "Honorarios Médicos Quirúrgicos",
@@ -4413,7 +4413,7 @@
       "date": "11/07/2026",
       "type": "receta",
       "patientName": "FEDERICO TIUL COC",
-      "total": 1148.0,
+      "total": 1148,
       "items": [
         {
           "name": "Servicio de Hospitalización y Encamamiento",
@@ -4426,7 +4426,7 @@
       "date": "12/07/2026",
       "type": "receta",
       "patientName": "BLANCA LUZ ARANA",
-      "total": 1232.0,
+      "total": 1232,
       "items": [
         {
           "name": "Venta de Medicamentos de Farmacia",
@@ -4439,7 +4439,7 @@
       "date": "13/07/2026",
       "type": "receta",
       "patientName": "JUAN CHOC CAAL",
-      "total": 1316.0,
+      "total": 1316,
       "items": [
         {
           "name": "Estudios de Laboratorio Clínico",
@@ -4452,7 +4452,7 @@
       "date": "14/07/2026",
       "type": "receta",
       "patientName": "MATILDE CHUB MAAS",
-      "total": 1400.0,
+      "total": 1400,
       "items": [
         {
           "name": "Estudios de Imagenología / RX",
@@ -4465,7 +4465,7 @@
       "date": "15/07/2026",
       "type": "receta",
       "patientName": "DILAN MARCELINONAJARRO TIUL",
-      "total": 1484.0,
+      "total": 1484,
       "items": [
         {
           "name": "Consulta Médica de Especialidad",
@@ -4478,7 +4478,7 @@
       "date": "16/07/2026",
       "type": "receta",
       "patientName": "GENESIS CAMILA MAQUIN",
-      "total": 1568.0,
+      "total": 1568,
       "items": [
         {
           "name": "Honorarios Médicos Quirúrgicos",
@@ -4491,7 +4491,7 @@
       "date": "17/07/2026",
       "type": "receta",
       "patientName": "JULIANA CHUBAJÀ RODRÌGUEZ",
-      "total": 1652.0,
+      "total": 1652,
       "items": [
         {
           "name": "Servicio de Hospitalización y Encamamiento",
@@ -4504,7 +4504,7 @@
       "date": "18/07/2026",
       "type": "receta",
       "patientName": "JOSE MAURICIO CAAL MAAZ",
-      "total": 1736.0,
+      "total": 1736,
       "items": [
         {
           "name": "Venta de Medicamentos de Farmacia",
@@ -4517,7 +4517,7 @@
       "date": "19/07/2026",
       "type": "receta",
       "patientName": "WENDY MARIBEL TOC CHOCOOJ",
-      "total": 1820.0,
+      "total": 1820,
       "items": [
         {
           "name": "Estudios de Laboratorio Clínico",
@@ -4530,7 +4530,7 @@
       "date": "20/07/2026",
       "type": "receta",
       "patientName": "CARLOS HUMBERTO DEBROY CADENAS",
-      "total": 1904.0,
+      "total": 1904,
       "items": [
         {
           "name": "Estudios de Imagenología / RX",
@@ -4546,31 +4546,31 @@
       "id": "l-1",
       "name": "Hematología Completa",
       "category": "Hematología",
-      "price": 125.0
+      "price": 125
     },
     {
       "id": "l-2",
       "name": "Perfil Lipídico",
       "category": "Química Clínica",
-      "price": 180.0
+      "price": 180
     },
     {
       "id": "l-3",
       "name": "Glucosa en Ayunas",
       "category": "Química Clínica",
-      "price": 75.0
+      "price": 75
     },
     {
       "id": "l-4",
       "name": "Examen General de Orina",
       "category": "Uroanálisis",
-      "price": 60.0
+      "price": 60
     },
     {
       "id": "l-5",
       "name": "Prueba PCR COVID-19",
       "category": "Microbiología",
-      "price": 250.0
+      "price": 250
     }
   ],
   "imagingStudies": [
@@ -4578,25 +4578,25 @@
       "id": "i-1",
       "name": "Radiografía de Tórax AP/PA",
       "category": "Rayos X",
-      "price": 250.0
+      "price": 250
     },
     {
       "id": "i-2",
       "name": "Ultrasonido Abdominal Superior",
       "category": "Ultrasonografía",
-      "price": 450.0
+      "price": 450
     },
     {
       "id": "i-3",
       "name": "Tomografía Axial Computarizada (TAC)",
       "category": "Tomografía",
-      "price": 1200.0
+      "price": 1200
     },
     {
       "id": "i-4",
       "name": "Resonancia Magnética Cerebral",
       "category": "Resonancia",
-      "price": 2200.0
+      "price": 2200
     }
   ],
   "consultationTypes": [
@@ -4604,19 +4604,19 @@
       "id": "c-1",
       "name": "Consulta General Preventiva",
       "specialty": "Medicina General",
-      "price": 150.0
+      "price": 150
     },
     {
       "id": "c-2",
       "name": "Consulta Especializada Hospitalaria",
       "specialty": "Especialista",
-      "price": 250.0
+      "price": 250
     },
     {
       "id": "c-3",
       "name": "Consulta de Control Post-Operatorio",
       "specialty": "Control",
-      "price": 100.0
+      "price": 100
     }
   ]
 }
