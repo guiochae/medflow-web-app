@@ -17,6 +17,19 @@ function classifyLabResult(valueStr, normalStr) {
   
   const cleanVal = String(valueStr).replace(',', '.');
   const val = parseFloat(cleanVal.replace(/[^\d\.]/g, ''));
+
+  // Regla de Negocio: Helicobacter pylori positivo si > 1
+  const normNormal = String(normalStr || '').toLowerCase();
+  if (normNormal.includes('helicobacter') || normNormal.includes('h. pylori') || normNormal.includes('> 1') || normNormal.includes('< 1')) {
+    if (!isNaN(val)) {
+      if (val > 1) {
+        return { color: '#d32f2f', label: 'Positivo' }; // Rojo
+      } else {
+        return { color: '#2e7d32', label: 'Negativo' }; // Verde
+      }
+    }
+  }
+  
   if (isNaN(val)) {
     const vStr = String(valueStr).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
     if (vStr.includes('negativo') || vStr === 'no reactivo' || vStr === 'normal') {
@@ -228,13 +241,27 @@ const LAB_STUDIES_CATALOG = [
     ]
   },
   {
-    name: "Coprológico General",
+    name: "Heces Completas",
     category: "Coproanálisis y Uroanálisis",
     parameters: [
-      { name: "Color", unit: "", normal: "Marrón" },
-      { name: "Consistencia", unit: "", normal: "Formada" },
-      { name: "Parásitos", unit: "", normal: "No se observan" },
-      { name: "Flora bacteriana", unit: "", normal: "Normal" }
+      { name: "Color", unit: "", normal: "Café / Pardo" },
+      { name: "Aspecto", unit: "", normal: "Formado / Pastoso" },
+      { name: "Restos alimenticios", unit: "", normal: "Escasos a No se observan" },
+      { name: "Moco", unit: "", normal: "Negativo (No se observa)" },
+      { name: "Sangre", unit: "", normal: "Negativo (No se observa)" },
+      { name: "Leucocitos", unit: "x campo", normal: "0 – 2 por campo / No se observan" },
+      { name: "Eritrocitos", unit: "x campo", normal: "0 – 2 por campo / No se observan" },
+      { name: "Grasas", unit: "", normal: "Escasas o No se observan" },
+      { name: "Almidón", unit: "", normal: "Escaso o No se observa" },
+      { name: "Levaduras", unit: "", normal: "No se observan" },
+      { name: "Fibras musculares", unit: "", normal: "Escasas o No se observan" },
+      { name: "Células Vegetales", unit: "", normal: "Escasas a moderadas" },
+      { name: "Jabones", unit: "", normal: "Escasos" },
+      { name: "Bacterias", unit: "", normal: "Flora normal (Regular / ++)" },
+      { name: "Quistes", unit: "", normal: "No se observan (Negativo)" },
+      { name: "Trofozoítos", unit: "", normal: "No se observan (Negativo)" },
+      { name: "Huevos", unit: "", normal: "No se observan (Negativo)" },
+      { name: "Helicobacter pylori", unit: "Índice / Ratio", normal: "< 1 Negativo; > 1 Positivo" }
     ]
   },
   {
@@ -2137,6 +2164,47 @@ function openOrderDetailsModal(order, patientObj) {
 }
 
 // --- MODAL GLOBAL DE INGRESO DE RESULTADOS ---
+function getCoprologyOptions(paramName) {
+  const normName = String(paramName || '').trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (normName === "COLOR") {
+    return ["Café", "Amarillo", "Verde", "Negro", "Acólico"];
+  }
+  if (normName === "ASPECTO") {
+    return ["Blando", "Formado", "Pastoso", "Líquido", "Semilíquido"];
+  }
+  if (normName === "RESTOS ALIMENTICIOS" || normName === "RESTOS ALIMENTARIOS") {
+    return ["No se observa", "Escasa (+)", "Regular (++)", "Abundante (+++)"];
+  }
+  if (normName === "MOCO") {
+    return ["No se observa", "Escaso (+)", "Moderado (++)", "Abundante (+++)"];
+  }
+  if (normName === "SANGRE") {
+    return ["No se observa", "Escasa (+)", "Moderada (++)", "Abundante (+++)"];
+  }
+  if (normName === "GRASAS") {
+    return ["No se observa", "Escasa (+)", "Regular (++)", "Abundante (+++)"];
+  }
+  if (normName === "ALMIDON" || normName === "ALMIDON Y GRASAS") {
+    return ["No se observa", "Escaso (+)", "Regular (++)", "Abundante (+++)"];
+  }
+  if (normName === "LEVADURAS") {
+    return ["No se observa", "Escasas (+)", "Abundantes (+++)"];
+  }
+  if (normName === "FIBRAS MUSCULARES") {
+    return ["No se observa", "Escasa (+)", "Regular (++)", "Abundante (+++)"];
+  }
+  if (normName === "CELULAS VEGETALES") {
+    return ["No se observa", "Escasa (+)", "Regular (++)", "Abundante (+++)"];
+  }
+  if (normName === "JABONES") {
+    return ["No se observa", "Escasa (+)", "Regular (++)", "Abundante (+++)"];
+  }
+  if (normName === "BACTERIAS") {
+    return ["Escasa (+)", "Regular (++)", "Abundante (+++)"];
+  }
+  return null;
+}
+
 function openResultsModal(study, customPatient, onSaveCallback) {
   const resultsModal = document.getElementById('results-entry-modal');
   const resultsTitle = document.getElementById('results-modal-title');
@@ -2151,6 +2219,8 @@ function openResultsModal(study, customPatient, onSaveCallback) {
   
   const stateObj = getAppState();
   const cloudCatalog = stateObj.laboratoryTests || [];
+
+  const isCoprologia = normalizeString(study.name).includes('heces') || normalizeString(study.name).includes('copro');
 
   const tableRowsHtml = (study.parameters || []).map((param, index) => {
     let defaultUnit = param.unit && param.unit !== 'N/A' ? param.unit : '';
@@ -2190,14 +2260,27 @@ function openResultsModal(study, customPatient, onSaveCallback) {
     if (defaultUnit === 'N/A') defaultUnit = '';
     if (defaultNormal === 'N/A') defaultNormal = '';
 
-    return `
-      <tr style="border-bottom: 1px solid var(--border-color);">
-        <td style="padding: 10px 12px;">
-          <strong style="color: var(--text-primary); font-size: 0.9rem;">${param.name}</strong>
-          ${param.studyName && param.studyName !== param.name ? `<div style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal; margin-top: 2px;">🧪 ${param.studyName}</div>` : ''}
-        </td>
-        <td style="padding: 8px 12px;">
-          <input type="text" name="param-val-${index}" value="${param.value || ''}" required placeholder="Ej. 110 o Negativo" style="
+    // Renderizado del campo de resultado
+    let valueFieldHtml = '';
+    const options = getCoprologyOptions(param.name);
+    if (options && isCoprologia) {
+      const isSelected = options.includes(param.value);
+      valueFieldHtml = `
+        <div style="display: flex; gap: 5px; flex-direction: column;">
+          <select onchange="const input = this.nextElementSibling; if (this.value) { input.value = this.value; input.style.display = 'none'; } else { input.value = ''; input.style.display = 'block'; input.focus(); }" style="
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg-card, #1f2937);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: var(--radius-sm);
+            font-weight: bold;
+          ">
+            <option value="">-- Seleccione una opción o escriba --</option>
+            ${options.map(o => `<option value="${o}" ${param.value === o ? 'selected' : ''}>${o}</option>`).join('')}
+            <option value="" ${param.value && !isSelected ? 'selected' : ''}>Otro (Escribir)...</option>
+          </select>
+          <input type="text" name="param-val-${index}" value="${param.value || ''}" required placeholder="Resultado..." style="
             width: 100%;
             padding: 8px 12px;
             background: var(--bg-card, rgba(255,255,255,0.05));
@@ -2205,26 +2288,57 @@ function openResultsModal(study, customPatient, onSaveCallback) {
             color: var(--text-primary);
             border-radius: var(--radius-sm);
             font-weight: 700;
+            display: ${param.value && !isSelected ? 'block' : (param.value ? 'none' : 'block')};
           ">
+        </div>
+      `;
+    } else {
+      valueFieldHtml = `
+        <input type="text" name="param-val-${index}" value="${param.value || ''}" required placeholder="Ej. 110 o Negativo" style="
+          width: 100%;
+          padding: 8px 12px;
+          background: var(--bg-card, rgba(255,255,255,0.05));
+          border: 1px solid var(--border-color);
+          color: var(--text-primary);
+          border-radius: var(--radius-sm);
+          font-weight: 700;
+        ">
+      `;
+    }
+
+    // Si es coprología, las unidades y valores de referencia son fijos (readonly)
+    const extraAttrs = isCoprologia ? 'readonly tabindex="-1"' : '';
+    const extraStyles = isCoprologia ? 'background: rgba(255,255,255,0.02); color: var(--text-muted); pointer-events: none;' : '';
+
+    return `
+      <tr style="border-bottom: 1px solid var(--border-color);">
+        <td style="padding: 10px 12px;">
+          <strong style="color: var(--text-primary); font-size: 0.9rem;">${param.name}</strong>
+          ${param.studyName && param.studyName !== param.name ? `<div style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal; margin-top: 2px;">🧪 ${param.studyName}</div>` : ''}
         </td>
         <td style="padding: 8px 12px;">
-          <input type="text" name="param-unit-${index}" value="${defaultUnit}" placeholder="Ninguna" style="
+          ${valueFieldHtml}
+        </td>
+        <td style="padding: 8px 12px;">
+          <input type="text" name="param-unit-${index}" value="${defaultUnit}" ${extraAttrs} placeholder="Ninguna" style="
             width: 100%;
             padding: 8px 12px;
             background: var(--bg-card, rgba(255,255,255,0.05));
             border: 1px solid var(--border-color);
             color: var(--text-muted);
             border-radius: var(--radius-sm);
+            ${extraStyles}
           ">
         </td>
         <td style="padding: 8px 12px;">
-          <input type="text" name="param-ref-${index}" value="${defaultNormal}" placeholder="Estable / Normal" style="
+          <input type="text" name="param-ref-${index}" value="${defaultNormal}" ${extraAttrs} placeholder="Estable / Normal" style="
             width: 100%;
             padding: 8px 12px;
             background: var(--bg-card, rgba(255,255,255,0.05));
             border: 1px solid var(--border-color);
             color: var(--text-muted);
             border-radius: var(--radius-sm);
+            ${extraStyles}
           ">
         </td>
       </tr>

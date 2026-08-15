@@ -4572,6 +4572,106 @@
       "name": "Prueba PCR COVID-19",
       "category": "Microbiología",
       "price": 250
+    },
+    {
+      "id": "l-heces-completas",
+      "name": "Heces Completas",
+      "category": "Coprología",
+      "price": 50,
+      "unit": "N/A",
+      "reference": "N/A",
+      "parameters": [
+        {
+          "name": "Color",
+          "unit": "",
+          "normal": "Café / Pardo"
+        },
+        {
+          "name": "Aspecto",
+          "unit": "",
+          "normal": "Formado / Pastoso"
+        },
+        {
+          "name": "Restos alimenticios",
+          "unit": "",
+          "normal": "Escasos a No se observan"
+        },
+        {
+          "name": "Moco",
+          "unit": "",
+          "normal": "Negativo (No se observa)"
+        },
+        {
+          "name": "Sangre",
+          "unit": "",
+          "normal": "Negativo (No se observa)"
+        },
+        {
+          "name": "Leucocitos",
+          "unit": "x campo",
+          "normal": "0 – 2 por campo / No se observan"
+        },
+        {
+          "name": "Eritrocitos",
+          "unit": "x campo",
+          "normal": "0 – 2 por campo / No se observan"
+        },
+        {
+          "name": "Grasas",
+          "unit": "",
+          "normal": "Escasas o No se observan"
+        },
+        {
+          "name": "Almidón",
+          "unit": "",
+          "normal": "Escaso o No se observa"
+        },
+        {
+          "name": "Levaduras",
+          "unit": "",
+          "normal": "No se observan"
+        },
+        {
+          "name": "Fibras musculares",
+          "unit": "",
+          "normal": "Escasas o No se observan"
+        },
+        {
+          "name": "Células Vegetales",
+          "unit": "",
+          "normal": "Escasas a moderadas"
+        },
+        {
+          "name": "Jabones",
+          "unit": "",
+          "normal": "Escasos"
+        },
+        {
+          "name": "Bacterias",
+          "unit": "",
+          "normal": "Flora normal (Regular / ++)"
+        },
+        {
+          "name": "Quistes",
+          "unit": "",
+          "normal": "No se observan (Negativo)"
+        },
+        {
+          "name": "Trofozoítos",
+          "unit": "",
+          "normal": "No se observan (Negativo)"
+        },
+        {
+          "name": "Huevos",
+          "unit": "",
+          "normal": "No se observan (Negativo)"
+        },
+        {
+          "name": "Helicobacter pylori",
+          "unit": "Índice / Ratio",
+          "normal": "< 1 Negativo; > 1 Positivo"
+        }
+      ]
     }
   ],
   "imagingStudies": [
