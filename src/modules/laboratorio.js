@@ -241,6 +241,30 @@ const LAB_STUDIES_CATALOG = [
     ]
   },
   {
+    name: "HECES",
+    category: "Coproanálisis y Uroanálisis",
+    parameters: [
+      { name: "Color", unit: "", normal: "Café / Pardo" },
+      { name: "Aspecto", unit: "", normal: "Formado / Pastoso" },
+      { name: "Restos alimenticios", unit: "", normal: "Escasos a No se observan" },
+      { name: "Moco", unit: "", normal: "Negativo (No se observa)" },
+      { name: "Sangre", unit: "", normal: "Negativo (No se observa)" },
+      { name: "Leucocitos", unit: "x campo", normal: "0 – 2 por campo / No se observan" },
+      { name: "Eritrocitos", unit: "x campo", normal: "0 – 2 por campo / No se observan" },
+      { name: "Grasas", unit: "", normal: "Escasas o No se observan" },
+      { name: "Almidón", unit: "", normal: "Escaso o No se observa" },
+      { name: "Levaduras", unit: "", normal: "No se observan" },
+      { name: "Fibras musculares", unit: "", normal: "Escasas o No se observan" },
+      { name: "Células Vegetales", unit: "", normal: "Escasas a moderadas" },
+      { name: "Jabones", unit: "", normal: "Escasos" },
+      { name: "Bacterias", unit: "", normal: "Flora normal (Regular / ++)" },
+      { name: "Quistes", unit: "", normal: "No se observan (Negativo)" },
+      { name: "Trofozoítos", unit: "", normal: "No se observan (Negativo)" },
+      { name: "Huevos", unit: "", normal: "No se observan (Negativo)" },
+      { name: "Helicobacter pylori", unit: "Índice / Ratio", normal: "< 1 Negativo; > 1 Positivo" }
+    ]
+  },
+  {
     name: "Heces Completas",
     category: "Coproanálisis y Uroanálisis",
     parameters: [
@@ -2215,12 +2239,44 @@ function openResultsModal(study, customPatient, onSaveCallback) {
 
   if (!resultsModal || !resultsBody) return;
 
+  const normStudyName = normalizeString(study.name);
+  const isCoprologia = normStudyName.includes('heces') || normStudyName.includes('copro');
+
+  // Auto-expandir estudios de Coprología/Heces si tienen menos de 18 parámetros
+  if (isCoprologia) {
+    if (!study.parameters || study.parameters.length < 18) {
+      const defaultCoprology = LAB_STUDIES_CATALOG.find(c => {
+        const cName = normalizeString(c.name);
+        return cName === 'heces' || cName === 'heces completas';
+      });
+      if (defaultCoprology && defaultCoprology.parameters) {
+        study.parameters = defaultCoprology.parameters.map(p => ({
+          studyName: study.name,
+          name: p.name,
+          unit: p.unit,
+          normal: p.normal,
+          value: ''
+        }));
+        
+        if (customPatient) {
+          const stateObj = getAppState();
+          const pObj = stateObj.patients.find(p => p.id === customPatient.id);
+          if (pObj) {
+            const sObj = pObj.localLabs.find(s => s.id === study.id);
+            if (sObj) {
+              sObj.parameters = study.parameters;
+              saveAppState(stateObj);
+            }
+          }
+        }
+      }
+    }
+  }
+
   resultsTitle.textContent = `Ingreso de Resultados: ${study.name}`;
   
   const stateObj = getAppState();
   const cloudCatalog = stateObj.laboratoryTests || [];
-
-  const isCoprologia = normalizeString(study.name).includes('heces') || normalizeString(study.name).includes('copro');
 
   const tableRowsHtml = (study.parameters || []).map((param, index) => {
     let defaultUnit = param.unit && param.unit !== 'N/A' ? param.unit : '';
