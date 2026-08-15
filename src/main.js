@@ -207,6 +207,7 @@ export function resetToOfficialDatabase() {
 
 // Guardar cambios directamente en Firestore y sincronizar estado
 export async function saveAppState(state) {
+  migrateLaboratoryTestsCategories(state);
   updateSidebarInfo(state);
 
   // Sincronizar de inmediato el estado en memoria para reactividad local offline
@@ -1012,7 +1013,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 1. Iniciar Escuchadores en Tiempo Real de Firebase Firestore
   initRealtimeFirestore((initialState) => {
-    migrateLaboratoryTestsCategories(initialState);
+    const wasModified = migrateLaboratoryTestsCategories(initialState);
+    if (wasModified) {
+      saveAppState(initialState);
+    }
     lastSyncedState = JSON.parse(JSON.stringify(initialState));
     // Suscribir render a cambios en tiempo real
     subscribeToStateUpdates((updatedState) => {
@@ -1326,7 +1330,7 @@ export function migrateLaboratoryTestsCategories(state) {
 
   if (modified) {
     console.log("Categorías de exámenes de laboratorio actualizadas en estado.");
-    saveAppState(state);
   }
+  return modified;
 }
 
