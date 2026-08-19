@@ -1202,6 +1202,81 @@ tbody tr:hover {
     max-width: 100% !important;
     width: 100% !important;
   }
+
+  @page {
+    size: letter;
+    margin: 15mm;
+  }
+
+  /* Ocultar encabezado y pie de página estándar en impresión */
+  .prescription-preview-header,
+  .prescription-preview-footer {
+    display: none !important;
+  }
+
+  /* Mostrar los espaciadores en la impresión */
+  .prescription-header-spacer {
+    display: block !important;
+    height: 130px !important;
+  }
+  .prescription-footer-spacer {
+    display: block !important;
+    height: 130px !important;
+  }
+
+  /* Contenedores fijos durante la impresión */
+  .prescription-fixed-header {
+    display: flex !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 130px !important;
+    border-bottom: 2px solid #333 !important;
+    background: white !important;
+    z-index: 9999;
+    box-sizing: border-box;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .prescription-fixed-footer {
+    display: flex !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 130px !important;
+    background: white !important;
+    z-index: 9999;
+    box-sizing: border-box;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    text-align: center !important;
+    padding-bottom: 10px !important;
+  }
+
+  .prescription-page-counter-print {
+    display: block !important;
+    font-size: 0.75rem !important;
+    color: #333 !important;
+    margin-top: 6px !important;
+  }
+
+  .prescription-page-counter-print::after {
+    counter-increment: page;
+    content: "Hoja " counter(page);
+  }
+}
+
+/* Ocultar elementos de impresión fijos y espaciadores en pantalla */
+.prescription-fixed-header,
+.prescription-fixed-footer,
+.prescription-header-spacer,
+.prescription-footer-spacer,
+.prescription-page-counter-print {
+  display: none;
 }
 
 /* Login styles */

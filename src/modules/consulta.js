@@ -1989,9 +1989,66 @@ function generateMedicalOrder(type) {
   modalTitle.textContent = subTitleText;
   printActionBtn.innerHTML = '<span>🖨️</span> Imprimir Orden';
 
+  // Renders the prescription in print-optimized markup with multi-page table structure
   previewContainer.innerHTML = `
     <div class="prescription-preview-box">
-      <!-- Encabezado de la clínica -->
+      
+      <!-- Tabla que envuelve el contenido en el flujo de impresión -->
+      <table style="width: 100%; border-collapse: collapse; background: transparent;">
+        <thead>
+          <tr>
+            <td>
+              <div class="prescription-header-spacer"></div>
+            </td>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="prescription-print-content" style="padding-top: 10px;">
+                <div style="text-align: center; margin: 1rem 0; padding: 6px; background-color: #f4f6f8; border-radius: 6px;">
+                  <h3 style="font-family: var(--font-heading); margin: 0; color: #000; font-size: 1.15rem; letter-spacing: 0.5px;">${titleText}</h3>
+                </div>
+
+                <!-- Información del paciente -->
+                <div class="prescription-preview-patient-info">
+                  <div>
+                    <strong>Paciente:</strong> ${patient.name}<br>
+                    <strong>Edad:</strong> ${age} años | <strong>Género:</strong> ${patient.gender}
+                  </div>
+                  <div style="text-align: right;">
+                    <strong>Fecha:</strong> ${dateFormatted}<br>
+                    <strong>ID Paciente:</strong> ${patient.id}
+                  </div>
+                </div>
+
+                <div style="margin-top: 1.5rem; font-size: 0.95rem; font-weight: 600; color: #111; margin-bottom: 8px;">
+                  Estudios e Indicaciones Solicitadas:
+                </div>
+
+                <table class="prescription-preview-table">
+                  <tbody>
+                    ${itemsHtml}
+                  </tbody>
+                </table>
+
+                <div style="margin-top: 1.5rem; font-size: 0.8rem; color: #555; border-top: 1px dashed #ccc; padding-top: 10px;">
+                  ${footerInstructions}
+                </div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>
+              <div class="prescription-footer-spacer"></div>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <!-- ENCABEZADO NORMAL (Pantalla) -->
       <div class="prescription-preview-header">
         <div>
           <div class="prescription-preview-logo">${clinic.logoText} ${clinic.name}</div>
@@ -2004,42 +2061,37 @@ function generateMedicalOrder(type) {
         </div>
       </div>
 
-      <div style="text-align: center; margin: 1rem 0; padding: 6px; background-color: #f4f6f8; border-radius: 6px;">
-        <h3 style="font-family: var(--font-heading); margin: 0; color: #000; font-size: 1.15rem; letter-spacing: 0.5px;">${titleText}</h3>
-      </div>
-
-      <!-- Información del paciente -->
-      <div class="prescription-preview-patient-info">
-        <div>
-          <strong>Paciente:</strong> ${patient.name}<br>
-          <strong>Edad:</strong> ${age} años | <strong>Género:</strong> ${patient.gender}
-        </div>
-        <div style="text-align: right;">
-          <strong>Fecha:</strong> ${dateFormatted}<br>
-          <strong>ID Paciente:</strong> ${patient.id}
-        </div>
-      </div>
-
-      <div style="margin-top: 1.5rem; font-size: 0.95rem; font-weight: 600; color: #111; margin-bottom: 8px;">
-        Estudios e Indicaciones Solicitadas:
-      </div>
-
-      <table class="prescription-preview-table">
-        <tbody>
-          ${itemsHtml}
-        </tbody>
-      </table>
-
-      <div style="margin-top: 1.5rem; font-size: 0.8rem; color: #555; border-top: 1px dashed #ccc; padding-top: 10px;">
-        ${footerInstructions}
-      </div>
-
-      <!-- Firma del Médico -->
+      <!-- FIRMA NORMAL (Pantalla) -->
       <div class="prescription-preview-footer" style="margin-top: 3.5rem;">
         <div class="prescription-preview-signature-line"></div>
         <div class="prescription-preview-doctor-sign">${doctorObj.name}</div>
         <div class="prescription-preview-license">Colegiado Activo No. ${doctorObj.license || 'N/A'}</div>
       </div>
+
+      <!-- ENCABEZADO FIJO (Impresión - se repite en cada página) -->
+      <div class="prescription-fixed-header">
+        <div style="display: flex; align-items: center; gap: 12px; text-align: left;">
+          <span style="font-size: 1.5rem; margin-right: 6px;">🏥</span>
+          <div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: #111; text-transform: uppercase;">${clinic.name}</div>
+            <div style="font-size: 0.75rem; font-weight: 600; color: #555; margin-top: 2px;">Servicios Médicos de Diagnóstico</div>
+          </div>
+        </div>
+        <div style="text-align: right; font-size: 0.75rem; color: #555;">
+          📍 ${clinic.address}<br>
+          📞 Teléfono: ${clinic.phone}<br>
+          ✉️ Email: ${clinic.email}
+        </div>
+      </div>
+
+      <!-- FIRMA FIJA (Impresión - se repite en cada página al final) -->
+      <div class="prescription-fixed-footer">
+        <div style="width: 200px; border-top: 1px solid #333; margin-bottom: 6px; margin-left: auto; margin-right: auto;"></div>
+        <div style="font-size: 0.85rem; font-weight: 600; color: #111;">Dr. ${doctorObj.name}</div>
+        <div style="font-size: 0.75rem; color: #666;">Colegiado Activo No. ${doctorObj.license || 'N/A'}</div>
+        <div class="prescription-page-counter-print"></div>
+      </div>
+
     </div>
   `;
 
