@@ -102,18 +102,15 @@ export function simulateOnPayrollGenerated(payroll, state) {
   state.administracion_caja = state.administracion_caja || [];
   
   let totalBaseSalary = 0;
-  let totalBonus = 0;
-  let totalIgssLaboral = 0;
+  let totalDiscounts = 0;
   let totalNetSalary = 0;
 
   payroll.employees.forEach(emp => {
     totalBaseSalary += emp.salary;
-    totalBonus += 250; // Bonificación de ley mensual en Guatemala
+    const discount = emp.discount || 0;
+    totalDiscounts += discount;
     
-    const igssLaboral = emp.salary * 0.0483; // 4.83% Retención laboral IGSS
-    totalIgssLaboral += igssLaboral;
-
-    const netSalary = emp.salary + 250 - igssLaboral;
+    const netSalary = emp.netSalary;
     totalNetSalary += netSalary;
 
     // Crear registro individual de pago de sueldo en Caja
@@ -129,25 +126,22 @@ export function simulateOnPayrollGenerated(payroll, state) {
     });
   });
 
-  // 2. Generación automática de Partida Doble en Contabilidad
-  // Carga Patronal del 10.67% IGSS en Guatemala
-  const totalIgssPatronal = totalBaseSalary * 0.1067;
-  
+  // 2. Generación automática de Partida Doble en Contabilidad (Debe = Sueldos, Haber = Descuentos + Cuentas por Pagar)
   const journalEntry = {
     id: 'PART-NOMINA-' + Date.now(),
     date: new Date().toISOString(),
     concept: `Provisión de Nómina Mensual de Empleados - Periodo: ${payroll.month}`,
-    totalDebits: totalBaseSalary + totalBonus + totalIgssPatronal,
-    totalCredits: totalBaseSalary + totalBonus + totalIgssPatronal,
+    totalDebits: totalBaseSalary,
+    totalCredits: totalBaseSalary,
     details: [
-      { account: 'Gastos de Administración (Sueldos)', type: 'Debe', amount: totalBaseSalary },
-      { account: 'Gastos de Administración (Bonificación Incentivo)', type: 'Debe', amount: totalBonus },
-      { account: 'Gastos de Administración (Cuota Patronal IGSS)', type: 'Debe', amount: totalIgssPatronal },
-      { account: 'Retenciones por Pagar (IGSS Laboral)', type: 'Haber', amount: totalIgssLaboral },
-      { account: 'Retenciones por Pagar (IGSS Patronal)', type: 'Haber', amount: totalIgssPatronal },
-      { account: 'Cuentas por Pagar (Nómina Neta)', type: 'Haber', amount: totalNetSalary }
+      { account: 'Gastos de Administración (Sueldos)', type: 'Debe', amount: totalBaseSalary }
     ]
   };
+
+  if (totalDiscounts > 0) {
+    journalEntry.details.push({ account: 'Otros Ingresos (Descuentos a Empleados)', type: 'Haber', amount: totalDiscounts });
+  }
+  journalEntry.details.push({ account: 'Cuentas por Pagar (Nómina Neta)', type: 'Haber', amount: totalNetSalary });
 
   state.administracion_contabilidad = state.administracion_contabilidad || [];
   state.administracion_contabilidad.unshift(journalEntry);

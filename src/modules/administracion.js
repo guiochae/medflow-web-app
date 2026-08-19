@@ -1587,25 +1587,25 @@ function renderRrhhNomina(container, state) {
                 <th style="padding: 6px;">Nombre</th>
                 <th style="padding: 6px;">Puesto</th>
                 <th style="padding: 6px; text-align: right;">Sueldo Base</th>
-                <th style="padding: 6px; text-align: right;">Bono Ley</th>
-                <th style="padding: 6px; text-align: right;">IGSS (4.83%)</th>
+                <th style="padding: 6px; text-align: right; width: 120px;">Descuentos</th>
                 <th style="padding: 6px; text-align: right;">Neto a Pagar</th>
               </tr>
             </thead>
             <tbody>
               ${employees.length === 0 
-                ? `<tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--text-muted); font-style: italic;">No hay colaboradores activos para liquidar nómina.</td></tr>`
+                ? `<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted); font-style: italic;">No hay colaboradores activos para liquidar nómina.</td></tr>`
                 : employees.map(emp => {
-                    const igss = emp.salary * 0.0483;
-                    const net = emp.salary + 250 - igss;
+                    const discount = 0;
+                    const net = emp.salary - discount;
                     return `
                       <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
                         <td style="padding: 6px;"><strong>${emp.name}</strong></td>
                         <td style="padding: 6px; color: var(--text-muted);">${emp.position}</td>
                         <td style="padding: 6px; text-align: right; font-family: var(--font-mono);">Q${parseFloat(emp.salary).toFixed(2)}</td>
-                        <td style="padding: 6px; text-align: right; font-family: var(--font-mono);">Q250.00</td>
-                        <td style="padding: 6px; text-align: right; font-family: var(--font-mono); color: var(--accent-danger);">-Q${igss.toFixed(2)}</td>
-                        <td style="padding: 6px; text-align: right; font-family: var(--font-mono); font-weight: bold; color: var(--accent-secondary);">Q${net.toFixed(2)}</td>
+                        <td style="padding: 6px; text-align: right;">
+                          <input type="number" min="0" value="0.00" step="any" class="payroll-discount-input" data-id="${emp.id}" style="width: 90px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: right;">
+                        </td>
+                        <td style="padding: 6px; text-align: right; font-family: var(--font-mono); font-weight: bold; color: var(--accent-secondary);" class="row-net-pay" data-id="${emp.id}">Q${net.toFixed(2)}</td>
                       </tr>
                     `;
                   }).join('')
@@ -1644,6 +1644,23 @@ function renderRrhhNomina(container, state) {
     </div>
   `;
 
+  // Dynamic change calculation for discount inputs
+  const discountInputs = container.querySelectorAll('.payroll-discount-input');
+  discountInputs.forEach(input => {
+    input.addEventListener('input', () => {
+      const empId = input.dataset.id;
+      const emp = employees.find(e => e.id === empId);
+      if (emp) {
+        const val = parseFloat(input.value) || 0;
+        const net = Math.max(0, emp.salary - val);
+        const netCell = container.querySelector(`.row-net-pay[data-id="${empId}"]`);
+        if (netCell) {
+          netCell.textContent = `Q${net.toFixed(2)}`;
+        }
+      }
+    });
+  });
+
   // Bind Generate Payroll Click
   const btnGen = document.getElementById('btn-generate-payroll');
   if (btnGen) {
@@ -1664,10 +1681,13 @@ function renderRrhhNomina(container, state) {
 
       let totalGross = 0;
       let totalNet = 0;
+      let totalDiscounts = 0;
       const payrollEmployees = employees.map(emp => {
-        const igss = emp.salary * 0.0483;
-        const net = emp.salary + 250 - igss;
+        const inputDisc = container.querySelector(`.payroll-discount-input[data-id="${emp.id}"]`);
+        const discount = inputDisc ? (parseFloat(inputDisc.value) || 0) : 0;
+        const net = Math.max(0, emp.salary - discount);
         totalGross += emp.salary;
+        totalDiscounts += discount;
         totalNet += net;
 
         return {
@@ -1675,8 +1695,9 @@ function renderRrhhNomina(container, state) {
           name: emp.name,
           position: emp.position,
           salary: emp.salary,
-          bonus: 250,
-          igssLaboral: igss,
+          bonus: 0,
+          igssLaboral: 0,
+          discount: discount,
           netSalary: net
         };
       });
@@ -1687,6 +1708,7 @@ function renderRrhhNomina(container, state) {
         month: month,
         employees: payrollEmployees,
         totalGross: totalGross,
+        totalDiscounts: totalDiscounts,
         totalNet: totalNet
       };
 
