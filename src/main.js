@@ -254,8 +254,6 @@ export async function saveAppState(state) {
         targetCollection = 'multimedica_users';
       } else if (collectionName === 'patients') {
         targetCollection = 'multimedica_pacientes';
-      } else if (collectionName.startsWith('administracion_') || collectionName === 'external_doctors' || collectionName === 'accounts_payable') {
-        targetCollection = 'multimedica_' + collectionName;
       } else {
         docData._collectionType = collectionName;
       }

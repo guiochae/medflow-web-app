@@ -278,39 +278,7 @@ export function initRealtimeFirestore(onFirstLoad) {
       checkFirstLoad();
     });
 
-    // Escuchadores para colecciones de Administración (Caja, Contabilidad, Compras, RRHH)
-    const adminCollections = [
-      { col: 'multimedica_administracion_compras', prop: 'administracion_compras' },
-      { col: 'multimedica_administracion_contabilidad', prop: 'administracion_contabilidad' },
-      { col: 'multimedica_administracion_caja', prop: 'administracion_caja' },
-      { col: 'multimedica_administracion_employees', prop: 'administracion_employees' },
-      { col: 'multimedica_administracion_nominas', prop: 'administracion_nominas' },
-      { col: 'multimedica_administracion_bancos', prop: 'administracion_bancos' },
-      { col: 'multimedica_external_doctors', prop: 'external_doctors' },
-      { col: 'multimedica_accounts_payable', prop: 'accounts_payable' }
-    ];
-
-    adminCollections.forEach(({ col, prop }) => {
-      onSnapshot(collection(db, col), (snapshot) => {
-        firestoreState[prop] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        notifySubscribers();
-        checkFirstLoad();
-      }, async (error) => {
-        console.warn(`Firestore fallback (${col}):`, error);
-        try {
-          const cacheSnap = await getDocsFromCache(collection(db, col));
-          if (!cacheSnap.empty) {
-            firestoreState[prop] = cacheSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            notifySubscribers();
-          }
-        } catch (cacheErr) {
-          console.warn(`No se pudo leer ${col} del caché nativo:`, cacheErr);
-        }
-        checkFirstLoad();
-      });
-    });
-
-    // 3. Escuchador de la colección 'multimedica' (agrupa medications, pharmacySales, etc.)
+    // 3. Escuchador de la colección 'multimedica' (agrupa medications, pharmacySales y todas las subcolecciones administrativas)
     onSnapshot(collection(db, 'multimedica'), (snapshot) => {
       // Limpiar arrays temporales antes de repoblar
       const meds = [];
@@ -321,6 +289,14 @@ export function initRealtimeFirestore(onFirstLoad) {
       const roomRatesList = [];
       const encamamientosList = [];
       const emergenciasList = [];
+      const compras = [];
+      const contabilidad = [];
+      const caja = [];
+      const employees = [];
+      const nominas = [];
+      const bancos = [];
+      const doctors = [];
+      const payables = [];
       let clinic = null;
 
       snapshot.docs.forEach(docSnap => {
@@ -362,6 +338,14 @@ export function initRealtimeFirestore(onFirstLoad) {
         else if (type === 'roomRates') roomRatesList.push(cleanDoc);
         else if (type === 'encamamiento') encamamientosList.push(cleanDoc);
         else if (type === 'emergencias') emergenciasList.push(cleanDoc);
+        else if (type === 'administracion_compras') compras.push(cleanDoc);
+        else if (type === 'administracion_contabilidad') contabilidad.push(cleanDoc);
+        else if (type === 'administracion_caja') caja.push(cleanDoc);
+        else if (type === 'administracion_employees') employees.push(cleanDoc);
+        else if (type === 'administracion_nominas') nominas.push(cleanDoc);
+        else if (type === 'administracion_bancos') bancos.push(cleanDoc);
+        else if (type === 'external_doctors') doctors.push(cleanDoc);
+        else if (type === 'accounts_payable') payables.push(cleanDoc);
         else if (type === 'clinicInfo') clinic = cleanDoc;
       });
 
@@ -373,6 +357,14 @@ export function initRealtimeFirestore(onFirstLoad) {
       firestoreState.roomRates = roomRatesList;
       firestoreState.encamamiento = encamamientosList;
       firestoreState.emergencias = emergenciasList;
+      firestoreState.administracion_compras = compras;
+      firestoreState.administracion_contabilidad = contabilidad;
+      firestoreState.administracion_caja = caja;
+      firestoreState.administracion_employees = employees;
+      firestoreState.administracion_nominas = nominas;
+      firestoreState.administracion_bancos = bancos;
+      firestoreState.external_doctors = doctors;
+      firestoreState.accounts_payable = payables;
       if (clinic) firestoreState.clinicInfo = clinic;
 
       notifySubscribers();
@@ -390,6 +382,14 @@ export function initRealtimeFirestore(onFirstLoad) {
           const roomRatesList = [];
           const encamamientosList = [];
           const emergenciasList = [];
+          const compras = [];
+          const contabilidad = [];
+          const caja = [];
+          const employees = [];
+          const nominas = [];
+          const bancos = [];
+          const doctors = [];
+          const payables = [];
           let clinic = null;
 
           cacheSnap.docs.forEach(docSnap => {
@@ -431,6 +431,14 @@ export function initRealtimeFirestore(onFirstLoad) {
             else if (type === 'roomRates') roomRatesList.push(cleanDoc);
             else if (type === 'encamamiento') encamamientosList.push(cleanDoc);
             else if (type === 'emergencias') emergenciasList.push(cleanDoc);
+            else if (type === 'administracion_compras') compras.push(cleanDoc);
+            else if (type === 'administracion_contabilidad') contabilidad.push(cleanDoc);
+            else if (type === 'administracion_caja') caja.push(cleanDoc);
+            else if (type === 'administracion_employees') employees.push(cleanDoc);
+            else if (type === 'administracion_nominas') nominas.push(cleanDoc);
+            else if (type === 'administracion_bancos') bancos.push(cleanDoc);
+            else if (type === 'external_doctors') doctors.push(cleanDoc);
+            else if (type === 'accounts_payable') payables.push(cleanDoc);
             else if (type === 'clinicInfo') clinic = cleanDoc;
           });
 
@@ -442,6 +450,14 @@ export function initRealtimeFirestore(onFirstLoad) {
           firestoreState.roomRates = roomRatesList;
           firestoreState.encamamiento = encamamientosList;
           firestoreState.emergencias = emergenciasList;
+          firestoreState.administracion_compras = compras;
+          firestoreState.administracion_contabilidad = contabilidad;
+          firestoreState.administracion_caja = caja;
+          firestoreState.administracion_employees = employees;
+          firestoreState.administracion_nominas = nominas;
+          firestoreState.administracion_bancos = bancos;
+          firestoreState.external_doctors = doctors;
+          firestoreState.accounts_payable = payables;
           if (clinic) firestoreState.clinicInfo = clinic;
 
           notifySubscribers();
