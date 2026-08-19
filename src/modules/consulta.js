@@ -1989,23 +1989,37 @@ function generateMedicalOrder(type) {
   modalTitle.textContent = subTitleText;
   printActionBtn.innerHTML = '<span>🖨️</span> Imprimir Orden';
 
-  // Renders the prescription in print-optimized markup with multi-page table structure
+  // Renders the prescription in print-optimized markup with native multi-page table structure
   previewContainer.innerHTML = `
     <div class="prescription-preview-box">
       
-      <!-- Tabla que envuelve el contenido en el flujo de impresión -->
+      <!-- Tabla principal de impresión y pantalla -->
       <table style="width: 100%; border-collapse: collapse; background: transparent;">
         <thead>
           <tr>
-            <td>
-              <div class="prescription-header-spacer"></div>
+            <td style="border: none; padding: 0 0 15px 0;">
+              <!-- Encabezado de la clínica (se repite automáticamente al inicio de cada página física) -->
+              <div class="prescription-preview-header" style="display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 1rem; margin-bottom: 1rem;">
+                <div style="display: flex; align-items: center; gap: 12px; text-align: left;">
+                  <span style="font-size: 1.5rem; margin-right: 6px;">🏥</span>
+                  <div>
+                    <div class="prescription-preview-logo" style="margin: 0; font-size: 1.25rem;">${clinic.name}</div>
+                    <div style="font-size: 0.85rem; font-weight: 600; color: #555; margin-top: 4px;">Servicios Médicos de Diagnóstico</div>
+                  </div>
+                </div>
+                <div class="prescription-preview-clinic-details">
+                  📍 ${clinic.address}<br>
+                  📞 Teléfono: ${clinic.phone}<br>
+                  ✉️ Email: ${clinic.email}
+                </div>
+              </div>
             </td>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td>
-              <div class="prescription-print-content" style="padding-top: 10px;">
+            <td style="border: none; padding: 0;">
+              <div class="prescription-print-content">
                 <div style="text-align: center; margin: 1rem 0; padding: 6px; background-color: #f4f6f8; border-radius: 6px;">
                   <h3 style="font-family: var(--font-heading); margin: 0; color: #000; font-size: 1.15rem; letter-spacing: 0.5px;">${titleText}</h3>
                 </div>
@@ -2041,56 +2055,18 @@ function generateMedicalOrder(type) {
         </tbody>
         <tfoot>
           <tr>
-            <td>
-              <div class="prescription-footer-spacer"></div>
+            <td style="border: none; padding: 30px 0 10px 0;">
+              <!-- Firma del Médico y Control de Hojas (se repite automáticamente al final de cada página física) -->
+              <div class="prescription-preview-footer" style="margin-top: 1.5rem; display: flex; flex-direction: column; align-items: center; text-align: center;">
+                <div class="prescription-preview-signature-line"></div>
+                <div class="prescription-preview-doctor-sign">${doctorObj.name}</div>
+                <div class="prescription-preview-license">Colegiado Activo No. ${doctorObj.license || 'N/A'}</div>
+                <div class="prescription-page-counter-print"></div>
+              </div>
             </td>
           </tr>
         </tfoot>
       </table>
-
-      <!-- ENCABEZADO NORMAL (Pantalla) -->
-      <div class="prescription-preview-header">
-        <div>
-          <div class="prescription-preview-logo">${clinic.logoText} ${clinic.name}</div>
-          <div style="font-size: 0.85rem; font-weight: 600; color: #555; margin-top: 4px;">Servicios Médicos de Diagnóstico</div>
-        </div>
-        <div class="prescription-preview-clinic-details">
-          📍 ${clinic.address}<br>
-          📞 Teléfono: ${clinic.phone}<br>
-          ✉️ Email: ${clinic.email}
-        </div>
-      </div>
-
-      <!-- FIRMA NORMAL (Pantalla) -->
-      <div class="prescription-preview-footer" style="margin-top: 3.5rem;">
-        <div class="prescription-preview-signature-line"></div>
-        <div class="prescription-preview-doctor-sign">${doctorObj.name}</div>
-        <div class="prescription-preview-license">Colegiado Activo No. ${doctorObj.license || 'N/A'}</div>
-      </div>
-
-      <!-- ENCABEZADO FIJO (Impresión - se repite en cada página) -->
-      <div class="prescription-fixed-header">
-        <div style="display: flex; align-items: center; gap: 12px; text-align: left;">
-          <span style="font-size: 1.5rem; margin-right: 6px;">🏥</span>
-          <div>
-            <div style="font-size: 1.15rem; font-weight: 800; color: #111; text-transform: uppercase;">${clinic.name}</div>
-            <div style="font-size: 0.75rem; font-weight: 600; color: #555; margin-top: 2px;">Servicios Médicos de Diagnóstico</div>
-          </div>
-        </div>
-        <div style="text-align: right; font-size: 0.75rem; color: #555;">
-          📍 ${clinic.address}<br>
-          📞 Teléfono: ${clinic.phone}<br>
-          ✉️ Email: ${clinic.email}
-        </div>
-      </div>
-
-      <!-- FIRMA FIJA (Impresión - se repite en cada página al final) -->
-      <div class="prescription-fixed-footer">
-        <div style="width: 200px; border-top: 1px solid #333; margin-bottom: 6px; margin-left: auto; margin-right: auto;"></div>
-        <div style="font-size: 0.85rem; font-weight: 600; color: #111;">Dr. ${doctorObj.name}</div>
-        <div style="font-size: 0.75rem; color: #666;">Colegiado Activo No. ${doctorObj.license || 'N/A'}</div>
-        <div class="prescription-page-counter-print"></div>
-      </div>
 
     </div>
   `;

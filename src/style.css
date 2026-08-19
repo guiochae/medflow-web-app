@@ -1208,53 +1208,18 @@ tbody tr:hover {
     margin: 15mm;
   }
 
-  /* Ocultar encabezado y pie de página estándar en impresión */
-  .prescription-preview-header,
-  .prescription-preview-footer {
-    display: none !important;
+  /* Asegurar que las secciones de encabezado y pie de página de la tabla se repitan nativamente en cada hoja */
+  thead {
+    display: table-header-group !important;
+  }
+  tfoot {
+    display: table-footer-group !important;
   }
 
-  /* Mostrar los espaciadores en la impresión */
-  .prescription-header-spacer {
-    display: block !important;
-    height: 130px !important;
-  }
-  .prescription-footer-spacer {
-    display: block !important;
-    height: 130px !important;
-  }
-
-  /* Contenedores fijos durante la impresión */
-  .prescription-fixed-header {
-    display: flex !important;
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    height: 130px !important;
-    border-bottom: 2px solid #333 !important;
-    background: white !important;
-    z-index: 9999;
-    box-sizing: border-box;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .prescription-fixed-footer {
-    display: flex !important;
-    position: fixed !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    height: 130px !important;
-    background: white !important;
-    z-index: 9999;
-    box-sizing: border-box;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: flex-end !important;
-    text-align: center !important;
-    padding-bottom: 10px !important;
+  /* Evitar saltos de página incómodos dentro de filas */
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
   .prescription-page-counter-print {
@@ -1270,11 +1235,7 @@ tbody tr:hover {
   }
 }
 
-/* Ocultar elementos de impresión fijos y espaciadores en pantalla */
-.prescription-fixed-header,
-.prescription-fixed-footer,
-.prescription-header-spacer,
-.prescription-footer-spacer,
+/* Ocultar correlativo en pantalla */
 .prescription-page-counter-print {
   display: none;
 }

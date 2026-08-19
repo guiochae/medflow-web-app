@@ -1232,25 +1232,41 @@ function showPrescriptionPreviewModal(patient, recipe) {
   const dob = new Date(patient.birthdate);
   const age = Math.abs(new Date(Date.now() - dob.getTime()).getUTCFullYear() - 1970);
 
-  // Renders the prescription in print-optimized markup with multi-page table structure
+  // Renders the prescription in print-optimized markup with native multi-page table structure
   previewContainer.innerHTML = `
     <div class="prescription-preview-box">
       
-      <!-- Tabla que envuelve el contenido en el flujo de impresión -->
+      <!-- Tabla principal de impresión y pantalla -->
       <table style="width: 100%; border-collapse: collapse; background: transparent;">
         <thead>
           <tr>
-            <td>
-              <div class="prescription-header-spacer"></div>
+            <td style="border: none; padding: 0 0 15px 0;">
+              <!-- Encabezado de la clínica (se repite automáticamente al inicio de cada página física) -->
+              <div class="prescription-preview-header" style="display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 1rem; margin-bottom: 1rem;">
+                <div style="display: flex; align-items: center; gap: 12px; text-align: left;">
+                  ${clinic.logoData 
+                    ? `<img src="${clinic.logoData}" style="max-height: 96px; max-width: 240px; object-fit: contain; border-radius: 4px;">` 
+                    : `<span style="font-size: 1.5rem;">🏥</span>`}
+                  <div>
+                    <div class="prescription-preview-logo" style="margin: 0; font-size: 1.25rem;">${clinic.name}</div>
+                    <div style="font-size: 0.85rem; font-weight: 600; color: #555; margin-top: 4px;">Atención Médica Profesional</div>
+                  </div>
+                </div>
+                <div class="prescription-preview-clinic-details">
+                  📍 ${clinic.address}<br>
+                  📞 Teléfono: ${clinic.phone}<br>
+                  ✉️ Email: ${clinic.email}
+                </div>
+              </div>
             </td>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td>
-              <div class="prescription-print-content" style="padding-top: 10px;">
+            <td style="border: none; padding: 0;">
+              <div class="prescription-print-content">
                 <!-- Información básica del paciente y receta -->
-                <div class="prescription-preview-patient-info" style="margin-top: 15px;">
+                <div class="prescription-preview-patient-info">
                   <div>
                     <strong>Paciente:</strong> ${patient.name}<br>
                     <strong>Edad:</strong> ${age} años | <strong>Género:</strong> ${patient.gender}
@@ -1262,24 +1278,24 @@ function showPrescriptionPreviewModal(patient, recipe) {
                 </div>
 
                 <!-- Icono Rp -->
-                <div class="prescription-preview-rx-icon" style="margin-top: 10px;">Rp.</div>
+                <div class="prescription-preview-rx-icon">Rp.</div>
 
                 <!-- Listado de medicamentos -->
-                <table class="prescription-preview-table" style="width: 100%; border-collapse: collapse; margin-bottom: 2rem;">
+                <table class="prescription-preview-table">
                   <thead>
                     <tr>
-                      <th style="width: 70%; text-align: left; border-bottom: 2px solid #333; padding: 8px;">Medicamento y Dosis</th>
-                      <th style="width: 30%; text-align: right; border-bottom: 2px solid #333; padding: 8px;">Cantidad</th>
+                      <th style="width: 70%; text-align: left;">Medicamento y Dosis</th>
+                      <th style="width: 30%; text-align: right;">Cantidad</th>
                     </tr>
                   </thead>
                   <tbody>
                     ${recipe.medicines.map(m => `
                       <tr>
-                        <td style="text-align: left; padding: 12px 8px; border-bottom: 1px solid #eee;">
+                        <td style="text-align: left; padding: 12px 8px;">
                           <strong style="color: #000; font-size: 1.15rem;">${m.name} (${m.presentation})</strong>
-                          <div style="font-size: 0.9rem; color: #555; margin-top: 4px;">${m.dosage} — ${m.duration}</div>
+                          <div class="prescription-preview-indications">${m.dosage} — ${m.duration}</div>
                         </td>
-                        <td style="text-align: right; font-weight: 700; padding: 12px 8px; font-size: 1.15rem; color: #333; border-bottom: 1px solid #eee;">
+                        <td style="text-align: right; font-weight: 700; padding: 12px 8px; font-size: 1.15rem; color: #333;">
                           ${m.quantity}
                         </td>
                       </tr>
@@ -1300,65 +1316,19 @@ function showPrescriptionPreviewModal(patient, recipe) {
         </tbody>
         <tfoot>
           <tr>
-            <td>
-              <div class="prescription-footer-spacer"></div>
+            <td style="border: none; padding: 30px 0 10px 0;">
+              <!-- Firma del Médico y Control de Hojas (se repite automáticamente al final de cada página física) -->
+              <div class="prescription-preview-footer" style="margin-top: 1.5rem; display: flex; flex-direction: column; align-items: center; text-align: center;">
+                <div class="prescription-preview-signature-line"></div>
+                <div class="prescription-preview-doctor-sign">${recipe.doctorName}</div>
+                <div class="prescription-preview-license">Colegiado Activo No. ${recipe.doctorLicense}</div>
+                <div class="prescription-preview-license" style="margin-top: 2px;">Teléfono: ${recipe.doctorPhone || 'N/A'}</div>
+                <div class="prescription-page-counter-print"></div>
+              </div>
             </td>
           </tr>
         </tfoot>
       </table>
-
-      <!-- ENCABEZADO NORMAL (Pantalla) -->
-      <div class="prescription-preview-header">
-        <div style="display: flex; align-items: center; gap: 12px;">
-          ${clinic.logoData 
-            ? `<img src="${clinic.logoData}" style="max-height: 96px; max-width: 240px; object-fit: contain; border-radius: 4px;">` 
-            : `<span style="font-size: 1.5rem;">🏥</span>`}
-          <div>
-            <div class="prescription-preview-logo" style="margin-top: 0; font-size: 1.25rem;">${clinic.name}</div>
-            <div style="font-size: 0.85rem; font-weight: 600; color: #555; margin-top: 4px;">Atención Médica Profesional</div>
-          </div>
-        </div>
-        <div class="prescription-preview-clinic-details">
-          📍 ${clinic.address}<br>
-          📞 Teléfono: ${clinic.phone}<br>
-          ✉️ Email: ${clinic.email}
-        </div>
-      </div>
-
-      <!-- FIRMA NORMAL (Pantalla) -->
-      <div class="prescription-preview-footer">
-        <div class="prescription-preview-signature-line"></div>
-        <div class="prescription-preview-doctor-sign">${recipe.doctorName}</div>
-        <div class="prescription-preview-license">Colegiado Activo No. ${recipe.doctorLicense}</div>
-        <div class="prescription-preview-license" style="margin-top: 2px;">Teléfono: ${recipe.doctorPhone || 'N/A'}</div>
-      </div>
-
-      <!-- ENCABEZADO FIJO (Impresión - se repite en cada página) -->
-      <div class="prescription-fixed-header">
-        <div style="display: flex; align-items: center; gap: 12px; text-align: left;">
-          ${clinic.logoData 
-            ? `<img src="${clinic.logoData}" style="max-height: 80px; max-width: 200px; object-fit: contain; border-radius: 4px;">` 
-            : `<span style="font-size: 1.5rem;">🏥</span>`}
-          <div>
-            <div style="font-size: 1.15rem; font-weight: 800; color: #111; text-transform: uppercase;">${clinic.name}</div>
-            <div style="font-size: 0.75rem; font-weight: 600; color: #555; margin-top: 2px;">Atención Médica Profesional</div>
-          </div>
-        </div>
-        <div style="text-align: right; font-size: 0.75rem; color: #555;">
-          📍 ${clinic.address}<br>
-          📞 Teléfono: ${clinic.phone}<br>
-          ✉️ Email: ${clinic.email}
-        </div>
-      </div>
-
-      <!-- FIRMA FIJA (Impresión - se repite en cada página al final) -->
-      <div class="prescription-fixed-footer">
-        <div style="width: 200px; border-top: 1px solid #333; margin-bottom: 6px; margin-left: auto; margin-right: auto;"></div>
-        <div style="font-size: 0.85rem; font-weight: 600; color: #111;">Dr. ${recipe.doctorName}</div>
-        <div style="font-size: 0.75rem; color: #666;">Colegiado Activo No. ${recipe.doctorLicense}</div>
-        <div style="font-size: 0.75rem; color: #666; margin-top: 1px;">Teléfono: ${recipe.doctorPhone || 'N/A'}</div>
-        <div class="prescription-page-counter-print"></div>
-      </div>
 
     </div>
   `;
