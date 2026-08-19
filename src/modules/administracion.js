@@ -1393,15 +1393,13 @@ function renderRrhhEmpleados(container, state) {
             </div>
           </div>
 
-          <!-- Widget Algoritmo Recomendador de Contratación (SAT / IGSS Carga Prestacional) -->
+          <!-- Widget Algoritmo Recomendador de Contratación -->
           <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px;">
             <h4 style="margin: 0 0 8px 0; font-size: 0.82rem; color: var(--text-muted);">Recomendador Financiero de Viabilidad</h4>
             
             <div style="font-size: 0.78rem; color: var(--text-muted); display: grid; grid-template-columns: 1.4fr 0.6fr; gap: 6px; margin-bottom: 8px;">
               <span>Salario Base Propuesto:</span>
               <span style="text-align: right;" id="rec-base-salary">Q0.00</span>
-              <span>Carga Prestacional de Ley (42%):</span>
-              <span style="text-align: right;" id="rec-benefits">Q0.00</span>
               <span style="font-weight: bold; color: var(--text-primary);">Costo Total de Contratación:</span>
               <span style="text-align: right; font-weight: bold; color: var(--text-primary);" id="rec-total-cost">Q0.00</span>
             </div>
@@ -1456,17 +1454,14 @@ function renderRrhhEmpleados(container, state) {
   // Implementación del Algoritmo Recomendador Dinámico (SAT / IGSS)
   const salaryInput = document.getElementById('e-salary');
   const baseSalaryText = document.getElementById('rec-base-salary');
-  const benefitsText = document.getElementById('rec-benefits');
   const totalCostText = document.getElementById('rec-total-cost');
   const badge = document.getElementById('rec-verdict-badge');
 
   const executeRecommendationAlgorithm = () => {
     const salary = parseFloat(salaryInput.value) || 0;
-    const benefits = salary * 0.42; // Aguinaldo (8.33%) + Bono 14 (8.33%) + IGSS Patronal (10.67%) + Vacaciones e Indemnización (14.67%)
-    const totalCost = salary + benefits;
+    const totalCost = salary;
 
     baseSalaryText.textContent = `Q${salary.toFixed(2)}`;
-    benefitsText.textContent = `Q${benefits.toFixed(2)}`;
     totalCostText.textContent = `Q${totalCost.toFixed(2)}`;
 
     // Ponderación: 60% Caja (saldo actual) y 40% Utilidad neta
