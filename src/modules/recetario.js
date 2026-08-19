@@ -2,6 +2,7 @@
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
 import { medicationsDatabase } from '../data/medicamentos.js';
 import { showPastConsultationDetail } from './consulta.js';
+import logoUrl from '../assets/logo.jpg';
 
 function searchMedications(query) {
   if (!query || query.trim().length < 2) return [];
@@ -1246,7 +1247,7 @@ function showPrescriptionPreviewModal(patient, recipe) {
                 <div style="display: flex; align-items: center; gap: 12px; text-align: left;">
                   ${clinic.logoData 
                     ? `<img src="${clinic.logoData}" style="max-height: 96px; max-width: 240px; object-fit: contain; border-radius: 4px;">` 
-                    : `<span style="font-size: 1.5rem;">🏥</span>`}
+                    : `<img src="${logoUrl}" style="max-height: 96px; max-width: 240px; object-fit: contain; border-radius: 4px;">`}
                   <div>
                     <div class="prescription-preview-logo" style="margin: 0; font-size: 1.25rem;">${clinic.name}</div>
                     <div style="font-size: 0.85rem; font-weight: 600; color: #555; margin-top: 4px;">Atención Médica Profesional</div>

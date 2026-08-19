@@ -1,6 +1,7 @@
 // src/modules/consulta.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
 import { searchDiagnosticSuggestions } from '../data/cie10.js';
+import logoUrl from '../assets/logo.jpg';
 
 function isCurrentUserAdmin() {
   const loggedUser = sessionStorage.getItem('medflow_logged_user');
@@ -2001,7 +2002,9 @@ function generateMedicalOrder(type) {
               <!-- Encabezado de la clínica (se repite automáticamente al inicio de cada página física) -->
               <div class="prescription-preview-header" style="display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 1rem; margin-bottom: 1rem;">
                 <div style="display: flex; align-items: center; gap: 12px; text-align: left;">
-                  <span style="font-size: 1.5rem; margin-right: 6px;">🏥</span>
+                  ${clinic.logoData 
+                    ? `<img src="${clinic.logoData}" style="max-height: 96px; max-width: 240px; object-fit: contain; border-radius: 4px;">` 
+                    : `<img src="${logoUrl}" style="max-height: 96px; max-width: 240px; object-fit: contain; border-radius: 4px;">`}
                   <div>
                     <div class="prescription-preview-logo" style="margin: 0; font-size: 1.25rem;">${clinic.name}</div>
                     <div style="font-size: 0.85rem; font-weight: 600; color: #555; margin-top: 4px;">Servicios Médicos de Diagnóstico</div>
