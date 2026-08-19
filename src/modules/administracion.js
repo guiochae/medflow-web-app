@@ -1385,7 +1385,7 @@ function renderRrhhEmpleados(container, state) {
           <div class="form-row" style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 10px;">
             <div class="form-group">
               <label>Salario Propuesto Mensual</label>
-              <input type="number" id="e-salary" required min="3500.00" step="100.00" value="4500.00">
+              <input type="number" id="e-salary" required min="0.01" step="any" value="4500.00">
             </div>
             <div class="form-group">
               <label>Fecha de Contratación</label>
