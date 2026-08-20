@@ -1617,7 +1617,7 @@ function showPayrollPrintPreview(payroll, state) {
   const totalDiscounts = payroll.totalDiscounts || 0;
   const totalNet = payroll.totalNet || 0;
 
-  // Generar filas
+  // Generar filas de la tabla general
   const rowsHtml = (payroll.employees || []).map(emp => `
     <tr style="border-bottom: 1px solid #ddd;">
       <td style="padding: 8px; border: 1px solid #ddd; text-align: left;"><strong>${emp.name}</strong></td>
@@ -1627,6 +1627,62 @@ function showPayrollPrintPreview(payroll, state) {
       <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-family: monospace; font-weight: bold;">Q${parseFloat(emp.netSalary).toFixed(2)}</td>
     </tr>
   `).join('');
+
+  // Agrupar empleados de 4 en 4 para los recibos individuales
+  const payslipsHtmlChunks = [];
+  const chunkSize = 4;
+  for (let i = 0; i < (payroll.employees || []).length; i += chunkSize) {
+    const chunk = payroll.employees.slice(i, i + chunkSize);
+    const chunkHtml = chunk.map(emp => `
+      <div style="width: 49%; height: 120mm; border: 1px dashed #000; padding: 15px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; font-size: 0.75rem; background: #fff; page-break-inside: avoid; margin-bottom: 8mm; border-radius: 4px; color: #000;">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 10px;">
+            <span style="font-weight: bold; font-size: 0.8rem; text-transform: uppercase;">${clinic.name}</span>
+            <span style="font-size: 0.7rem; font-weight: bold; color: #333; letter-spacing: 0.5px;">RECIBO DE PAGO</span>
+          </div>
+          <div style="line-height: 1.4; margin-bottom: 10px;">
+            <strong>Colaborador:</strong> ${emp.name}<br>
+            <strong>Puesto:</strong> ${emp.position}<br>
+            <strong>Período:</strong> ${payroll.month}<br>
+            <strong>Fecha Emisión:</strong> ${dateFormatted.split(',')[0]}<br>
+            <strong>ID Recibo:</strong> REC-${payroll.id.substring(8, 14)}-${emp.id.substring(4, 8)}
+          </div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.72rem; margin-top: 10px; color: #000;">
+            <thead>
+              <tr style="border-bottom: 1px solid #000; font-weight: bold;">
+                <td style="padding: 3px 0;">Concepto</td>
+                <td style="text-align: right; padding: 3px 0;">Monto</td>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px dashed #eee;">
+                <td style="padding: 4px 0;">Sueldo Devengado</td>
+                <td style="text-align: right; font-family: monospace; padding: 4px 0;">Q${parseFloat(emp.salary).toFixed(2)}</td>
+              </tr>
+              <tr style="border-bottom: 1px dashed #eee; color: #a00;">
+                <td style="padding: 4px 0;">Deducciones / Descuentos</td>
+                <td style="text-align: right; font-family: monospace; padding: 4px 0;">Q${parseFloat(emp.discount || 0).toFixed(2)}</td>
+              </tr>
+              <tr style="font-weight: bold; border-top: 1.5px solid #000;">
+                <td style="padding: 6px 0;">Neto Liquidado</td>
+                <td style="text-align: right; font-family: monospace; padding: 6px 0; color: #000;">Q${parseFloat(emp.netSalary).toFixed(2)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="text-align: center; margin-top: 25px; margin-bottom: 5px;">
+          <div style="border-top: 1px solid #000; width: 80%; margin: 0 auto 4px auto;"></div>
+          <span style="font-size: 0.65rem; color: #333; text-transform: uppercase;">Firma de Conforme (Empleado)</span>
+        </div>
+      </div>
+    `).join('');
+
+    payslipsHtmlChunks.push(`
+      <div class="payroll-payslips-page" style="page-break-before: always; display: flex; flex-wrap: wrap; justify-content: space-between; align-content: flex-start; height: 260mm; box-sizing: border-box; padding: 10px 0;">
+        ${chunkHtml}
+      </div>
+    `);
+  }
 
   previewContainer.innerHTML = `
     <div class="prescription-preview-box">
@@ -1725,6 +1781,9 @@ function showPayrollPrintPreview(payroll, state) {
       </table>
 
     </div>
+
+    <!-- Hojas de Recibos Individuales de Pago (4 por página física) -->
+    ${payslipsHtmlChunks.join('')}
   `;
 
   printActionBtn.onclick = () => {
