@@ -6,6 +6,7 @@ let activeAdminTab = 'caja'; // 'caja', 'contabilidad', 'compras', 'rrhh'
 let activeCajaSubTab = 'cobros'; // 'cobros', 'cxp', 'nominas'
 let activeContabilidadSubTab = 'diario'; // 'diario', 'impuestos'
 let activeRrhhSubTab = 'empleados'; // 'empleados', 'nomina'
+let editingEmployeeId = null;
 
 // Variables temporales para el creador de compras
 let tempPurchaseItems = [];
@@ -1359,38 +1360,41 @@ function renderRrhhEmpleados(container, state) {
   const totalExpense = calculateAccountBalance(state, 'Gastos de Administración (Sueldos)') + calculateAccountBalance(state, 'Gastos de Administración (Bonificación Incentivo)') + calculateAccountBalance(state, 'Gastos de Administración (Cuota Patronal IGSS)');
   const utilityBalance = totalIncome - totalExpense;
 
+  const isEditing = editingEmployeeId !== null;
+  const editingEmp = isEditing ? (state.administracion_employees || []).find(e => e.id === editingEmployeeId) : null;
+
   container.innerHTML = `
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;">
       
       <!-- Registrar Empleado -->
       <div class="glass-card" style="padding: 1.25rem;">
-        <h3 style="font-size: 1rem; color: var(--accent-primary); margin-bottom: 1rem;">Registrar Nuevo Empleado</h3>
+        <h3 style="font-size: 1rem; color: var(--accent-primary); margin-bottom: 1rem;">${isEditing ? 'Modificar Empleado' : 'Registrar Nuevo Empleado'}</h3>
         
         <form id="admin-employee-form" style="display: flex; flex-direction: column; gap: 12px;">
           <div class="form-group">
             <label>Nombre Completo</label>
-            <input type="text" id="e-name" required placeholder="Nombre del empleado">
+            <input type="text" id="e-name" required placeholder="Nombre del empleado" value="${editingEmp ? editingEmp.name : ''}">
           </div>
 
           <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group">
               <label>Puesto</label>
-              <input type="text" id="e-position" required placeholder="Enfermero, Analista, Recepcionista">
+              <input type="text" id="e-position" required placeholder="Enfermero, Analista, Recepcionista" value="${editingEmp ? editingEmp.position : ''}">
             </div>
             <div class="form-group">
               <label>Especialidad</label>
-              <input type="text" id="e-specialty" placeholder="Pediatría, General, Contabilidad">
+              <input type="text" id="e-specialty" placeholder="Pediatría, General, Contabilidad" value="${editingEmp ? editingEmp.specialty || '' : ''}">
             </div>
           </div>
 
           <div class="form-row" style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 10px;">
             <div class="form-group">
               <label>Salario Propuesto Mensual</label>
-              <input type="number" id="e-salary" required min="0.01" step="any" value="4500.00">
+              <input type="number" id="e-salary" required min="0.01" step="any" value="${editingEmp ? editingEmp.salary : '4500.00'}">
             </div>
             <div class="form-group">
               <label>Fecha de Contratación</label>
-              <input type="date" id="e-date" required value="${new Date().toISOString().substring(0, 10)}">
+              <input type="date" id="e-date" required value="${editingEmp && editingEmp.hireDate ? editingEmp.hireDate.substring(0, 10) : new Date().toISOString().substring(0, 10)}">
             </div>
           </div>
 
@@ -1411,9 +1415,16 @@ function renderRrhhEmpleados(container, state) {
             </div>
           </div>
 
-          <button type="submit" class="btn btn-primary" style="width: 100%; padding: 10px; font-weight: 600; font-size: 0.9rem;">
-            📝 Contratar Empleado
-          </button>
+          <div style="display: flex; gap: 10px;">
+            <button type="submit" class="btn btn-primary" style="flex: 1; padding: 10px; font-weight: 600; font-size: 0.9rem;">
+              ${isEditing ? '💾 Guardar Cambios' : '📝 Contratar Empleado'}
+            </button>
+            ${isEditing ? `
+              <button type="button" id="btn-cancel-employee-edit" class="btn btn-secondary" style="padding: 10px; font-weight: 600; font-size: 0.9rem;">
+                Cancelar
+              </button>
+            ` : ''}
+          </div>
         </form>
       </div>
 
@@ -1436,6 +1447,7 @@ function renderRrhhEmpleados(container, state) {
                   </div>
 
                   <div style="display: flex; flex-direction: column; gap: 4px; width: 100px;">
+                    <button class="btn btn-secondary btn-small btn-edit-emp" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px;">✏️ Editar</button>
                     <button class="btn btn-secondary btn-small btn-add-absence" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px;">➕ Registrar Falta</button>
                     <button class="btn btn-secondary btn-small btn-add-warning" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px;">⚠️ Amonestar</button>
                     <button class="btn btn-small btn-fire-emp" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px; background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);">Dar de Baja</button>
@@ -1483,7 +1495,7 @@ function renderRrhhEmpleados(container, state) {
   salaryInput.addEventListener('input', executeRecommendationAlgorithm);
   executeRecommendationAlgorithm(); // Calcular al iniciar
 
-  // Bind Submit Employee
+  // Bind Submit Employee (New or Edit)
   document.getElementById('admin-employee-form').addEventListener('submit', (e) => {
     e.preventDefault();
 
@@ -1493,23 +1505,54 @@ function renderRrhhEmpleados(container, state) {
     const salary = parseFloat(salaryInput.value) || 0;
     const hireDate = document.getElementById('e-date').value;
 
-    const newEmp = {
-      id: 'emp-' + Date.now(),
-      name: name,
-      position: pos,
-      specialty: specialty,
-      salary: salary,
-      hireDate: hireDate,
-      absences: 0,
-      warnings: 0,
-      status: 'Activo'
-    };
+    if (isEditing) {
+      const emp = state.administracion_employees.find(x => x.id === editingEmployeeId);
+      if (emp) {
+        emp.name = name;
+        emp.position = pos;
+        emp.specialty = specialty;
+        emp.salary = salary;
+        emp.hireDate = hireDate;
+        saveAppState(state);
+        alert(`✅ Empleado ${name} actualizado exitosamente.`);
+      }
+      editingEmployeeId = null;
+    } else {
+      const newEmp = {
+        id: 'emp-' + Date.now(),
+        name: name,
+        position: pos,
+        specialty: specialty,
+        salary: salary,
+        hireDate: hireDate,
+        absences: 0,
+        warnings: 0,
+        status: 'Activo'
+      };
 
-    state.administracion_employees.push(newEmp);
-    saveAppState(state);
+      state.administracion_employees.push(newEmp);
+      saveAppState(state);
+      alert(`✅ Empleado ${name} registrado y contratado exitosamente.`);
+    }
 
-    alert(`✅ Empleado ${name} registrado y contratado exitosamente.`);
     renderRrhhEmpleados(container, state);
+  });
+
+  // Bind Cancel Edit Button
+  const btnCancel = document.getElementById('btn-cancel-employee-edit');
+  if (btnCancel) {
+    btnCancel.addEventListener('click', () => {
+      editingEmployeeId = null;
+      renderRrhhEmpleados(container, state);
+    });
+  }
+
+  // Bind Edit Employee Button
+  container.querySelectorAll('.btn-edit-emp').forEach(btn => {
+    btn.addEventListener('click', () => {
+      editingEmployeeId = btn.getAttribute('data-id');
+      renderRrhhEmpleados(container, state);
+    });
   });
 
   // Bind Incidencias (Faltas, Amonestaciones y Despido)
