@@ -1552,13 +1552,15 @@ function renderRrhhEmpleados(container, state) {
 // Vista Preliminar e Impresión de Nómina
 function showPayrollPrintPreview(payroll, state) {
   const modal = document.getElementById('prescription-print-modal');
-  const modalTitle = document.getElementById('prescription-print-title');
+  const modalTitle = modal ? modal.querySelector('.modal-header h2') : null;
   const previewContainer = document.getElementById('prescription-preview-content');
   const printActionBtn = document.getElementById('btn-print-action');
 
-  if (!modal || !previewContainer) return;
+  if (!modal || !previewContainer || !printActionBtn) return;
 
-  modalTitle.textContent = "Vista Preliminar de Impresión: Nómina de Empleados";
+  if (modalTitle) {
+    modalTitle.textContent = "Vista Preliminar de Impresión: Nómina de Empleados";
+  }
   printActionBtn.innerHTML = '<span>🖨️</span> Imprimir Nómina';
 
   const clinic = state.clinicInfo || {};
