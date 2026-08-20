@@ -1,5 +1,6 @@
 import { getAppState, saveAppState } from '../main.js';
 import { simulateOnPurchaseCreated, simulateOnPayrollGenerated } from '../utils/cloud_functions.js';
+import logoUrl from '../assets/logo.jpg';
 
 let activeAdminTab = 'caja'; // 'caja', 'contabilidad', 'compras', 'rrhh'
 let activeCajaSubTab = 'cobros'; // 'cobros', 'cxp', 'nominas'
@@ -1548,6 +1549,145 @@ function renderRrhhEmpleados(container, state) {
   });
 }
 
+// Vista Preliminar e Impresión de Nómina
+function showPayrollPrintPreview(payroll, state) {
+  const modal = document.getElementById('prescription-print-modal');
+  const modalTitle = document.getElementById('prescription-print-title');
+  const previewContainer = document.getElementById('prescription-preview-content');
+  const printActionBtn = document.getElementById('btn-print-action');
+
+  if (!modal || !previewContainer) return;
+
+  modalTitle.textContent = "Vista Preliminar de Impresión: Nómina de Empleados";
+  printActionBtn.innerHTML = '<span>🖨️</span> Imprimir Nómina';
+
+  const clinic = state.clinicInfo || {};
+  const dateFormatted = new Date(payroll.date).toLocaleDateString('es-GT', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+
+  // Calcular totales
+  const totalGross = payroll.totalGross || 0;
+  const totalDiscounts = payroll.totalDiscounts || 0;
+  const totalNet = payroll.totalNet || 0;
+
+  // Generar filas
+  const rowsHtml = (payroll.employees || []).map(emp => `
+    <tr style="border-bottom: 1px solid #ddd;">
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: left;"><strong>${emp.name}</strong></td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: left; color: #555;">${emp.position}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-family: monospace;">Q${parseFloat(emp.salary).toFixed(2)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-family: monospace; color: #c00;">Q${parseFloat(emp.discount || 0).toFixed(2)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-family: monospace; font-weight: bold;">Q${parseFloat(emp.netSalary).toFixed(2)}</td>
+    </tr>
+  `).join('');
+
+  previewContainer.innerHTML = `
+    <div class="prescription-preview-box">
+      
+      <!-- Tabla principal de impresión y pantalla -->
+      <table style="width: 100%; border-collapse: collapse; background: transparent;">
+        <thead>
+          <tr>
+            <td style="border: none; padding: 0 0 15px 0;">
+              <!-- Encabezado de la clínica (se repite automáticamente al inicio de cada página física) -->
+              <div class="prescription-preview-header" style="display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 1rem; margin-bottom: 1rem;">
+                <div style="display: flex; align-items: center; gap: 12px; text-align: left;">
+                  ${clinic.logoData 
+                    ? `<img src="${clinic.logoData}" style="max-height: 96px; max-width: 240px; object-fit: contain; border-radius: 4px;">` 
+                    : `<img src="${logoUrl}" style="max-height: 96px; max-width: 240px; object-fit: contain; border-radius: 4px;">`}
+                  <div>
+                    <div class="prescription-preview-logo" style="margin: 0; font-size: 1.25rem;">${clinic.name}</div>
+                    <div style="font-size: 0.85rem; font-weight: 600; color: #555; margin-top: 4px;">Atención Médica y Hospitalaria</div>
+                  </div>
+                </div>
+                <div class="prescription-preview-clinic-details">
+                  📍 ${clinic.address}<br>
+                  📞 Teléfono: ${clinic.phone}<br>
+                  ✉️ Email: ${clinic.email}
+                </div>
+              </div>
+            </td>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="border: none; padding: 0;">
+              <div class="prescription-print-content">
+                <div style="text-align: center; margin: 1rem 0; padding: 6px; background-color: #f4f6f8; border-radius: 6px; border: 1px solid #ddd;">
+                  <h3 style="font-family: var(--font-heading); margin: 0; color: #000; font-size: 1.15rem; letter-spacing: 0.5px; text-transform: uppercase;">Nómina de Empleados</h3>
+                </div>
+
+                <!-- Detalles del período y emisión -->
+                <div class="prescription-preview-patient-info" style="display: flex; justify-content: space-between; margin-bottom: 1.5rem; font-size: 0.9rem; border-bottom: 1px solid #eee; padding-bottom: 8px;">
+                  <div>
+                    <strong>Mes / Período:</strong> ${payroll.month}<br>
+                    <strong>Fecha de Emisión:</strong> ${dateFormatted}
+                  </div>
+                  <div style="text-align: right;">
+                    <strong>ID Planilla:</strong> ${payroll.id}<br>
+                    <strong>Estado:</strong> Cerrada y Liquidada
+                  </div>
+                </div>
+
+                <!-- Tabla de Empleados y montos -->
+                <table style="width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.85rem;">
+                  <thead>
+                    <tr style="background-color: #f4f6f8; border-top: 1px solid #ddd; border-bottom: 2px solid #ddd;">
+                      <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Nombre Colaborador</th>
+                      <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Puesto</th>
+                      <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Sueldo Base</th>
+                      <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Descuentos</th>
+                      <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Neto Recibido</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${rowsHtml}
+                    <!-- Fila de Totales -->
+                    <tr style="background-color: #fafafa; font-weight: bold; border-top: 2px solid #333; border-bottom: 2px solid #333;">
+                      <td colspan="2" style="padding: 10px; border: 1px solid #ddd; text-align: left; text-transform: uppercase;">Total General</td>
+                      <td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-family: monospace;">Q${totalGross.toFixed(2)}</td>
+                      <td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-family: monospace; color: #c00;">Q${totalDiscounts.toFixed(2)}</td>
+                      <td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-family: monospace; color: var(--accent-success);">Q${totalNet.toFixed(2)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td style="border: none; padding: 50px 0 10px 0;">
+              <!-- Firmas de Autorización -->
+              <div style="display: flex; justify-content: space-around; width: 100%; margin-top: 2rem;">
+                <div style="text-align: center; width: 40%;">
+                  <div style="border-top: 1px solid #333; width: 80%; margin: 0 auto 5px auto;"></div>
+                  <div style="font-size: 0.8rem; font-weight: 600; color: #111;">Firma de Elaborado por</div>
+                  <div style="font-size: 0.7rem; color: #666;">Dpto. Recursos Humanos</div>
+                </div>
+                <div style="text-align: center; width: 40%;">
+                  <div style="border-top: 1px solid #333; width: 80%; margin: 0 auto 5px auto;"></div>
+                  <div style="font-size: 0.8rem; font-weight: 600; color: #111;">Firma de Autorizado por</div>
+                  <div style="font-size: 0.7rem; color: #666;">Dirección General / Administración</div>
+                </div>
+              </div>
+              <div class="prescription-page-counter-print" style="margin-top: 20px; text-align: center;"></div>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+
+    </div>
+  `;
+
+  printActionBtn.onclick = () => {
+    window.print();
+  };
+
+  modal.style.display = "flex";
+}
+
 // Planilla / Nómina Mensual
 function renderRrhhNomina(container, state) {
   const employees = (state.administracion_employees || []).filter(e => e.status === 'Activo');
@@ -1562,7 +1702,7 @@ function renderRrhhNomina(container, state) {
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
           <h3 style="font-size: 1rem; color: var(--accent-primary); margin: 0;">Planilla de Sueldos Mensual</h3>
           <div style="display: flex; gap: 8px;">
-            <select id="payroll-month" style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.8rem;">
+            <select id="payroll-month" class="form-control" style="padding: 4px 8px; font-size: 0.85rem;">
               <option value="Enero 2026">Enero 2026</option>
               <option value="Febrero 2026">Febrero 2026</option>
               <option value="Marzo 2026">Marzo 2026</option>
@@ -1576,7 +1716,7 @@ function renderRrhhNomina(container, state) {
               <option value="Noviembre 2026">Noviembre 2026</option>
               <option value="Diciembre 2026">Diciembre 2026</option>
             </select>
-            <button class="btn btn-primary btn-small" id="btn-generate-payroll" style="font-size: 0.78rem; padding: 4px 10px;">💾 Generar y Provisionar</button>
+            <button class="btn btn-primary btn-small" id="btn-generate-payroll"><span>⚙️</span> Procesar Planilla</button>
           </div>
         </div>
 
@@ -1633,7 +1773,10 @@ function renderRrhhNomina(container, state) {
                       <span style="font-weight: bold; color: var(--text-primary);">${n.month}</span><br>
                       <span style="font-size: 0.75rem; color: var(--text-muted);">${n.employees.length} colaboradores incluidos</span>
                     </div>
-                    <strong style="color: var(--accent-secondary); font-size: 0.95rem;">Q${parseFloat(n.totalNet).toFixed(2)}</strong>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <strong style="color: var(--accent-secondary); font-size: 0.95rem;">Q${parseFloat(n.totalNet).toFixed(2)}</strong>
+                      <button class="btn btn-secondary btn-small btn-print-payroll" data-id="${n.id}" style="padding: 4px 8px; font-size: 0.75rem;" title="Imprimir Nómina">🖨️</button>
+                    </div>
                   </div>
                 </div>
               `).join('')
@@ -1657,6 +1800,18 @@ function renderRrhhNomina(container, state) {
         if (netCell) {
           netCell.textContent = `Q${net.toFixed(2)}`;
         }
+      }
+    });
+  });
+
+  // Bind Print Payroll Click
+  const printBtns = container.querySelectorAll('.btn-print-payroll');
+  printBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const payrollId = btn.dataset.id;
+      const payroll = state.administracion_nominas.find(n => n.id === payrollId);
+      if (payroll) {
+        showPayrollPrintPreview(payroll, state);
       }
     });
   });
