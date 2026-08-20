@@ -1,3 +1,5 @@
+import { getAppState } from '../main.js';
+
 /**
  * Envía una notificación de WhatsApp al médico asignado de forma asíncrona (fire-and-forget)
  * mediante el microservicio local de whatsapp-bridge en el puerto 3001.
@@ -21,8 +23,11 @@ export async function notifyDoctorViaWhatsApp(nombreMedico, telefonoMedico, nomb
     nombrePaciente: nombrePaciente
   };
 
+  const state = getAppState();
+  const bridgeUrl = (state.clinicInfo && state.clinicInfo.whatsappBridgeUrl) || 'http://localhost:3001';
+
   // 2. Llamada asíncrona no bloqueante (Fire-and-forget)
-  fetch('http://localhost:3001/api/notify-doctor', {
+  fetch(`${bridgeUrl}/api/notify-doctor`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'

@@ -90,6 +90,11 @@ export function renderConfiguracion(container) {
               <input type="email" id="c-info-email" value="${state.clinicInfo.email || ''}" required placeholder="Ej. contacto@clinica.com">
             </div>
           </div>
+          <div class="form-group" style="margin-top: 1rem;">
+            <label for="c-info-whatsapp-url">Servidor de WhatsApp Bridge (Opcional)</label>
+            <input type="url" id="c-info-whatsapp-url" value="${state.clinicInfo.whatsappBridgeUrl || 'http://localhost:3001'}" placeholder="Ej. http://localhost:3001">
+            <small style="color: var(--text-muted); display: block; margin-top: 4px;">Indica el puerto o dirección IP de la máquina donde se ejecuta el puente de WhatsApp (ej. si usas ngrok para acceso externo).</small>
+          </div>
           <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem;">
             <button type="submit" class="btn btn-primary">Guardar Información</button>
           </div>
@@ -785,6 +790,7 @@ export function renderConfiguracion(container) {
       appState.clinicInfo.address = document.getElementById('c-info-address').value;
       appState.clinicInfo.phone = document.getElementById('c-info-phone').value;
       appState.clinicInfo.email = document.getElementById('c-info-email').value;
+      appState.clinicInfo.whatsappBridgeUrl = document.getElementById('c-info-whatsapp-url').value;
       saveAppState(appState);
 
       // Update sidebar logo dynamically

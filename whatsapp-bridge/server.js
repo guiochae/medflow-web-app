@@ -18,6 +18,7 @@ const client = new Client({
   }),
   puppeteer: {
     handleSIGINT: false,
+    executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   }
 });
