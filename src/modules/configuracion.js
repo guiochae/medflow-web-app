@@ -97,9 +97,9 @@ export function renderConfiguracion(container) {
           </div>
           
           <!-- Panel de Estado y Conexión de WhatsApp Bridge -->
-          <div id="whatsapp-bridge-status-card" style="margin-top: 1.5rem; padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.01);">
+          <div id="whatsapp-bridge-status-card" style="margin-top: 1.5rem; padding: 15px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.15); background: rgba(255, 255, 255, 0.03); box-shadow: 0 4px 6px rgba(0,0,0,0.15);">
             <h4 style="margin: 0 0 10px 0; font-size: 0.9rem; color: var(--accent-primary); display: flex; align-items: center; gap: 8px;">
-              <span>📱</span> Estado de Conexión de WhatsApp
+              <span>📱</span> Estado de Conexión de WhatsApp (Panel Interactivo)
             </h4>
             <div id="whatsapp-bridge-status-content" style="font-size: 0.82rem; color: var(--text-muted);">
               Cargando estado del servidor de WhatsApp...
