@@ -7,6 +7,7 @@ let activeCajaSubTab = 'cobros'; // 'cobros', 'cxp', 'nominas'
 let activeContabilidadSubTab = 'diario'; // 'diario', 'impuestos'
 let activeRrhhSubTab = 'empleados'; // 'empleados', 'nomina'
 let editingEmployeeId = null;
+let selectedPayrollMonth = 'Agosto 2026';
 
 // Variables temporales para el creador de compras
 let tempPurchaseItems = [];
@@ -1735,9 +1736,37 @@ function showPayrollPrintPreview(payroll, state) {
 
 // Planilla / Nómina Mensual
 function renderRrhhNomina(container, state) {
-  const employees = (state.administracion_employees || []).filter(e => e.status === 'Activo');
+  const employees = (state.administracion_employees || []).filter(e => e.status === 'Activo' && e.name !== "Empleado de Prueba Antigravity" && !e.name.toLowerCase().includes("antigravity"));
   
   state.administracion_nominas = state.administracion_nominas || [];
+
+  const parts = selectedPayrollMonth.split(' ');
+  const monthName = parts[0].toLowerCase();
+  const year = parseInt(parts[1]);
+  
+  const monthMap = {
+    enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5,
+    julio: 6, agosto: 7, septiembre: 8, octubre: 9, noviembre: 10, diciembre: 11
+  };
+  const monthIndex = monthMap[monthName];
+  const totalDays = new Date(year, monthIndex + 1, 0).getDate();
+
+  // Helper para obtener el sueldo prorrateado si ingresó a trabajar a mitad del mes
+  const getProratedSalary = (emp) => {
+    let baseSalary = emp.salary;
+    if (emp.hireDate) {
+      const hireDate = new Date(emp.hireDate);
+      const hireYear = hireDate.getUTCFullYear();
+      const hireMonth = hireDate.getUTCMonth();
+      const hireDay = hireDate.getUTCDate();
+      
+      if (hireYear === year && hireMonth === monthIndex) {
+        const daysWorked = totalDays - hireDay + 1;
+        return (baseSalary / totalDays) * daysWorked;
+      }
+    }
+    return baseSalary;
+  };
 
   container.innerHTML = `
     <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; align-items: start;">
@@ -1748,18 +1777,18 @@ function renderRrhhNomina(container, state) {
           <h3 style="font-size: 1rem; color: var(--accent-primary); margin: 0;">Planilla de Sueldos Mensual</h3>
           <div style="display: flex; gap: 8px;">
             <select id="payroll-month" class="form-control" style="padding: 4px 8px; font-size: 0.85rem;">
-              <option value="Enero 2026">Enero 2026</option>
-              <option value="Febrero 2026">Febrero 2026</option>
-              <option value="Marzo 2026">Marzo 2026</option>
-              <option value="Abril 2026">Abril 2026</option>
-              <option value="Mayo 2026">Mayo 2026</option>
-              <option value="Junio 2026">Junio 2026</option>
-              <option value="Julio 2026">Julio 2026</option>
-              <option value="Agosto 2026">Agosto 2026</option>
-              <option value="Septiembre 2026">Septiembre 2026</option>
-              <option value="Octubre 2026">Octubre 2026</option>
-              <option value="Noviembre 2026">Noviembre 2026</option>
-              <option value="Diciembre 2026">Diciembre 2026</option>
+              <option value="Enero 2026" ${selectedPayrollMonth === 'Enero 2026' ? 'selected' : ''}>Enero 2026</option>
+              <option value="Febrero 2026" ${selectedPayrollMonth === 'Febrero 2026' ? 'selected' : ''}>Febrero 2026</option>
+              <option value="Marzo 2026" ${selectedPayrollMonth === 'Marzo 2026' ? 'selected' : ''}>Marzo 2026</option>
+              <option value="Abril 2026" ${selectedPayrollMonth === 'Abril 2026' ? 'selected' : ''}>Abril 2026</option>
+              <option value="Mayo 2026" ${selectedPayrollMonth === 'Mayo 2026' ? 'selected' : ''}>Mayo 2026</option>
+              <option value="Junio 2026" ${selectedPayrollMonth === 'Junio 2026' ? 'selected' : ''}>Junio 2026</option>
+              <option value="Julio 2026" ${selectedPayrollMonth === 'Julio 2026' ? 'selected' : ''}>Julio 2026</option>
+              <option value="Agosto 2026" ${selectedPayrollMonth === 'Agosto 2026' ? 'selected' : ''}>Agosto 2026</option>
+              <option value="Septiembre 2026" ${selectedPayrollMonth === 'Septiembre 2026' ? 'selected' : ''}>Septiembre 2026</option>
+              <option value="Octubre 2026" ${selectedPayrollMonth === 'Octubre 2026' ? 'selected' : ''}>Octubre 2026</option>
+              <option value="Noviembre 2026" ${selectedPayrollMonth === 'Noviembre 2026' ? 'selected' : ''}>Noviembre 2026</option>
+              <option value="Diciembre 2026" ${selectedPayrollMonth === 'Diciembre 2026' ? 'selected' : ''}>Diciembre 2026</option>
             </select>
             <button class="btn btn-primary btn-small" id="btn-generate-payroll"><span>⚙️</span> Procesar Planilla</button>
           </div>
@@ -1780,13 +1809,14 @@ function renderRrhhNomina(container, state) {
               ${employees.length === 0 
                 ? `<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted); font-style: italic;">No hay colaboradores activos para liquidar nómina.</td></tr>`
                 : employees.map(emp => {
+                    const proratedSalary = getProratedSalary(emp);
                     const discount = 0;
-                    const net = emp.salary - discount;
+                    const net = proratedSalary - discount;
                     return `
                       <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
                         <td style="padding: 6px;"><strong>${emp.name}</strong></td>
                         <td style="padding: 6px; color: var(--text-muted);">${emp.position}</td>
-                        <td style="padding: 6px; text-align: right; font-family: var(--font-mono);">Q${parseFloat(emp.salary).toFixed(2)}</td>
+                        <td style="padding: 6px; text-align: right; font-family: var(--font-mono);">Q${parseFloat(proratedSalary).toFixed(2)}</td>
                         <td style="padding: 6px; text-align: right;">
                           <input type="number" min="0" value="0.00" step="any" class="payroll-discount-input" data-id="${emp.id}" style="width: 90px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: right;">
                         </td>
@@ -1832,6 +1862,15 @@ function renderRrhhNomina(container, state) {
     </div>
   `;
 
+  // Listener para cambio de mes seleccionado
+  const monthSelect = document.getElementById('payroll-month');
+  if (monthSelect) {
+    monthSelect.addEventListener('change', () => {
+      selectedPayrollMonth = monthSelect.value;
+      renderRrhhNomina(container, state);
+    });
+  }
+
   // Dynamic change calculation for discount inputs
   const discountInputs = container.querySelectorAll('.payroll-discount-input');
   discountInputs.forEach(input => {
@@ -1839,8 +1878,9 @@ function renderRrhhNomina(container, state) {
       const empId = input.dataset.id;
       const emp = employees.find(e => e.id === empId);
       if (emp) {
+        const proratedSalary = getProratedSalary(emp);
         const val = parseFloat(input.value) || 0;
-        const net = Math.max(0, emp.salary - val);
+        const net = Math.max(0, proratedSalary - val);
         const netCell = container.querySelector(`.row-net-pay[data-id="${empId}"]`);
         if (netCell) {
           netCell.textContent = `Q${net.toFixed(2)}`;
@@ -1883,10 +1923,11 @@ function renderRrhhNomina(container, state) {
       let totalNet = 0;
       let totalDiscounts = 0;
       const payrollEmployees = employees.map(emp => {
+        const proratedSalary = getProratedSalary(emp);
         const inputDisc = container.querySelector(`.payroll-discount-input[data-id="${emp.id}"]`);
         const discount = inputDisc ? (parseFloat(inputDisc.value) || 0) : 0;
-        const net = Math.max(0, emp.salary - discount);
-        totalGross += emp.salary;
+        const net = Math.max(0, proratedSalary - discount);
+        totalGross += proratedSalary;
         totalDiscounts += discount;
         totalNet += net;
 
@@ -1894,7 +1935,7 @@ function renderRrhhNomina(container, state) {
           id: emp.id,
           name: emp.name,
           position: emp.position,
-          salary: emp.salary,
+          salary: proratedSalary,
           bonus: 0,
           igssLaboral: 0,
           discount: discount,
