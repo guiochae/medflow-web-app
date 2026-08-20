@@ -95,6 +95,17 @@ export function renderConfiguracion(container) {
             <input type="url" id="c-info-whatsapp-url" value="${state.clinicInfo.whatsappBridgeUrl || 'http://localhost:3001'}" placeholder="Ej. http://localhost:3001">
             <small style="color: var(--text-muted); display: block; margin-top: 4px;">Indica el puerto o dirección IP de la máquina donde se ejecuta el puente de WhatsApp (ej. si usas ngrok para acceso externo).</small>
           </div>
+          
+          <!-- Panel de Estado y Conexión de WhatsApp Bridge -->
+          <div id="whatsapp-bridge-status-card" style="margin-top: 1.5rem; padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.01);">
+            <h4 style="margin: 0 0 10px 0; font-size: 0.9rem; color: var(--accent-primary); display: flex; align-items: center; gap: 8px;">
+              <span>📱</span> Estado de Conexión de WhatsApp
+            </h4>
+            <div id="whatsapp-bridge-status-content" style="font-size: 0.82rem; color: var(--text-muted);">
+              Cargando estado del servidor de WhatsApp...
+            </div>
+          </div>
+
           <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem;">
             <button type="submit" class="btn btn-primary">Guardar Información</button>
           </div>
@@ -466,6 +477,79 @@ export function renderConfiguracion(container) {
       }
     }, 0);
   }
+
+  // Polling del estado de WhatsApp Bridge
+  const updateWhatsAppBridgeStatus = () => {
+    const statusContainer = document.getElementById('whatsapp-bridge-status-content');
+    if (!statusContainer) {
+      if (window.whatsappBridgeStatusInterval) {
+        clearInterval(window.whatsappBridgeStatusInterval);
+        window.whatsappBridgeStatusInterval = null;
+      }
+      return;
+    }
+
+    const bridgeUrl = (state.clinicInfo && state.clinicInfo.whatsappBridgeUrl) || 'http://localhost:3001';
+
+    fetch(`${bridgeUrl}/api/status`)
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then(data => {
+        if (!document.getElementById('whatsapp-bridge-status-content')) return;
+        if (data.isReady) {
+          statusContainer.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: var(--accent-success);"></span>
+              <strong style="color: var(--accent-success);">Conectado y Listo</strong>
+            </div>
+            <p style="margin: 8px 0 0 0; font-size: 0.8rem; color: var(--text-muted);">El microservicio de WhatsApp Web está autenticado. Las notificaciones se enviarán automáticamente en segundo plano al registrar pacientes.</p>
+          `;
+        } else if (data.qr) {
+          statusContainer.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+              <span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: var(--accent-secondary);"></span>
+              <strong style="color: var(--accent-secondary);">Pendiente de Autenticación (Escanear QR)</strong>
+            </div>
+            <p style="margin: 0 0 12px 0; font-size: 0.8rem;">Escanea este código QR con la cámara de tu celular desde la aplicación de WhatsApp (**Dispositivos vinculados > Vincular un dispositivo**) para iniciar la sesión:</p>
+            <div style="display: flex; justify-content: center; background: white; padding: 15px; border-radius: 6px; width: fit-content; margin: 10px auto;">
+              <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(data.qr)}" style="width: 250px; height: 250px; display: block;" alt="WhatsApp QR Code">
+            </div>
+            <small style="color: var(--text-muted); display: block; text-align: center; margin-top: 4px;">El código QR se actualizará automáticamente en pantalla si expira.</small>
+          `;
+        } else {
+          statusContainer.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: var(--text-muted);"></span>
+              <strong style="color: var(--text-primary);">Iniciando cliente de WhatsApp...</strong>
+            </div>
+            <p style="margin: 8px 0 0 0; font-size: 0.8rem; color: var(--text-muted);">El servidor de WhatsApp está levantado pero está arrancando el navegador Chrome interno. Espera unos segundos...</p>
+          `;
+        }
+      })
+      .catch(err => {
+        if (!document.getElementById('whatsapp-bridge-status-content')) return;
+        statusContainer.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: var(--accent-danger);"></span>
+            <strong style="color: var(--accent-danger);">Servidor Desconectado / Fuera de Línea</strong>
+          </div>
+          <p style="margin: 8px 0 0 0; font-size: 0.8rem; color: var(--text-muted);">No se pudo establecer conexión con el puente de WhatsApp en <code>${bridgeUrl}</code>.</p>
+          <div style="margin-top: 10px; font-size: 0.78rem; background: rgba(239, 68, 68, 0.05); padding: 8px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.1);">
+            <strong>Posibles razones:</strong><br>
+            1. El servidor microservicio local no se está ejecutando (corre <code>npm start</code> en la carpeta <code>whatsapp-bridge</code>).<br>
+            2. Si estás accediendo desde otra computadora, asegúrate de que el campo de arriba apunte a la IP correcta del servidor (ej. <code>http://192.168.1.5:3001</code>) o que tengas tu túnel ngrok configurado y activo.
+          </div>
+        `;
+      });
+  };
+
+  if (window.whatsappBridgeStatusInterval) {
+    clearInterval(window.whatsappBridgeStatusInterval);
+  }
+  window.whatsappBridgeStatusInterval = setInterval(updateWhatsAppBridgeStatus, 3000);
+  updateWhatsAppBridgeStatus();
 
   // ==========================================
   // ENCAPSULATED EVENT DELEGATION ON CONTAINER

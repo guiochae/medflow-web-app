@@ -24,9 +24,11 @@ const client = new Client({
 });
 
 let isReady = false;
+let latestQr = null;
 
 // Evento de generación del código QR en terminal
 client.on('qr', (qr) => {
+  latestQr = qr;
   console.log('\n======================================================');
   console.log('📌 ESCANEA ESTE CÓDIGO QR EN TU CELULAR PARA INICIAR SESIÓN:');
   console.log('======================================================\n');
@@ -108,6 +110,15 @@ app.post('/api/notify-doctor', async (req, res) => {
       details: error.message 
     });
   }
+});
+
+// Endpoint GET /api/status
+app.get('/api/status', (req, res) => {
+  return res.status(200).json({
+    success: true,
+    isReady: isReady,
+    qr: isReady ? null : latestQr
+  });
 });
 
 // Levantar el Servidor Express
