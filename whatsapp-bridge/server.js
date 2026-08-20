@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import qrcode from 'qrcode-terminal';
+import fs from 'fs';
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth } = pkg;
 
@@ -11,16 +12,30 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+const puppeteerOptions = {
+  handleSIGINT: false,
+  args: ['--no-sandbox', '--disable-setuid-sandbox']
+};
+
+// Fallback de ruta de Chrome en Windows
+if (process.platform === 'win32') {
+  const defaultChromePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+  if (fs.existsSync(defaultChromePath)) {
+    puppeteerOptions.executablePath = defaultChromePath;
+  }
+}
+
+// Permitir personalización mediante variable de entorno
+if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+  puppeteerOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+}
+
 // Inicializar el cliente de WhatsApp Web
 const client = new Client({
   authStrategy: new LocalAuth({
     dataPath: './.wwebjs_auth'
   }),
-  puppeteer: {
-    handleSIGINT: false,
-    executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  }
+  puppeteer: puppeteerOptions
 });
 
 let isReady = false;
