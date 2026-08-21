@@ -542,7 +542,7 @@ function renderEvolucionTab(activeEmerg, patient) {
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; flex-wrap: wrap;">
       
       <!-- Columna Izquierda: Historial de Notas y Nueva Nota -->
-      <div class="glass-card" style="padding: 1.25rem;">
+      <div class="glass-card" style="padding: 1.25rem; display: flex; flex-direction: column;">
         <h3 style="color: var(--accent-primary); margin-bottom: 1rem; font-size: 1.1rem;">Evoluciones Médicas</h3>
         
         <form id="emerg-evolution-form" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1.25rem;">
@@ -556,22 +556,19 @@ function renderEvolucionTab(activeEmerg, patient) {
             <label>Nota Clínico / Evolución Médica</label>
             <textarea id="emerg-evo-note" required rows="3" placeholder="Nota S.O.A.P., estado actual del paciente, cambios hemodinámicos, plan..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical; font-size: 0.88rem;"></textarea>
           </div>
-          <button type="submit" class="btn btn-primary" style="width: 100%; font-size: 0.85rem; padding: 10px;">Guardar Nota de Evolución</button>
+          <button type="submit" class="btn btn-primary" style="width: 100%; font-size: 0.85rem; padding: 10px;">💾 Guardar Nota de Evolución</button>
         </form>
 
-        <div style="max-height: 250px; overflow-y: auto;">
-          <h4 style="margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">Historial de Notas</h4>
+        <div style="max-height: 350px; overflow-y: auto;">
+          <h4 style="margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">Historial de Notas de Evolución</h4>
           ${activeEmerg.evolutions && activeEmerg.evolutions.length > 0 
             ? activeEmerg.evolutions.map(e => `
-                <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; margin-bottom: 8px;">
-                  <div style="font-size: 0.72rem; color: var(--accent-primary); font-weight: bold; margin-bottom: 4px;">📅 ${new Date(e.date).toLocaleString('es-GT')} | Dr. ${e.doctorName}</div>
-                  <p style="margin: 0; font-size: 0.85rem; color: var(--text-primary); white-space: pre-wrap; line-height: 1.3;"><strong>Nota:</strong> ${e.note}</p>
-                  ${e.orders ? `
-                    <div style="margin-top: 8px; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,0.1); font-size: 0.82rem; color: var(--accent-secondary);">
-                      <strong>📋 Órdenes Médicas:</strong>
-                      <p style="margin: 4px 0 0 0; white-space: pre-wrap; color: var(--text-muted); line-height: 1.3;">${e.orders}</p>
-                    </div>
-                  ` : ''}
+                <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 6px;">
+                  <div style="font-size: 0.72rem; color: var(--accent-primary); font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
+                    <span>📅 ${new Date(e.date).toLocaleString('es-GT')} | Dr. ${e.doctorName}</span>
+                    <button class="btn btn-secondary btn-small btn-print-evo" data-id="${e.id}" style="padding: 3px 6px; font-size: 0.72rem; display: flex; align-items: center; gap: 4px;">🖨️ Imprimir</button>
+                  </div>
+                  <p style="margin: 0; font-size: 0.85rem; color: var(--text-primary); white-space: pre-wrap; line-height: 1.3;">${e.note}</p>
                 </div>
               `).join('')
             : `<p style="font-style: italic; color: var(--text-muted); font-size: 0.85rem;">No hay notas de evolución registradas aún.</p>`
@@ -580,11 +577,37 @@ function renderEvolucionTab(activeEmerg, patient) {
       </div>
 
       <!-- Columna Derecha: Órdenes y Tratamiento de esta nota (Ingreso Manual) -->
-      <div class="glass-card" style="padding: 1.25rem; display: flex; flex-direction: column;">
+      <div class="glass-card" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 12px;">
         <h3 style="color: var(--accent-secondary); margin-bottom: 1rem; font-size: 1.1rem;">Prescripciones / Órdenes Médicas</h3>
-        <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
-          <label style="font-size: 0.85rem; font-weight: bold; color: var(--text-muted);">Ingresar Prescripciones / Órdenes Médicas Manuales:</label>
-          <textarea id="emerg-evo-orders-manual" rows="12" placeholder="Escriba aquí los medicamentos, dosis, laboratorios o estudios de imagenología que el paciente requiera..." style="width: 100%; flex: 1; padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical; font-size: 0.88rem; line-height: 1.4; min-height: 250px;"></textarea>
+        
+        <form id="emerg-prescription-form" style="display: flex; flex-direction: column; gap: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 1.25rem;">
+          <div class="form-group">
+            <label>Médico que indica la orden</label>
+            <select id="emerg-presc-doctor" required style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+              <!-- Se inyectan médicos -->
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Indicaciones de la Prescripción / Órden:</label>
+            <textarea id="emerg-evo-orders-manual" rows="6" placeholder="Escriba aquí los medicamentos, dosis, laboratorios o estudios de imagenología que el paciente requiera..." style="width: 100%; padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical; font-size: 0.88rem; line-height: 1.4;" required></textarea>
+          </div>
+          <button type="submit" class="btn btn-secondary" style="width: 100%; font-size: 0.85rem; padding: 10px;">💾 Guardar Prescripción / Órdenes</button>
+        </form>
+
+        <div style="max-height: 350px; overflow-y: auto;">
+          <h4 style="margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">Historial de Prescripciones</h4>
+          ${activeEmerg.prescriptions && activeEmerg.prescriptions.length > 0 
+            ? activeEmerg.prescriptions.map(p => `
+                <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 6px;">
+                  <div style="font-size: 0.72rem; color: var(--accent-secondary); font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
+                    <span>📅 ${new Date(p.date).toLocaleString('es-GT')} | Dr. ${p.doctorName}</span>
+                    <button class="btn btn-secondary btn-small btn-print-presc" data-id="${p.id}" style="padding: 3px 6px; font-size: 0.72rem; display: flex; align-items: center; gap: 4px;">🖨️ Imprimir</button>
+                  </div>
+                  <p style="margin: 0; font-size: 0.85rem; color: var(--text-primary); white-space: pre-wrap; line-height: 1.3;">${p.orders}</p>
+                </div>
+              `).join('')
+            : `<p style="font-style: italic; color: var(--text-muted); font-size: 0.85rem;">No hay prescripciones registradas aún.</p>`
+          }
         </div>
       </div>
     </div>
@@ -592,21 +615,25 @@ function renderEvolucionTab(activeEmerg, patient) {
 
   // Poblar médicos
   const doctorSelect = document.getElementById('emerg-evo-doctor');
+  const prescDoctorSelect = document.getElementById('emerg-presc-doctor');
   const doctors = state.users.filter(u => {
     const r = String(u.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     return r.includes('medico') || r.includes('admin') || r.includes('administrador');
   });
+
   if (doctorSelect) {
     doctorSelect.innerHTML = doctors.map(d => `<option value="${d.id}" ${d.name === activeEmerg.doctorName ? 'selected' : ''}>${d.name}</option>`).join('');
   }
+  if (prescDoctorSelect) {
+    prescDoctorSelect.innerHTML = doctors.map(d => `<option value="${d.id}" ${d.name === activeEmerg.doctorName ? 'selected' : ''}>${d.name}</option>`).join('');
+  }
 
-  // Bind Form Submit
+  // Bind Evolutions Form Submit
   document.getElementById('emerg-evolution-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const noteVal = document.getElementById('emerg-evo-note').value;
     const docId = document.getElementById('emerg-evo-doctor').value;
     const docObj = state.users.find(u => u.id === docId);
-    const ordersVal = document.getElementById('emerg-evo-orders-manual') ? document.getElementById('emerg-evo-orders-manual').value : '';
 
     const newEvo = {
       id: 'evo-' + Date.now(),
@@ -614,7 +641,6 @@ function renderEvolucionTab(activeEmerg, patient) {
       doctorName: docObj.name,
       doctorId: docObj.id,
       note: noteVal,
-      orders: ordersVal,
       meds: [],
       labs: [],
       images: []
@@ -624,9 +650,134 @@ function renderEvolucionTab(activeEmerg, patient) {
     activeEmerg.evolutions.push(newEvo);
 
     saveAppState(state);
-    alert("Nota de evolución y órdenes guardadas correctamente.");
-    renderEmergDashboard();
+    alert("Nota de evolución guardada correctamente.");
+    renderEvolucionTab(activeEmerg, patient);
   });
+
+  // Bind Prescriptions Form Submit
+  document.getElementById('emerg-prescription-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const ordersVal = document.getElementById('emerg-evo-orders-manual').value;
+    const docId = document.getElementById('emerg-presc-doctor').value;
+    const docObj = state.users.find(u => u.id === docId);
+
+    const newPresc = {
+      id: 'presc-' + Date.now(),
+      date: new Date().toISOString(),
+      doctorName: docObj.name,
+      doctorId: docObj.id,
+      orders: ordersVal
+    };
+
+    activeEmerg.prescriptions = activeEmerg.prescriptions || [];
+    activeEmerg.prescriptions.push(newPresc);
+
+    saveAppState(state);
+    alert("Prescripción guardada correctamente.");
+    renderEvolucionTab(activeEmerg, patient);
+  });
+
+  // Bind Print Evolutions
+  container.querySelectorAll('.btn-print-evo').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const evoId = btn.getAttribute('data-id');
+      const evo = activeEmerg.evolutions.find(e => e.id === evoId);
+      printEvoOrPrescDocument(patient, evo, 'evolution', state);
+    });
+  });
+
+  // Bind Print Prescriptions
+  container.querySelectorAll('.btn-print-presc').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const prescId = btn.getAttribute('data-id');
+      const presc = activeEmerg.prescriptions.find(p => p.id === prescId);
+      printEvoOrPrescDocument(patient, presc, 'prescription', state);
+    });
+  });
+}
+
+// Función para imprimir nota de evolución o prescripción
+function printEvoOrPrescDocument(patient, record, type, state) {
+  const modal = document.getElementById('prescription-print-modal');
+  const modalTitle = modal ? modal.querySelector('.modal-header h2') : null;
+  const previewContainer = document.getElementById('prescription-preview-content');
+  const printActionBtn = document.getElementById('btn-print-action');
+
+  if (!modal || !previewContainer || !printActionBtn) return;
+
+  const isEvo = type === 'evolution';
+  if (modalTitle) {
+    modalTitle.textContent = isEvo 
+      ? "Vista Preliminar: Nota de Evolución Médica" 
+      : "Vista Preliminar: Prescripción / Orden Médica";
+  }
+  printActionBtn.innerHTML = `<span>🖨️</span> Imprimir ${isEvo ? 'Evolución' : 'Prescripción'}`;
+
+  const clinic = state.clinicInfo || {};
+  const dateFormatted = new Date(record.date).toLocaleDateString('es-GT', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+
+  const logoUrl = 'assets/logo-Db6-vjaU.jpg';
+
+  previewContainer.innerHTML = `
+    <div class="prescription-preview-box" style="color: #000; font-family: sans-serif; padding: 20px;">
+      <!-- Encabezado de la clínica -->
+      <div style="display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 15px;">
+        <div style="display: flex; align-items: center; gap: 12px; text-align: left;">
+          ${clinic.logoData 
+            ? `<img src="${clinic.logoData}" style="max-height: 80px; max-width: 200px; object-fit: contain;">` 
+            : `<img src="${logoUrl}" style="max-height: 80px; max-width: 200px; object-fit: contain;">`}
+          <div>
+            <div style="font-weight: bold; font-size: 1.2rem;">${clinic.name || 'HOSPITAL MULTIMEDICA'}</div>
+            <div style="font-size: 0.8rem; color: #555; margin-top: 2px;">Atención Médica y Hospitalaria</div>
+          </div>
+        </div>
+        <div style="text-align: right; font-size: 0.8rem; color: #333; line-height: 1.3;">
+          📍 ${clinic.address || ''}<br>
+          📞 Teléfono: ${clinic.phone || ''}<br>
+          ✉️ Email: ${clinic.email || ''}
+        </div>
+      </div>
+
+      <!-- Título de Documento -->
+      <div style="text-align: center; margin: 15px 0; padding: 6px; background-color: #f4f6f8; border: 1px solid #ddd; border-radius: 4px;">
+        <strong style="font-size: 1.1rem; text-transform: uppercase;">
+          ${isEvo ? 'Nota de Evolución Médica' : 'Prescripción / Orden Médica'}
+        </strong>
+      </div>
+
+      <!-- Información de Paciente y Médico -->
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 0.85rem; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+        <tr>
+          <td style="padding: 4px 0; width: 55%;"><strong>Paciente:</strong> ${patient.name}</td>
+          <td style="padding: 4px 0; text-align: right;"><strong>Expediente:</strong> ${patient.id}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 0;"><strong>Médico:</strong> Dr. ${record.doctorName}</td>
+          <td style="padding: 4px 0; text-align: right;"><strong>Fecha/Hora:</strong> ${dateFormatted}</td>
+        </tr>
+      </table>
+
+      <!-- Contenido de la Nota u Órdenes -->
+      <div style="min-height: 250px; font-size: 0.92rem; line-height: 1.6; border: 1px solid #eee; padding: 15px; border-radius: 6px; background: #fff; white-space: pre-wrap; word-wrap: break-word;">
+        ${isEvo ? record.note : record.orders}
+      </div>
+
+      <!-- Pie de página y Firma -->
+      <div style="margin-top: 80px; display: flex; flex-direction: column; align-items: center; width: 100%;">
+        <div style="border-top: 1px solid #333; width: 250px; margin-bottom: 5px;"></div>
+        <strong style="font-size: 0.85rem; color: #111;">Firma y Sello del Médico</strong>
+        <span style="font-size: 0.75rem; color: #666;">Dr. ${record.doctorName}</span>
+      </div>
+    </div>
+  `;
+
+  printActionBtn.onclick = () => {
+    window.print();
+  };
+
+  modal.style.display = "flex";
 }
 
 // 7. Renderizar listado de órdenes en borrador
