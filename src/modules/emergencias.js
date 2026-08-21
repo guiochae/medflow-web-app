@@ -565,7 +565,13 @@ function renderEvolucionTab(activeEmerg, patient) {
             ? activeEmerg.evolutions.map(e => `
                 <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; margin-bottom: 8px;">
                   <div style="font-size: 0.72rem; color: var(--accent-primary); font-weight: bold; margin-bottom: 4px;">📅 ${new Date(e.date).toLocaleString('es-GT')} | Dr. ${e.doctorName}</div>
-                  <p style="margin: 0; font-size: 0.85rem; color: var(--text-primary); white-space: pre-wrap; line-height: 1.3;">${e.note}</p>
+                  <p style="margin: 0; font-size: 0.85rem; color: var(--text-primary); white-space: pre-wrap; line-height: 1.3;"><strong>Nota:</strong> ${e.note}</p>
+                  ${e.orders ? `
+                    <div style="margin-top: 8px; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,0.1); font-size: 0.82rem; color: var(--accent-secondary);">
+                      <strong>📋 Órdenes Médicas:</strong>
+                      <p style="margin: 4px 0 0 0; white-space: pre-wrap; color: var(--text-muted); line-height: 1.3;">${e.orders}</p>
+                    </div>
+                  ` : ''}
                 </div>
               `).join('')
             : `<p style="font-style: italic; color: var(--text-muted); font-size: 0.85rem;">No hay notas de evolución registradas aún.</p>`
@@ -573,22 +579,12 @@ function renderEvolucionTab(activeEmerg, patient) {
         </div>
       </div>
 
-      <!-- Columna Derecha: Órdenes y Tratamiento de esta nota -->
-      <div class="glass-card" style="padding: 1.25rem;">
+      <!-- Columna Derecha: Órdenes y Tratamiento de esta nota (Ingreso Manual) -->
+      <div class="glass-card" style="padding: 1.25rem; display: flex; flex-direction: column;">
         <h3 style="color: var(--accent-secondary); margin-bottom: 1rem; font-size: 1.1rem;">Prescripciones / Órdenes Médicas</h3>
-        
-        <div style="display: flex; gap: 8px; margin-bottom: 1rem;">
-          <button class="btn btn-secondary btn-small" id="btn-add-med" style="flex: 1; font-size: 0.78rem;">💊 Recetar Med</button>
-          <button class="btn btn-secondary btn-small" id="btn-add-lab" style="flex: 1; font-size: 0.78rem;">🔬 Exámenes</button>
-          <button class="btn btn-secondary btn-small" id="btn-add-img" style="flex: 1; font-size: 0.78rem;">🖼️ Rayos X / USG</button>
-        </div>
-
-        <div style="background: rgba(0,0,0,0.1); padding: 10px; border-radius: 4px; border: 1px solid var(--border-color); min-height: 250px;">
-          <h4 style="margin-top: 0; font-size: 0.85rem; border-bottom: 1px dashed var(--border-color); padding-bottom: 6px; color: var(--text-primary);">Órdenes a emitir con la nota:</h4>
-          
-          <div id="emerg-temp-orders-list" style="font-size: 0.82rem; display: flex; flex-direction: column; gap: 10px;">
-            <!-- Se llena con renderTempOrders() -->
-          </div>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+          <label style="font-size: 0.85rem; font-weight: bold; color: var(--text-muted);">Ingresar Prescripciones / Órdenes Médicas Manuales:</label>
+          <textarea id="emerg-evo-orders-manual" rows="12" placeholder="Escriba aquí los medicamentos, dosis, laboratorios o estudios de imagenología que el paciente requiera..." style="width: 100%; flex: 1; padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical; font-size: 0.88rem; line-height: 1.4; min-height: 250px;"></textarea>
         </div>
       </div>
     </div>
@@ -604,17 +600,13 @@ function renderEvolucionTab(activeEmerg, patient) {
     doctorSelect.innerHTML = doctors.map(d => `<option value="${d.id}" ${d.name === activeEmerg.doctorName ? 'selected' : ''}>${d.name}</option>`).join('');
   }
 
-  // Bind Buttons
-  document.getElementById('btn-add-med').addEventListener('click', () => showMedsOrderModal(patient));
-  document.getElementById('btn-add-lab').addEventListener('click', () => showLabsOrderModal(activeEmerg));
-  document.getElementById('btn-add-img').addEventListener('click', () => showImgsOrderModal(activeEmerg));
-
   // Bind Form Submit
   document.getElementById('emerg-evolution-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const noteVal = document.getElementById('emerg-evo-note').value;
     const docId = document.getElementById('emerg-evo-doctor').value;
     const docObj = state.users.find(u => u.id === docId);
+    const ordersVal = document.getElementById('emerg-evo-orders-manual') ? document.getElementById('emerg-evo-orders-manual').value : '';
 
     const newEvo = {
       id: 'evo-' + Date.now(),
@@ -622,54 +614,19 @@ function renderEvolucionTab(activeEmerg, patient) {
       doctorName: docObj.name,
       doctorId: docObj.id,
       note: noteVal,
-      meds: [...tempMeds],
-      labs: [...tempLabs],
-      images: [...tempImgs]
+      orders: ordersVal,
+      meds: [],
+      labs: [],
+      images: []
     };
 
     activeEmerg.evolutions = activeEmerg.evolutions || [];
     activeEmerg.evolutions.push(newEvo);
 
-    // Mudar órdenes a consumos activos del expediente de urgencias
-    activeEmerg.consumedMedicines = activeEmerg.consumedMedicines || [];
-    activeEmerg.consumedMedicines.push(...tempMeds);
-
-    activeEmerg.consumedLabs = activeEmerg.consumedLabs || [];
-    activeEmerg.consumedLabs.push(...tempLabs);
-
-    activeEmerg.consumedImaging = activeEmerg.consumedImaging || [];
-    activeEmerg.consumedImaging.push(...tempImgs);
-
-    // Descontar inventario de medicamentos recetados por la presentación completa o proporcional
-    tempMeds.forEach(tm => {
-      const med = state.medications.find(m => m.id === tm.id);
-      if (med) {
-        if (tm.tipoPrescripcion === 'caja') {
-          med.stock = Math.max(0, med.stock - tm.qty);
-        } else if (tm.tipoPrescripcion === 'unidad') {
-          const uPrice = med.price / (med.unidades_por_presentacion || 10);
-          const totalUnitsInStock = med.stock * (med.unidades_por_presentacion || 10);
-          const remainUnits = Math.max(0, totalUnitsInStock - tm.cantidad_o_dosis);
-          med.stock = Math.ceil(remainUnits / (med.unidades_por_presentacion || 10));
-        } else if (tm.tipoPrescripcion === 'dosis') {
-          const totalDosesInStock = med.stock * (med.dosis_total_presentacion || 100);
-          const remainDoses = Math.max(0, totalDosesInStock - tm.cantidad_o_dosis);
-          med.stock = Math.ceil(remainDoses / (med.dosis_total_presentacion || 100));
-        }
-      }
-    });
-
-    // Limpiar temporales
-    tempMeds = [];
-    tempLabs = [];
-    tempImgs = [];
-
     saveAppState(state);
     alert("Nota de evolución y órdenes guardadas correctamente.");
     renderEmergDashboard();
   });
-
-  renderTempOrders();
 }
 
 // 7. Renderizar listado de órdenes en borrador
