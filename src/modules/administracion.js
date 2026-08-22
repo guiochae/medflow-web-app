@@ -1903,6 +1903,7 @@ function renderRrhhNomina(container, state) {
                     <div style="display: flex; align-items: center; gap: 8px;">
                       <strong style="color: var(--accent-secondary); font-size: 0.95rem;">Q${parseFloat(n.totalNet).toFixed(2)}</strong>
                       <button class="btn btn-secondary btn-small btn-print-payroll" data-id="${n.id}" style="padding: 4px 8px; font-size: 0.75rem;" title="Imprimir Nómina">🖨️</button>
+                      <button class="btn btn-danger btn-small btn-delete-payroll" data-id="${n.id}" style="padding: 4px 8px; font-size: 0.75rem;" title="Eliminar Nómina">🗑️</button>
                     </div>
                   </div>
                 </div>
@@ -1949,6 +1950,33 @@ function renderRrhhNomina(container, state) {
       const payroll = state.administracion_nominas.find(n => n.id === payrollId);
       if (payroll) {
         showPayrollPrintPreview(payroll, state);
+      }
+    });
+  });
+
+  // Bind Delete Payroll Click
+  const deleteBtns = container.querySelectorAll('.btn-delete-payroll');
+  deleteBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const payrollId = btn.dataset.id;
+      const payroll = state.administracion_nominas.find(n => n.id === payrollId);
+      if (payroll) {
+        if (confirm(`¿Confirma eliminar permanentemente la nómina de ${payroll.month}? Esta acción también anulará los pagos de caja y asientos contables asociados.`)) {
+          // 1. Eliminar la nómina
+          state.administracion_nominas = state.administracion_nominas.filter(n => n.id !== payrollId);
+          
+          // 2. Eliminar registros de caja asociados
+          state.administracion_caja = (state.administracion_caja || []).filter(c => c.refId !== payrollId);
+          
+          // 3. Eliminar partida contable asociada
+          state.administracion_contabilidad = (state.administracion_contabilidad || []).filter(entry => 
+            !(entry.concept && entry.concept.includes(`Periodo: ${payroll.month}`))
+          );
+          
+          saveAppState(state);
+          alert(`Nómina de ${payroll.month} eliminada correctamente.`);
+          renderRrhhNomina(container, state);
+        }
       }
     });
   });
