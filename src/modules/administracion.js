@@ -52,11 +52,6 @@ export function renderAdministracion(container) {
     return;
   }
 
-  // Si es recepcionista, forzar a estar ÚNICAMENTE en la pestaña de Caja y deshabilitar las demás
-  if (isRecepcionista) {
-    activeAdminTab = 'caja';
-  }
-
   // Inicializar colecciones de administración si no existen en el estado
   state.administracion_compras = state.administracion_compras || [];
   state.administracion_contabilidad = state.administracion_contabilidad || [];
@@ -90,10 +85,10 @@ export function renderAdministracion(container) {
     <!-- Pestañas Principales del Módulo -->
     <div class="tabs-container" style="display: flex; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 1px; margin-bottom: 1.5rem;">
       <button class="tab-btn ${activeAdminTab === 'caja' ? 'active' : ''}" id="admin-tab-caja">💳 Facturación y Caja</button>
-      <button class="tab-btn ${activeAdminTab === 'contabilidad' ? 'active' : ''}" id="admin-tab-contabilidad" ${isRecepcionista ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''}>📊 Contabilidad</button>
-      <button class="tab-btn ${activeAdminTab === 'compras' ? 'active' : ''}" id="admin-tab-compras" ${isRecepcionista ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''}>🛒 Compras</button>
-      <button class="tab-btn ${activeAdminTab === 'rrhh' ? 'active' : ''}" id="admin-tab-rrhh" ${isRecepcionista ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''}>👥 Recursos Humanos</button>
-      <button class="tab-btn ${activeAdminTab === 'medicos' ? 'active' : ''}" id="admin-tab-medicos" ${isRecepcionista ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''}>🩺 Médicos Externos</button>
+      <button class="tab-btn ${activeAdminTab === 'contabilidad' ? 'active' : ''}" id="admin-tab-contabilidad">📊 Contabilidad</button>
+      <button class="tab-btn ${activeAdminTab === 'compras' ? 'active' : ''}" id="admin-tab-compras">🛒 Compras</button>
+      <button class="tab-btn ${activeAdminTab === 'rrhh' ? 'active' : ''}" id="admin-tab-rrhh">👥 Recursos Humanos</button>
+      <button class="tab-btn ${activeAdminTab === 'medicos' ? 'active' : ''}" id="admin-tab-medicos">🩺 Médicos Externos</button>
     </div>
 
     <div id="admin-module-content">
@@ -103,12 +98,10 @@ export function renderAdministracion(container) {
 
   // Bind Pestañas Principales
   document.getElementById('admin-tab-caja').addEventListener('click', () => { activeAdminTab = 'caja'; renderAdminContent(state); });
-  if (!isRecepcionista) {
-    document.getElementById('admin-tab-contabilidad').addEventListener('click', () => { activeAdminTab = 'contabilidad'; renderAdminContent(state); });
-    document.getElementById('admin-tab-compras').addEventListener('click', () => { activeAdminTab = 'compras'; renderAdminContent(state); });
-    document.getElementById('admin-tab-rrhh').addEventListener('click', () => { activeAdminTab = 'rrhh'; renderAdminContent(state); });
-    document.getElementById('admin-tab-medicos').addEventListener('click', () => { activeAdminTab = 'medicos'; renderAdminContent(state); });
-  }
+  document.getElementById('admin-tab-contabilidad').addEventListener('click', () => { activeAdminTab = 'contabilidad'; renderAdminContent(state); });
+  document.getElementById('admin-tab-compras').addEventListener('click', () => { activeAdminTab = 'compras'; renderAdminContent(state); });
+  document.getElementById('admin-tab-rrhh').addEventListener('click', () => { activeAdminTab = 'rrhh'; renderAdminContent(state); });
+  document.getElementById('admin-tab-medicos').addEventListener('click', () => { activeAdminTab = 'medicos'; renderAdminContent(state); });
 
   // Cargar contenido
   renderAdminContent(state);
