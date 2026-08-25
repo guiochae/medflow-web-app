@@ -41,8 +41,11 @@ export function renderPreconsulta(container) {
         <h1>Preconsulta</h1>
         <p>Toma de signos vitales, datos demográficos, citas y gestión de estudios.</p>
       </div>
-      <div>
-        <button class="btn btn-primary" id="btn-new-patient">
+      <div style="display: flex; gap: 10px;">
+        <button class="btn btn-secondary" id="btn-view-appointments-agenda" style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; padding: 8px 14px;">
+          <span>📅</span> Agenda de Citas
+        </button>
+        <button class="btn btn-primary" id="btn-new-patient" style="font-size: 0.85rem; padding: 8px 14px;">
           <span>+</span> Nuevo Paciente
         </button>
       </div>
@@ -74,6 +77,13 @@ export function renderPreconsulta(container) {
 
   // Bind new patient button
   document.getElementById('btn-new-patient').addEventListener('click', showNewPatientForm);
+
+  // Bind agenda button
+  document.getElementById('btn-view-appointments-agenda').addEventListener('click', () => {
+    setActivePatientId(null);
+    renderPatientList();
+    renderAppointmentsAgenda();
+  });
 
   // Bind search input
   document.getElementById('patient-search').addEventListener('input', (e) => {
@@ -3617,4 +3627,216 @@ function printSurgicalRecordInHistory(surg, patient, stateObj) {
     </html>
   `);
   printWindow.document.close();
+}
+
+// Variables para controlar el estado del calendario de citas
+let calendarSelectedDoctorId = '';
+let calendarSelectedYear = new Date().getFullYear();
+let calendarSelectedMonth = new Date().getMonth();
+
+export function renderAppointmentsAgenda(docId = null, year = null, month = null) {
+  const state = getAppState();
+  const detailArea = document.getElementById('patient-detail-area');
+  if (!detailArea) return;
+
+  const doctors = state.users.filter(u => {
+    const r = String(u.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return r.includes('medico') || r.includes('admin') || r.includes('administrador');
+  });
+
+  if (docId !== null) calendarSelectedDoctorId = docId;
+  if (year !== null) calendarSelectedYear = year;
+  if (month !== null) calendarSelectedMonth = month;
+
+  // Fallback para doctor seleccionado por defecto
+  if (!calendarSelectedDoctorId && doctors.length > 0) {
+    calendarSelectedDoctorId = doctors[0].id;
+  }
+
+  const selectedDoc = doctors.find(d => d.id === calendarSelectedDoctorId) || doctors[0];
+  const docName = selectedDoc ? selectedDoc.name : '';
+
+  // Filtrar citas del médico seleccionado
+  const appointments = [];
+  if (state.patients && Array.isArray(state.patients)) {
+    state.patients.forEach(p => {
+      const isAssigned = p.assignedDoctorId === calendarSelectedDoctorId || 
+                         (docName && p.assignedDoctorName === docName);
+      if (isAssigned && p.appointments && Array.isArray(p.appointments)) {
+        p.appointments.forEach(app => {
+          appointments.push({
+            patientId: p.id,
+            patientName: p.name,
+            date: app.date, // YYYY-MM-DD
+            time: app.time, // HH:MM
+            notes: app.notes || ''
+          });
+        });
+      }
+    });
+  }
+
+  // Ordenar por hora
+  appointments.sort((a, b) => a.time.localeCompare(b.time));
+
+  // Meses en español
+  const monthNames = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+  ];
+
+  // Calcular días de la cuadrícula
+  const firstDayIndex = new Date(calendarSelectedYear, calendarSelectedMonth, 1).getDay();
+  const totalDays = new Date(calendarSelectedYear, calendarSelectedMonth + 1, 0).getDate();
+  const prevMonthTotalDays = new Date(calendarSelectedYear, calendarSelectedMonth, 0).getDate();
+
+  // Generar HTML de los días
+  let daysHtml = '';
+  
+  // Días del mes anterior (relleno)
+  for (let i = firstDayIndex - 1; i >= 0; i--) {
+    const dayNum = prevMonthTotalDays - i;
+    daysHtml += `
+      <div style="background: rgba(255,255,255,0.005); border: 1px solid rgba(255,255,255,0.03); min-height: 90px; padding: 6px; box-sizing: border-box; opacity: 0.25; cursor: not-allowed;">
+        <span style="font-size: 0.8rem; font-weight: bold; color: var(--text-muted);">${dayNum}</span>
+      </div>
+    `;
+  }
+
+  // Días del mes actual
+  const today = new Date();
+  const isCurrentMonth = today.getFullYear() === calendarSelectedYear && today.getMonth() === calendarSelectedMonth;
+
+  for (let day = 1; day <= totalDays; day++) {
+    const dateStr = `${calendarSelectedYear}-${String(calendarSelectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const dayAppointments = appointments.filter(app => app.date === dateStr);
+    
+    const isToday = isCurrentMonth && today.getDate() === day;
+    const borderStyle = isToday 
+      ? 'border: 2px solid var(--accent-primary); box-shadow: 0 0 10px rgba(0, 242, 254, 0.25);' 
+      : 'border: 1px solid var(--border-color);';
+
+    let appListHtml = '';
+    if (dayAppointments.length > 0) {
+      appListHtml = dayAppointments.map(app => `
+        <div class="calendar-app-pill" data-patient-id="${app.patientId}" style="
+          background: rgba(0, 242, 254, 0.08);
+          border-left: 3px solid var(--accent-primary);
+          color: var(--text-primary);
+          font-size: 0.72rem;
+          padding: 4px 6px;
+          border-radius: 3px;
+          margin-top: 4px;
+          cursor: pointer;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          transition: all 0.2s;
+        " title="${app.time} - ${app.patientName} (${app.notes})">
+          <strong>${app.time}</strong> ${app.patientName}
+        </div>
+      `).join('');
+    }
+
+    daysHtml += `
+      <div style="background: rgba(255,255,255,0.015); ${borderStyle} min-height: 90px; padding: 6px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-start; border-radius: 4px;">
+        <span style="font-size: 0.8rem; font-weight: bold; color: ${isToday ? 'var(--accent-primary)' : 'var(--text-muted)'}; margin-bottom: 2px;">${day}</span>
+        <div style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;">
+          ${appListHtml}
+        </div>
+      </div>
+    `;
+  }
+
+  // Generar layout completo
+  detailArea.innerHTML = `
+    <div class="glass-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; min-height: 500px;">
+      
+      <!-- Encabezado de la Agenda -->
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
+        <div>
+          <h2 style="font-family: var(--font-heading); color: var(--accent-primary); margin: 0; display: flex; align-items: center; gap: 8px;">
+            <span>📅</span> Agenda de Citas Médicas
+          </h2>
+          <p style="color: var(--text-muted); font-size: 0.82rem; margin-top: 4px;">Calendario mensual de citas programadas por médico especialista.</p>
+        </div>
+        
+        <!-- Selectores y Navegación -->
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <!-- Selector de Médico -->
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <label style="font-size: 0.8rem; color: var(--text-muted); font-weight: bold;">Médico:</label>
+            <select id="agenda-doctor-select" style="padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.82rem; min-width: 180px;">
+              ${doctors.map(d => `<option value="${d.id}" ${d.id === calendarSelectedDoctorId ? 'selected' : ''}>${d.name}</option>`).join('')}
+            </select>
+          </div>
+          
+          <!-- Controles de Mes -->
+          <div style="display: flex; align-items: center; gap: 6px; border: 1px solid var(--border-color); padding: 2px; border-radius: var(--radius-sm); background: rgba(0,0,0,0.1);">
+            <button class="btn btn-secondary btn-small" id="btn-agenda-prev-month" style="padding: 4px 8px; font-size: 0.8rem;">◀</button>
+            <span style="font-size: 0.85rem; font-weight: bold; min-width: 110px; text-align: center; color: var(--text-primary);">
+              ${monthNames[calendarSelectedMonth]} ${calendarSelectedYear}
+            </span>
+            <button class="btn btn-secondary btn-small" id="btn-agenda-next-month" style="padding: 4px 8px; font-size: 0.8rem;">▶</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cuadrícula del Calendario -->
+      <div style="display: flex; flex-direction: column; gap: 5px; flex: 1;">
+        <!-- Cabecera de días de la semana -->
+        <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; font-size: 0.75rem; font-weight: bold; color: var(--accent-secondary); text-transform: uppercase; border-bottom: 2px solid var(--border-color); padding-bottom: 4px; margin-bottom: 4px;">
+          <div>Dom</div>
+          <div>Lun</div>
+          <div>Mar</div>
+          <div>Mié</div>
+          <div>Jue</div>
+          <div>Vie</div>
+          <div>Sáb</div>
+        </div>
+        <!-- Grid de días -->
+        <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; flex: 1;">
+          ${daysHtml}
+        </div>
+      </div>
+      
+    </div>
+  `;
+
+  // Bind Selector Events
+  document.getElementById('agenda-doctor-select').addEventListener('change', (e) => {
+    renderAppointmentsAgenda(e.target.value);
+  });
+
+  document.getElementById('btn-agenda-prev-month').addEventListener('click', () => {
+    let m = calendarSelectedMonth - 1;
+    let y = calendarSelectedYear;
+    if (m < 0) {
+      m = 11;
+      y -= 1;
+    }
+    renderAppointmentsAgenda(calendarSelectedDoctorId, y, m);
+  });
+
+  document.getElementById('btn-agenda-next-month').addEventListener('click', () => {
+    let m = calendarSelectedMonth + 1;
+    let y = calendarSelectedYear;
+    if (m > 11) {
+      m = 0;
+      y += 1;
+    }
+    renderAppointmentsAgenda(calendarSelectedDoctorId, y, m);
+  });
+
+  // Bind Click on appointment pills
+  detailArea.querySelectorAll('.calendar-app-pill').forEach(pill => {
+    pill.addEventListener('click', (e) => {
+      const patientId = pill.getAttribute('data-patient-id');
+      if (patientId) {
+        setActivePatientId(patientId);
+        renderPatientList();
+        renderPatientDetails();
+      }
+    });
+  });
 }
