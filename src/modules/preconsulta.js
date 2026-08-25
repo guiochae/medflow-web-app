@@ -3639,12 +3639,33 @@ export function renderAppointmentsAgenda(docId = null, year = null, month = null
   const detailArea = document.getElementById('patient-detail-area');
   if (!detailArea) return;
 
-  const doctors = state.users.filter(u => {
+  const loggedUser = sessionStorage.getItem('medflow_logged_user');
+  let currentUser = null;
+  let isDoctor = false;
+  if (loggedUser) {
+    try {
+      currentUser = JSON.parse(loggedUser);
+      const roleLower = String(currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      isDoctor = roleLower.includes('medico');
+    } catch(e) {
+      console.error("Error parsing logged user in agenda:", e);
+    }
+  }
+
+  let doctors = state.users.filter(u => {
     const r = String(u.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     return r.includes('medico') || r.includes('admin') || r.includes('administrador');
   });
 
-  if (docId !== null) calendarSelectedDoctorId = docId;
+  if (isDoctor && currentUser) {
+    // Si el rol es médico, forzar a que solo vea su propia información
+    const matchedDoc = doctors.find(d => d.id === currentUser.id);
+    doctors = matchedDoc ? [matchedDoc] : [{ id: currentUser.id, name: currentUser.name }];
+    calendarSelectedDoctorId = currentUser.id;
+  } else {
+    if (docId !== null) calendarSelectedDoctorId = docId;
+  }
+
   if (year !== null) calendarSelectedYear = year;
   if (month !== null) calendarSelectedMonth = month;
 
