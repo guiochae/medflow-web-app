@@ -137,11 +137,20 @@ function renderInventoryAlerts(query = '') {
 function enrichMedication(m) {
   if (!m) return null;
   const precio = parseFloat(m.price || m.precio_presentacion || 50.0);
-  const unidades = parseInt(m.unidades_por_presentacion || 10);
-  
   const presNorm = String(m.presentation || '').toLowerCase();
   const nameNorm = String(m.name || '').toLowerCase();
   
+  const unidades = m.unidades_por_presentacion !== undefined 
+    ? parseInt(m.unidades_por_presentacion) 
+    : (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') || nameNorm.includes('jarabe')
+        ? 100 
+        : (presNorm.includes('ampolla') || presNorm.includes('inyeccion') || nameNorm.includes('ampolla') ? 1 : 30));
+        
+  const unidadDispensable = m.unidad_dispensable || 
+    (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') || nameNorm.includes('jarabe')
+      ? 'ml' 
+      : (presNorm.includes('ampolla') || presNorm.includes('inyeccion') || nameNorm.includes('ampolla') ? 'Ampolla' : 'Tableta'));
+
   const esFrac = m.es_fraccionable !== undefined 
     ? !!m.es_fraccionable 
     : (m.permite_dosis !== undefined 
@@ -157,11 +166,37 @@ function enrichMedication(m) {
     price: precio,
     precio_presentacion: precio,
     unidades_por_presentacion: unidades,
+    unidad_dispensable: unidadDispensable,
+    precio_unitario: parseFloat((precio / unidades).toFixed(4)),
     es_fraccionable: esFrac,
     permite_dosis: esFrac,
     dosis_total_presentacion: dosisTotal,
     unidad_medida_dosis: unidadMedida
   };
+}
+
+function formatStockFriendly(stock, factor, presentacion = 'Caja', unidadDispensable = 'Tableta') {
+  const stockVal = parseInt(stock) || 0;
+  const factorVal = Math.max(1, parseInt(factor) || 1);
+  const pres = presentacion || 'Caja';
+  const unit = unidadDispensable || 'Tableta';
+
+  if (factorVal <= 1) {
+    return `${stockVal} ${unit}(s)`;
+  }
+
+  const completePacks = Math.floor(stockVal / factorVal);
+  const remainingUnits = stockVal % factorVal;
+
+  let text = `${stockVal} ${unit}(s)`;
+  if (completePacks > 0 && remainingUnits > 0) {
+    text += ` (${completePacks} ${pres}(s) y ${remainingUnits} ${unit}(s))`;
+  } else if (completePacks > 0 && remainingUnits === 0) {
+    text += ` (${completePacks} ${pres}(s) completa(s))`;
+  } else {
+    text += ` (0 ${pres}(s) completa(s))`;
+  }
+  return text;
 }
 
 // Lista temporal de medicamentos agregados a la receta en curso
@@ -858,18 +893,19 @@ function renderRecipeBuilder(patient, doctors) {
     }
 
     const m = enrichMedication(activeSelectedRecipeMed);
+    const stockFriendly = formatStockFriendly(m.stock, m.unidades_por_presentacion, m.presentation, m.unidad_dispensable);
     packInfoEl.style.display = 'grid';
     packInfoEl.innerHTML = `
       <div>📦 Lote: <strong>${m.lote || 'N/A'}</strong></div>
-      <div>🩺 Stock: <strong>${m.stock} cajas</strong></div>
-      <div>📑 Unidades/Caja: <strong>${m.unidades_por_presentacion} uds</strong></div>
-      <div>📏 Dosis/Caja: <strong>${m.dosis_total_presentacion} ${m.unidad_medida_dosis}</strong></div>
+      <div>🩺 Stock: <strong>${stockFriendly}</strong></div>
+      <div>📑 Unidades/${m.presentation || 'Caja'}: <strong>${m.unidades_por_presentacion} ${m.unidad_dispensable || 'uds'}</strong></div>
+      <div>📏 Dosis/${m.presentation || 'Caja'}: <strong>${m.dosis_total_presentacion} ${m.unidad_medida_dosis}</strong></div>
     `;
 
     // Rebuild options based on fractionability
     let typeOptions = `
-      <option value="presentacion">Presentación Completa (Q${m.precio_presentacion.toFixed(2)})</option>
-      <option value="unidad">Unidad Individual (Q${(m.precio_presentacion / m.unidades_por_presentacion).toFixed(2)} c/u)</option>
+      <option value="presentacion">Presentación Completa (${m.presentation || 'Caja'}) - Q${m.precio_presentacion.toFixed(2)}</option>
+      <option value="unidad">Unidad Individual (${m.unidad_dispensable || 'Tableta'}) - Q${m.precio_unitario.toFixed(2)} c/u</option>
     `;
     if (m.es_fraccionable) {
       typeOptions += `<option value="dosis">Dosis Específica (${m.unidad_medida_dosis})</option>`;
@@ -890,27 +926,28 @@ function renderRecipeBuilder(patient, doctors) {
     if (!typeSelect || !qtyInput || !lblQty || !costPreview) return;
 
     const type = typeSelect.value;
+    const m = activeSelectedRecipeMed ? enrichMedication(activeSelectedRecipeMed) : null;
+
     if (type === 'presentacion') {
-      lblQty.textContent = "Cantidad (Cajas)";
+      lblQty.textContent = `Cantidad (${m ? m.presentation : 'Caja'}(s))`;
     } else if (type === 'unidad') {
-      lblQty.textContent = "Cantidad (Unidades)";
+      lblQty.textContent = `Cantidad (${m ? m.unidad_dispensable : 'Tableta'}(s))`;
     } else if (type === 'dosis') {
-      lblQty.textContent = `Dosis Específica (${activeSelectedRecipeMed ? enrichMedication(activeSelectedRecipeMed).unidad_medida_dosis : 'mg'})`;
+      lblQty.textContent = `Dosis Específica (${m ? m.unidad_medida_dosis : 'mg'})`;
     }
 
-    if (!activeSelectedRecipeMed) {
+    if (!m) {
       costPreview.textContent = "Q0.00";
       return;
     }
 
-    const m = enrichMedication(activeSelectedRecipeMed);
     const val = parseFloat(qtyInput.value) || 0;
     let cost = 0;
 
     if (type === 'presentacion') {
       cost = val * m.precio_presentacion;
     } else if (type === 'unidad') {
-      cost = val * (m.precio_presentacion / m.unidades_por_presentacion);
+      cost = val * m.precio_unitario;
     } else if (type === 'dosis') {
       cost = val * (m.precio_presentacion / m.dosis_total_presentacion);
     }
@@ -982,25 +1019,34 @@ function renderRecipeBuilder(patient, doctors) {
       type = typeSelectEl ? typeSelectEl.value : 'presentacion';
 
       if (type === 'presentacion') {
+        qtyToRecord = quantity * m.unidades_por_presentacion;
         finalCost = quantity * m.precio_presentacion;
-        qtyToRecord = quantity;
+        displayPres = m.presentation || 'Caja';
       } else if (type === 'unidad') {
-        finalCost = quantity * (m.precio_presentacion / m.unidades_por_presentacion);
         qtyToRecord = quantity;
-        displayPres = `Unidad (${presentation})`;
+        finalCost = quantity * m.precio_unitario;
+        displayPres = `Unidad (${m.presentation || 'Caja'})`;
       } else if (type === 'dosis') {
+        qtyToRecord = quantity;
         finalCost = quantity * (m.precio_presentacion / m.dosis_total_presentacion);
-        qtyToRecord = 1;
-        displayPres = `Dosis fracc. (${presentation})`;
+        displayPres = `Dosis fracc. (${m.presentation || 'Caja'})`;
       }
     } else {
       finalCost = quantity * 50.00;
+      qtyToRecord = quantity;
     }
+
+    const mEnriched = activeSelectedRecipeMed ? enrichMedication(activeSelectedRecipeMed) : null;
+    const quantityText = type === 'presentacion' 
+      ? `${quantity} ${mEnriched ? mEnriched.presentation : 'caja'}(s)` 
+      : (type === 'unidad' 
+          ? `${quantity} ${mEnriched ? mEnriched.unidad_dispensable : 'unidad'}(s)` 
+          : `${quantity} ${mEnriched ? mEnriched.unidad_medida_dosis : 'mg'}`);
 
     const newMed = {
       name,
       presentation: displayPres,
-      quantity: type === 'presentacion' ? `${quantity} cajas` : (type === 'unidad' ? `${quantity} unidades` : `${quantity} ${activeSelectedRecipeMed ? enrichMedication(activeSelectedRecipeMed).unidad_medida_dosis : 'mg'}`),
+      quantity: quantityText,
       dosage,
       duration,
       breakdownSchedule: shouldBreakdown,
@@ -1008,7 +1054,7 @@ function renderRecipeBuilder(patient, doctors) {
       cantidad_o_dosis: quantity,
       costo_calculado: finalCost,
       qty: qtyToRecord,
-      price: finalCost / qtyToRecord
+      price: finalCost / (qtyToRecord || 1)
     };
 
     currentPrescriptionMedicines.push(newMed);

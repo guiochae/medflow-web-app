@@ -4,11 +4,20 @@ import { getAppState, saveAppState, getActivePatientId, setActivePatientId } fro
 function enrichMedication(m) {
   if (!m) return null;
   const precio = parseFloat(m.price || m.precio_presentacion || 50.0);
-  const unidades = parseInt(m.unidades_por_presentacion || 10);
-  
   const presNorm = String(m.presentation || '').toLowerCase();
   const nameNorm = String(m.name || '').toLowerCase();
   
+  const unidades = m.unidades_por_presentacion !== undefined 
+    ? parseInt(m.unidades_por_presentacion) 
+    : (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') || nameNorm.includes('jarabe')
+        ? 100 
+        : (presNorm.includes('ampolla') || presNorm.includes('inyeccion') || nameNorm.includes('ampolla') ? 1 : 30));
+        
+  const unidadDispensable = m.unidad_dispensable || 
+    (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') || nameNorm.includes('jarabe')
+      ? 'ml' 
+      : (presNorm.includes('ampolla') || presNorm.includes('inyeccion') || nameNorm.includes('ampolla') ? 'Ampolla' : 'Tableta'));
+
   const esFrac = m.es_fraccionable !== undefined 
     ? !!m.es_fraccionable 
     : (m.permite_dosis !== undefined 
@@ -24,11 +33,37 @@ function enrichMedication(m) {
     price: precio,
     precio_presentacion: precio,
     unidades_por_presentacion: unidades,
+    unidad_dispensable: unidadDispensable,
+    precio_unitario: parseFloat((precio / unidades).toFixed(4)),
     es_fraccionable: esFrac,
     permite_dosis: esFrac,
     dosis_total_presentacion: dosisTotal,
     unidad_medida_dosis: unidadMedida
   };
+}
+
+function formatStockFriendly(stock, factor, presentacion = 'Caja', unidadDispensable = 'Tableta') {
+  const stockVal = parseInt(stock) || 0;
+  const factorVal = Math.max(1, parseInt(factor) || 1);
+  const pres = presentacion || 'Caja';
+  const unit = unidadDispensable || 'Tableta';
+
+  if (factorVal <= 1) {
+    return `${stockVal} ${unit}(s)`;
+  }
+
+  const completePacks = Math.floor(stockVal / factorVal);
+  const remainingUnits = stockVal % factorVal;
+
+  let text = `${stockVal} ${unit}(s)`;
+  if (completePacks > 0 && remainingUnits > 0) {
+    text += ` (${completePacks} ${pres}(s) y ${remainingUnits} ${unit}(s))`;
+  } else if (completePacks > 0 && remainingUnits === 0) {
+    text += ` (${completePacks} ${pres}(s) completa(s))`;
+  } else {
+    text += ` (0 ${pres}(s) completa(s))`;
+  }
+  return text;
 }
 
 // Lista temporal de órdenes para la evolución médica en curso
@@ -1286,11 +1321,12 @@ function showMedsOrderModal(patient) {
     }
 
     const m = enrichMedication(selectedMed);
+    const stockFriendly = formatStockFriendly(m.stock, m.unidades_por_presentacion, m.presentation, m.unidad_dispensable);
 
     // Options for Prescription Type
     let typeOptions = `
-      <option value="presentacion">Presentación Completa (Q${m.precio_presentacion.toFixed(2)})</option>
-      <option value="unidad">Unidad Individual (Q${(m.precio_presentacion / m.unidades_por_presentacion).toFixed(2)} c/u)</option>
+      <option value="presentacion">Presentación Completa (${m.presentation || 'Caja'}) - Q${m.precio_presentacion.toFixed(2)}</option>
+      <option value="unidad">Unidad Individual (${m.unidad_dispensable || 'Tableta'}) - Q${m.precio_unitario.toFixed(2)} c/u</option>
     `;
 
     if (m.es_fraccionable) {
@@ -1304,9 +1340,9 @@ function showMedsOrderModal(patient) {
         <h4 style="margin: 0 0 10px 0; color: var(--accent-primary); font-size: 0.92rem;">${m.name}</h4>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; opacity: 0.8; font-size: 0.78rem;">
           <div>📦 Lote: <strong>${m.lote || 'N/A'}</strong></div>
-          <div>🩺 Stock: <strong>${m.stock} cajas</strong></div>
-          <div>📑 Unidades/Caja: <strong>${m.unidades_por_presentacion} uds</strong></div>
-          <div>📏 Dosis/Caja: <strong>${m.dosis_total_presentacion} ${m.unidad_medida_dosis}</strong></div>
+          <div>🩺 Stock: <strong>${stockFriendly}</strong></div>
+          <div>📑 Unidades/${m.presentation || 'Caja'}: <strong>${m.unidades_por_presentacion} uds</strong></div>
+          <div>📏 Dosis/${m.presentation || 'Caja'}: <strong>${m.dosis_total_presentacion} ${m.unidad_medida_dosis}</strong></div>
         </div>
 
         <div class="form-group" style="margin-bottom: 10px;">
@@ -1342,20 +1378,20 @@ function showMedsOrderModal(patient) {
     const updateConditionalFields = () => {
       const type = typeSelect.value;
       if (type === 'presentacion') {
+        const availableCajas = Math.floor(m.stock / m.unidades_por_presentacion);
         condContainer.innerHTML = `
           <label style="display: block; font-weight: bold; margin-bottom: 3px; font-size: 0.8rem;">Cantidad (Presentación Completa)</label>
-          <input type="number" id="presc-qty-val" value="1" min="1" max="${m.stock}" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+          <input type="number" id="presc-qty-val" value="1" min="1" max="${availableCajas || 1}" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
         `;
       } else if (type === 'unidad') {
-        const totalUnitsStock = m.stock * m.unidades_por_presentacion;
         condContainer.innerHTML = `
           <label style="display: block; font-weight: bold; margin-bottom: 3px; font-size: 0.8rem;">Cantidad (Unidades Individuales)</label>
-          <input type="number" id="presc-qty-val" value="1" min="1" max="${totalUnitsStock}" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+          <input type="number" id="presc-qty-val" value="1" min="1" max="${m.stock}" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
         `;
       } else if (type === 'dosis') {
         condContainer.innerHTML = `
           <label style="display: block; font-weight: bold; margin-bottom: 3px; font-size: 0.8rem;">Dosis Específica Prescrita (${m.unidad_medida_dosis})</label>
-          <input type="number" id="presc-qty-val" value="" min="0.1" max="${m.dosis_total_presentacion}" step="any" placeholder="Dosis (Máx: ${m.dosis_total_presentacion} ${m.unidad_medida_dosis})" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+          <input type="number" id="presc-qty-val" value="" min="0.1" max="${m.stock}" step="any" placeholder="Dosis (Máx: ${m.stock} ${m.unidad_medida_dosis})" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
         `;
       }
 
@@ -1369,7 +1405,7 @@ function showMedsOrderModal(patient) {
         if (type === 'presentacion') {
           cost = val * m.precio_presentacion;
         } else if (type === 'unidad') {
-          cost = val * (m.precio_presentacion / m.unidades_por_presentacion);
+          cost = val * m.precio_unitario;
         } else if (type === 'dosis') {
           cost = val * (m.precio_presentacion / m.dosis_total_presentacion);
         }
@@ -1397,19 +1433,20 @@ function showMedsOrderModal(patient) {
 
       // Validation bounds
       if (type === 'presentacion') {
-        if (val > m.stock) {
-          alert(`No hay suficiente stock. Stock disponible: ${m.stock} cajas.`);
+        const unitsNeeded = val * m.unidades_por_presentacion;
+        if (unitsNeeded > m.stock) {
+          const availableCajas = Math.floor(m.stock / m.unidades_por_presentacion);
+          alert(`No hay suficiente stock. Stock disponible: ${availableCajas} cajas (${m.stock} unidades).`);
           return;
         }
       } else if (type === 'unidad') {
-        const totalUnitsStock = m.stock * m.unidades_por_presentacion;
-        if (val > totalUnitsStock) {
-          alert(`No hay suficiente stock. Stock disponible: ${totalUnitsStock} unidades.`);
+        if (val > m.stock) {
+          alert(`No hay suficiente stock. Stock disponible: ${m.stock} unidades.`);
           return;
         }
       } else if (type === 'dosis') {
-        if (val > m.dosis_total_presentacion) {
-          alert(`La dosis ingresada (${val} ${m.unidad_medida_dosis}) supera el total de la presentación (${m.dosis_total_presentacion} ${m.unidad_medida_dosis}).`);
+        if (val > m.stock) {
+          alert(`No hay suficiente stock en volumen/dosis. Stock disponible: ${m.stock} unidades/ml.`);
           return;
         }
       }
@@ -1421,14 +1458,14 @@ function showMedsOrderModal(patient) {
 
       if (type === 'presentacion') {
         finalCost = val * m.precio_presentacion;
-        qtyToRecord = val;
+        qtyToRecord = val * m.unidades_por_presentacion;
       } else if (type === 'unidad') {
-        finalCost = val * (m.precio_presentacion / m.unidades_por_presentacion);
-        qtyToRecord = val; // units
+        finalCost = val * m.precio_unitario;
+        qtyToRecord = val;
         displayPresentation = `Unidad (${m.presentation || 'N/A'})`;
       } else if (type === 'dosis') {
         finalCost = val * (m.precio_presentacion / m.dosis_total_presentacion);
-        qtyToRecord = 1;
+        qtyToRecord = val;
         displayPresentation = `Dosis fracc. (${m.presentation || 'N/A'})`;
       }
 
@@ -1436,9 +1473,9 @@ function showMedsOrderModal(patient) {
         id: m.id,
         name: m.name,
         presentation: displayPresentation,
-        price: finalCost / qtyToRecord, // Calculated price unit
+        price: finalCost / (qtyToRecord || 1), // Calculated price unit
         qty: qtyToRecord,
-        dosage: `${doseText} (${type === 'presentacion' ? `${val} cajas` : (type === 'unidad' ? `${val} unidades` : `${val} ${m.unidad_medida_dosis}`)})`,
+        dosage: `${doseText} (${type === 'presentacion' ? `${val} ${m.presentation || 'caja'}(s)` : (type === 'unidad' ? `${val} ${m.unidad_dispensable || 'unidad'}(s)` : `${val} ${m.unidad_medida_dosis}`)})`,
         tipoPrescripcion: type,
         cantidad_o_dosis: val,
         costo_calculado: finalCost,

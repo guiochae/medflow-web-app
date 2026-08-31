@@ -5,11 +5,20 @@ import { renderAdmissionForm } from './encamamiento.js';
 function enrichMedication(m) {
   if (!m) return null;
   const precio = parseFloat(m.price || m.precio_presentacion || 50.0);
-  const unidades = parseInt(m.unidades_por_presentacion || 10);
-  
   const presNorm = String(m.presentation || '').toLowerCase();
   const nameNorm = String(m.name || '').toLowerCase();
   
+  const unidades = m.unidades_por_presentacion !== undefined 
+    ? parseInt(m.unidades_por_presentacion) 
+    : (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') || nameNorm.includes('jarabe')
+        ? 100 
+        : (presNorm.includes('ampolla') || presNorm.includes('inyeccion') || nameNorm.includes('ampolla') ? 1 : 30));
+        
+  const unidadDispensable = m.unidad_dispensable || 
+    (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') || nameNorm.includes('jarabe')
+      ? 'ml' 
+      : (presNorm.includes('ampolla') || presNorm.includes('inyeccion') || nameNorm.includes('ampolla') ? 'Ampolla' : 'Tableta'));
+
   const esFrac = m.es_fraccionable !== undefined 
     ? !!m.es_fraccionable 
     : (m.permite_dosis !== undefined 
@@ -25,11 +34,37 @@ function enrichMedication(m) {
     price: precio,
     precio_presentacion: precio,
     unidades_por_presentacion: unidades,
+    unidad_dispensable: unidadDispensable,
+    precio_unitario: parseFloat((precio / unidades).toFixed(4)),
     es_fraccionable: esFrac,
     permite_dosis: esFrac,
     dosis_total_presentacion: dosisTotal,
     unidad_medida_dosis: unidadMedida
   };
+}
+
+function formatStockFriendly(stock, factor, presentacion = 'Caja', unidadDispensable = 'Tableta') {
+  const stockVal = parseInt(stock) || 0;
+  const factorVal = Math.max(1, parseInt(factor) || 1);
+  const pres = presentacion || 'Caja';
+  const unit = unidadDispensable || 'Tableta';
+
+  if (factorVal <= 1) {
+    return `${stockVal} ${unit}(s)`;
+  }
+
+  const completePacks = Math.floor(stockVal / factorVal);
+  const remainingUnits = stockVal % factorVal;
+
+  let text = `${stockVal} ${unit}(s)`;
+  if (completePacks > 0 && remainingUnits > 0) {
+    text += ` (${completePacks} ${pres}(s) y ${remainingUnits} ${unit}(s))`;
+  } else if (completePacks > 0 && remainingUnits === 0) {
+    text += ` (${completePacks} ${pres}(s) completa(s))`;
+  } else {
+    text += ` (0 ${pres}(s) completa(s))`;
+  }
+  return text;
 }
 
 // Variables temporales para prescripciones de evolución en curso
@@ -991,14 +1026,18 @@ function loadPrescriptionForm(med) {
   const formArea = document.getElementById('hosp-prescribe-form-area');
   if (!formArea) return;
 
+  const enrichedMed = enrichMedication(med);
+  const stockFriendly = formatStockFriendly(enrichedMed.stock, enrichedMed.unidades_por_presentacion, enrichedMed.presentation, enrichedMed.unidad_dispensable);
+
   formArea.innerHTML = `
     <div style="background: rgba(255,255,255,0.02); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color);">
-      <h4 style="margin: 0 0 5px 0; color: var(--accent-primary); font-size: 0.95rem;">${med.name}</h4>
+      <h4 style="margin: 0 0 5px 0; color: var(--accent-primary); font-size: 0.95rem;">${enrichedMed.name}</h4>
       <div style="font-size: 0.75rem; color: var(--text-muted); display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
-        <span>📦 Presentación: <strong>${med.presentation}</strong></span>
-        <span>⚖️ Unidades/Caja: <strong>${med.unidades_por_presentacion} uds</strong></span>
-        <span>💧 Dosis/Frasco: <strong>${med.dosis_total_presentacion} ${med.unidad_medida_dosis}</strong></span>
-        <span>🏷️ Lote: <strong>${med.lote}</strong></span>
+        <span>📦 Presentación: <strong>${enrichedMed.presentation}</strong></span>
+        <span>⚖️ Unidades/${enrichedMed.presentation || 'Caja'}: <strong>${enrichedMed.unidades_por_presentacion} uds</strong></span>
+        <span>💧 Dosis/${enrichedMed.presentation || 'Caja'}: <strong>${enrichedMed.dosis_total_presentacion} ${enrichedMed.unidad_medida_dosis}</strong></span>
+        <span>🏷️ Lote: <strong>${enrichedMed.lote || 'N/A'}</strong></span>
+        <span style="grid-column: span 2;">🩺 Existencias: <strong>${stockFriendly}</strong></span>
       </div>
     </div>
 
@@ -1006,9 +1045,9 @@ function loadPrescriptionForm(med) {
       <div class="form-group">
         <label style="font-size: 0.8rem;">Tipo de Despacho / Cobro</label>
         <select id="h-pres-type" required style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
-          <option value="caja">Presentación Completa (Caja/Frasco entero)</option>
-          <option value="unidad">Unidad Individual (Tabletas sueltas/Ampolla)</option>
-          <option value="dosis" ${med.es_fraccionable ? '' : 'disabled'}>Dosis Específica (Jarabe en ml / Dosis inyectable en mg) ${med.es_fraccionable ? '' : '[No Fraccionable]'}</option>
+          <option value="caja">Presentación Completa (${enrichedMed.presentation || 'Caja'})</option>
+          <option value="unidad">Unidad Individual (${enrichedMed.unidad_dispensable || 'Tableta'})</option>
+          <option value="dosis" ${enrichedMed.es_fraccionable ? '' : 'disabled'}>Dosis Específica (${enrichedMed.unidad_medida_dosis}) ${enrichedMed.es_fraccionable ? '' : '[No Fraccionable]'}</option>
         </select>
       </div>
 
@@ -1019,7 +1058,7 @@ function loadPrescriptionForm(med) {
 
       <div style="background: rgba(0,0,0,0.15); padding: 10px; border-radius: 4px; border: 1px dashed var(--border-color); text-align: center;">
         <span style="font-size: 0.8rem; color: var(--text-muted); display: block;">Costo Estimado a Facturar:</span>
-        <strong id="h-cost-preview" style="font-size: 1.25rem; color: var(--accent-success);">Q${parseFloat(med.price).toFixed(2)}</strong>
+        <strong id="h-cost-preview" style="font-size: 1.25rem; color: var(--accent-success);">Q${parseFloat(enrichedMed.price).toFixed(2)}</strong>
       </div>
 
       <button type="submit" class="btn btn-success" style="width: 100%; font-size: 0.85rem; padding: 10px; background: var(--accent-success); border: none;">Agregar a la Receta</button>
@@ -1037,11 +1076,11 @@ function loadPrescriptionForm(med) {
     let cost = 0;
 
     if (type === 'caja') {
-      cost = qtyVal * med.price;
+      cost = qtyVal * enrichedMed.price;
     } else if (type === 'unidad') {
-      cost = qtyVal * (med.price / med.unidades_por_presentacion);
+      cost = qtyVal * enrichedMed.precio_unitario;
     } else if (type === 'dosis') {
-      cost = qtyVal * (med.price / med.dosis_total_presentacion);
+      cost = qtyVal * (enrichedMed.price / enrichedMed.dosis_total_presentacion);
     }
 
     costPreview.textContent = `Q${cost.toFixed(2)}`;
@@ -1050,15 +1089,15 @@ function loadPrescriptionForm(med) {
   presSelect.addEventListener('change', () => {
     const type = presSelect.value;
     if (type === 'caja') {
-      qtyLabel.textContent = "Cantidad de Presentaciones (Cajas/Frascos)";
+      qtyLabel.textContent = `Cantidad de Presentaciones (${enrichedMed.presentation || 'Caja'}(s))`;
       qtyInput.step = "1";
       qtyInput.value = "1";
     } else if (type === 'unidad') {
-      qtyLabel.textContent = "Cantidad de Unidades Individuales (Tabletas/Ampollas)";
+      qtyLabel.textContent = `Cantidad de Unidades Individuales (${enrichedMed.unidad_dispensable || 'Tableta'}(s))`;
       qtyInput.step = "1";
       qtyInput.value = "1";
     } else if (type === 'dosis') {
-      qtyLabel.textContent = `Dosis Específica a Administrar (${med.unidad_medida_dosis})`;
+      qtyLabel.textContent = `Dosis Específica a Administrar (${enrichedMed.unidad_medida_dosis})`;
       qtyInput.step = "0.5";
       qtyInput.value = "5";
     }
@@ -1074,40 +1113,50 @@ function loadPrescriptionForm(med) {
     const qtyVal = parseFloat(qtyInput.value) || 0;
 
     // Validar stock físico
-    if (type === 'caja' && qtyVal > med.stock) {
-      alert(`Stock insuficiente. Solo quedan ${med.stock} cajas.`);
-      return;
+    if (type === 'caja') {
+      const unitsNeeded = qtyVal * enrichedMed.unidades_por_presentacion;
+      if (unitsNeeded > enrichedMed.stock) {
+        const availableCajas = Math.floor(enrichedMed.stock / enrichedMed.unidades_por_presentacion);
+        alert(`Stock insuficiente. Solo quedan ${availableCajas} cajas completas equivalentes (${enrichedMed.stock} unidades).`);
+        return;
+      }
     }
     if (type === 'unidad') {
-      const neededUnits = qtyVal;
-      const totalUnits = med.stock * med.unidades_por_presentacion;
-      if (neededUnits > totalUnits) {
-        alert(`Stock insuficiente. Quedan ${totalUnits} unidades sueltas equivalentes.`);
+      if (qtyVal > enrichedMed.stock) {
+        alert(`Stock insuficiente. Quedan ${enrichedMed.stock} unidades sueltas equivalentes.`);
         return;
       }
     }
     if (type === 'dosis') {
-      if (qtyVal > med.dosis_total_presentacion) {
-        alert(`La dosis prescrita (${qtyVal} ${med.unidad_medida_dosis}) excede la dosis total de una presentación (${med.dosis_total_presentacion} ${med.unidad_medida_dosis}). Deberá prescribir múltiples presentaciones completas si es necesario.`);
+      if (qtyVal > enrichedMed.stock) {
+        alert(`Stock insuficiente en volumen/dosis. Solo quedan ${enrichedMed.stock} unidades/ml.`);
         return;
       }
     }
 
     let cost = 0;
-    if (type === 'caja') cost = qtyVal * med.price;
-    else if (type === 'unidad') cost = qtyVal * (med.price / med.unidades_por_presentacion);
-    else if (type === 'dosis') cost = qtyVal * (med.price / med.dosis_total_presentacion);
+    let qtyToRecord = qtyVal;
+    if (type === 'caja') {
+      cost = qtyVal * enrichedMed.price;
+      qtyToRecord = qtyVal * enrichedMed.unidades_por_presentacion;
+    } else if (type === 'unidad') {
+      cost = qtyVal * enrichedMed.precio_unitario;
+      qtyToRecord = qtyVal;
+    } else if (type === 'dosis') {
+      cost = qtyVal * (enrichedMed.price / enrichedMed.dosis_total_presentacion);
+      qtyToRecord = qtyVal;
+    }
 
     const medOrderRecord = {
-      id: med.id,
-      name: med.name,
-      lote: med.lote,
-      qty: type === 'caja' ? qtyVal : 1,
-      price: med.price,
+      id: enrichedMed.id,
+      name: enrichedMed.name,
+      lote: enrichedMed.lote || 'N/A',
+      qty: qtyToRecord,
+      price: enrichedMed.price,
       tipoPrescripcion: type,
       cantidad_o_dosis: qtyVal,
       costo_calculado: cost,
-      unidad_medida_dosis: med.unidad_medida_dosis,
+      unidad_medida_dosis: enrichedMed.unidad_medida_dosis,
       date: new Date().toISOString()
     };
 

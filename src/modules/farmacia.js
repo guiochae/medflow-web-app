@@ -1,6 +1,71 @@
 // src/modules/farmacia.js
 import { getAppState, saveAppState } from '../main.js';
 
+function enrichMedication(m) {
+  if (!m) return null;
+  const precio = parseFloat(m.price || m.precio_presentacion || 50.0);
+  const presNorm = String(m.presentation || '').toLowerCase();
+  const nameNorm = String(m.name || '').toLowerCase();
+  
+  const unidades = m.unidades_por_presentacion !== undefined 
+    ? parseInt(m.unidades_por_presentacion) 
+    : (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') || nameNorm.includes('jarabe')
+        ? 100 
+        : (presNorm.includes('ampolla') || presNorm.includes('inyeccion') || nameNorm.includes('ampolla') ? 1 : 30));
+        
+  const unidadDispensable = m.unidad_dispensable || 
+    (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') || nameNorm.includes('jarabe')
+      ? 'ml' 
+      : (presNorm.includes('ampolla') || presNorm.includes('inyeccion') || nameNorm.includes('ampolla') ? 'Ampolla' : 'Tableta'));
+
+  const esFrac = m.es_fraccionable !== undefined 
+    ? !!m.es_fraccionable 
+    : (m.permite_dosis !== undefined 
+        ? !!m.permite_dosis 
+        : (presNorm.includes('jarabe') || presNorm.includes('gotas') || presNorm.includes('ampolla') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('crema') || presNorm.includes('frasco') || presNorm.includes('gotero') ||
+           nameNorm.includes('jarabe') || nameNorm.includes('gotas') || nameNorm.includes('ampolla') || nameNorm.includes('solucion') || nameNorm.includes('suspension') || nameNorm.includes('crema')));
+           
+  const unidadMedida = m.unidad_medida_dosis || (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') ? 'ml' : 'mg');
+  const dosisTotal = parseFloat(m.dosis_total_presentacion || (unidadMedida === 'ml' ? 100 : 500));
+
+  return {
+    ...m,
+    price: precio,
+    precio_presentacion: precio,
+    unidades_por_presentacion: unidades,
+    unidad_dispensable: unidadDispensable,
+    precio_unitario: parseFloat((precio / unidades).toFixed(4)),
+    es_fraccionable: esFrac,
+    permite_dosis: esFrac,
+    dosis_total_presentacion: dosisTotal,
+    unidad_medida_dosis: unidadMedida
+  };
+}
+
+function formatStockFriendly(stock, factor, presentacion = 'Caja', unidadDispensable = 'Tableta') {
+  const stockVal = parseInt(stock) || 0;
+  const factorVal = Math.max(1, parseInt(factor) || 1);
+  const pres = presentacion || 'Caja';
+  const unit = unidadDispensable || 'Tableta';
+
+  if (factorVal <= 1) {
+    return `${stockVal} ${unit}(s)`;
+  }
+
+  const completePacks = Math.floor(stockVal / factorVal);
+  const remainingUnits = stockVal % factorVal;
+
+  let text = `${stockVal} ${unit}(s)`;
+  if (completePacks > 0 && remainingUnits > 0) {
+    text += ` (${completePacks} ${pres}(s) y ${remainingUnits} ${unit}(s))`;
+  } else if (completePacks > 0 && remainingUnits === 0) {
+    text += ` (${completePacks} ${pres}(s) completa(s))`;
+  } else {
+    text += ` (0 ${pres}(s) completa(s))`;
+  }
+  return text;
+}
+
 let activeFarmaciaTab = 'tab-dispense-recipes'; // 'tab-dispense-recipes' | 'tab-external-sale' | 'tab-sales-history'
 let currentCart = [];
 let selectedMedicineForSale = null;
@@ -79,18 +144,28 @@ export function renderFarmacia(container) {
               margin-bottom: 1.5rem;
             ">
               <h4 id="prev-med-name" style="color: var(--accent-primary); margin-bottom: 5px;">Medicamento</h4>
-              <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 15px;">
+              <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px;">
                 Genérico: <span id="prev-med-generic">--</span> | Presentación: <span id="prev-med-presentation">--</span>
               </p>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 15px;">
+                🩺 Existencias: <strong id="prev-med-stock" style="color: var(--accent-success);">--</strong>
+              </div>
               
-              <div style="display: flex; gap: 15px; align-items: flex-end;">
-                <div class="form-group" style="flex: 1; margin: 0;">
-                  <label>Precio Unitario</label>
-                  <strong style="color: var(--accent-success); font-size: 1.2rem; display: block; margin-top: 5px;" id="prev-med-price">Q0.00</strong>
+              <div style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
+                <div class="form-group" style="flex: 1.2; min-width: 150px; margin: 0;">
+                  <label for="pharmacy-sale-type">Tipo de Venta</label>
+                  <select id="pharmacy-sale-type" style="height: 38px; width: 100%; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+                    <option value="presentacion">Presentación Completa</option>
+                    <option value="unidad">Unidad Individual</option>
+                  </select>
                 </div>
-                <div class="form-group" style="flex: 1; margin: 0;">
-                  <label for="pharmacy-med-qty">Cantidad</label>
+                <div class="form-group" style="flex: 1; min-width: 100px; margin: 0;">
+                  <label id="lbl-pharmacy-med-qty" for="pharmacy-med-qty">Cantidad</label>
                   <input type="number" id="pharmacy-med-qty" value="1" min="1" step="1" style="height: 38px;">
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 100px; margin: 0;">
+                  <label id="lbl-prev-price-title">Precio Unitario</label>
+                  <strong style="color: var(--accent-success); font-size: 1.2rem; display: block; margin-top: 5px;" id="prev-med-price">Q0.00</strong>
                 </div>
                 <button type="button" class="btn btn-success" id="btn-add-to-cart" style="height: 38px; display: flex; align-items: center; gap: 5px;">
                   <span>🛒</span> Agregar
@@ -318,6 +393,28 @@ export function renderFarmacia(container) {
       }
     }
   });
+
+  container.addEventListener('change', (e) => {
+    const saleTypeSelect = e.target.closest('#pharmacy-sale-type');
+    if (saleTypeSelect && selectedMedicineForSale) {
+      const type = saleTypeSelect.value;
+      const priceDisplay = document.getElementById('prev-med-price');
+      const qtyLabel = document.getElementById('lbl-pharmacy-med-qty');
+      const priceTitle = document.getElementById('lbl-prev-price-title');
+
+      if (priceDisplay) {
+        if (type === 'presentacion') {
+          priceDisplay.textContent = `Q${parseFloat(selectedMedicineForSale.precio_presentacion).toFixed(2)}`;
+          if (qtyLabel) qtyLabel.textContent = `Cantidad (${selectedMedicineForSale.presentation || 'Caja'}(s))`;
+          if (priceTitle) priceTitle.textContent = "Precio Presentación";
+        } else {
+          priceDisplay.textContent = `Q${parseFloat(selectedMedicineForSale.precio_unitario).toFixed(2)}`;
+          if (qtyLabel) qtyLabel.textContent = `Cantidad (${selectedMedicineForSale.unidad_dispensable || 'Tableta'}(s))`;
+          if (priceTitle) priceTitle.textContent = "Precio Unitario";
+        }
+      }
+    }
+  });
 }
 
   // 2. Eventos de entrada de texto (Buscador Autocomplete)
@@ -362,10 +459,19 @@ export function renderFarmacia(container) {
           font-size: 0.85rem;
           transition: background-color 0.2s;
         `;
+        const enrichedMatch = enrichMedication(match);
+        const friendlyStock = formatStockFriendly(
+          enrichedMatch.stock,
+          enrichedMatch.unidades_por_presentacion,
+          enrichedMatch.presentation,
+          enrichedMatch.unidad_dispensable
+        );
+
         item.innerHTML = `
           <strong style="color: var(--accent-primary);">${match.name}</strong> 
-          <span style="font-size: 0.75rem; color: var(--text-muted); margin-left: 5px;">(${match.generic} - ${match.presentation})</span>
-          <strong style="color: var(--accent-success); float: right;">Q${parseFloat(match.price).toFixed(2)}</strong>
+          <span style="font-size: 0.75rem; color: var(--text-muted); margin-left: 5px;">(${match.generic} - ${match.presentation})</span><br>
+          <span style="font-size: 0.72rem; color: var(--text-muted);">Stock: ${friendlyStock}</span>
+          <strong style="color: var(--accent-success); float: right; margin-top: -10px;">Q${parseFloat(match.price).toFixed(2)}</strong>
         `;
 
         item.addEventListener('mouseover', () => {
@@ -376,13 +482,22 @@ export function renderFarmacia(container) {
         });
 
         item.addEventListener('click', () => {
-          selectedMedicineForSale = match;
+          selectedMedicineForSale = enrichedMatch;
           
           document.getElementById('prev-med-name').textContent = match.name;
           document.getElementById('prev-med-generic').textContent = match.generic || 'N/D';
           document.getElementById('prev-med-presentation').textContent = match.presentation || 'N/D';
-          document.getElementById('prev-med-price').textContent = `Q${parseFloat(match.price).toFixed(2)}`;
+          document.getElementById('prev-med-stock').textContent = friendlyStock;
+
+          // Restablecer valores por defecto del tipo de venta
+          const saleTypeSelect = document.getElementById('pharmacy-sale-type');
+          if (saleTypeSelect) saleTypeSelect.value = 'presentacion';
+          const qtyLabel = document.getElementById('lbl-pharmacy-med-qty');
+          if (qtyLabel) qtyLabel.textContent = `Cantidad (${match.presentation || 'Caja'}(s))`;
+          const priceTitle = document.getElementById('lbl-prev-price-title');
+          if (priceTitle) priceTitle.textContent = "Precio Presentación";
           
+          document.getElementById('prev-med-price').textContent = `Q${parseFloat(match.price).toFixed(2)}`;
           document.getElementById('pharmacy-selection-preview').style.display = 'block';
           medSearchInput.value = '';
           autocompleteList.style.display = 'none';
@@ -574,10 +689,25 @@ function dispenseRecipe(patientId, recipeId) {
   let insufficientStock = [];
   recipeObj.medicines.forEach(m => {
     const catalogItem = stateObj.medications && stateObj.medications.find(med => med.name === m.name);
-    const currentStock = catalogItem ? (catalogItem.stock !== undefined ? catalogItem.stock : 120) : 0;
-    const requestedQty = parseInt(m.quantity) || 1;
-    if (currentStock < requestedQty) {
-      insufficientStock.push(`${m.name} (Stock: ${currentStock}, Solicitado: ${requestedQty})`);
+    if (catalogItem) {
+      const enrichedCatalog = enrichMedication(catalogItem);
+      const currentStock = enrichedCatalog.stock !== undefined ? enrichedCatalog.stock : 120;
+      
+      let requestedUnits = parseInt(m.qty);
+      if (m.qty === undefined || isNaN(requestedUnits)) {
+        const qtyParsed = parseInt(m.quantity) || 1;
+        if (m.quantity.toLowerCase().includes('caja')) {
+          requestedUnits = qtyParsed * enrichedCatalog.unidades_por_presentacion;
+        } else {
+          requestedUnits = qtyParsed;
+        }
+      }
+
+      if (currentStock < requestedUnits) {
+        const friendlyStock = formatStockFriendly(currentStock, enrichedCatalog.unidades_por_presentacion, enrichedCatalog.presentation, enrichedCatalog.unidad_dispensable);
+        const requestedFriendly = m.quantity || `${requestedUnits} unidades`;
+        insufficientStock.push(`${m.name} (Stock: ${friendlyStock}, Solicitado: ${requestedFriendly})`);
+      }
     }
   });
 
@@ -590,8 +720,17 @@ function dispenseRecipe(patientId, recipeId) {
   recipeObj.medicines.forEach(m => {
     const catalogItem = stateObj.medications && stateObj.medications.find(med => med.name === m.name);
     if (catalogItem) {
-      const requestedQty = parseInt(m.quantity) || 1;
-      catalogItem.stock = Math.max(0, (catalogItem.stock !== undefined ? catalogItem.stock : 120) - requestedQty);
+      const enrichedCatalog = enrichMedication(catalogItem);
+      let requestedUnits = parseInt(m.qty);
+      if (m.qty === undefined || isNaN(requestedUnits)) {
+        const qtyParsed = parseInt(m.quantity) || 1;
+        if (m.quantity.toLowerCase().includes('caja')) {
+          requestedUnits = qtyParsed * enrichedCatalog.unidades_por_presentacion;
+        } else {
+          requestedUnits = qtyParsed;
+        }
+      }
+      catalogItem.stock = Math.max(0, (catalogItem.stock !== undefined ? catalogItem.stock : 120) - requestedUnits);
     }
   });
 
@@ -635,7 +774,7 @@ function renderCartTable() {
         <strong>${item.name}</strong><br>
         <span style="font-size: 0.75rem; color: var(--text-muted);">${item.generic}</span>
       </td>
-      <td style="padding: 10px; text-align: center; font-weight: bold;">${item.quantity}</td>
+      <td style="padding: 10px; text-align: center; font-weight: bold;">${item.displayQuantity || item.quantity}</td>
       <td style="padding: 10px; text-align: right; color: var(--text-muted);">Q${parseFloat(item.price).toFixed(2)}</td>
       <td style="padding: 10px; text-align: right; font-weight: bold; color: var(--accent-success);">Q${subtotal.toFixed(2)}</td>
       <td style="padding: 10px; text-align: center;">
@@ -662,31 +801,58 @@ function addToCart() {
     return;
   }
 
-  // Validar existencia
-  const currentStock = selectedMedicineForSale.stock !== undefined ? selectedMedicineForSale.stock : 120;
+  const saleTypeSelect = document.getElementById('pharmacy-sale-type');
+  const saleType = saleTypeSelect ? saleTypeSelect.value : 'presentacion';
+
+  const m = enrichMedication(selectedMedicineForSale);
+  const currentStock = m.stock !== undefined ? m.stock : 120;
   if (currentStock <= 0) {
-    alert(`❌ NOTIFICACIÓN DE INVENTARIO:\nNo se puede vender el medicamento "${selectedMedicineForSale.name}" porque su existencia es igual a cero.`);
+    alert(`❌ NOTIFICACIÓN DE INVENTARIO:\nNo se puede vender el medicamento "${m.name}" porque su existencia es igual a cero.`);
     return;
   }
 
-  // Validar cantidad acumulada vs stock disponible
-  const existingIdx = currentCart.findIndex(item => item.id === selectedMedicineForSale.id);
-  const cartQty = existingIdx !== -1 ? currentCart[existingIdx].quantity : 0;
-  if (cartQty + qty > currentStock) {
-    alert(`❌ NOTIFICACIÓN DE INVENTARIO:\nNo hay suficientes existencias disponibles de "${selectedMedicineForSale.name}".\n\nStock disponible: ${currentStock}\nEn carrito: ${cartQty}\nSolicitado: ${qty}`);
+  // Calcular las unidades totales solicitadas
+  let totalUnitsToAdd = qty;
+  if (saleType === 'presentacion') {
+    totalUnitsToAdd = qty * m.unidades_por_presentacion;
+  }
+
+  // Calcular cantidad acumulada ya en el carrito para este medicamento (en unidades mínimas)
+  const existingUnitsInCart = currentCart
+    .filter(item => item.id === m.id)
+    .reduce((sum, item) => sum + (item.unidades_totales || item.quantity), 0);
+
+  if (existingUnitsInCart + totalUnitsToAdd > currentStock) {
+    const friendlyStock = formatStockFriendly(currentStock, m.unidades_por_presentacion, m.presentation, m.unidad_dispensable);
+    const requestedFriendly = saleType === 'presentacion' 
+      ? `${qty} ${m.presentation || 'Caja'}(s) (${totalUnitsToAdd} unidades)` 
+      : `${qty} ${m.unidad_dispensable || 'Tableta'}(s)`;
+    
+    alert(`❌ NOTIFICACIÓN DE INVENTARIO:\nNo hay suficientes existencias disponibles de "${m.name}".\n\nStock disponible: ${friendlyStock}\nEn carrito (equivalente): ${existingUnitsInCart} unidades\nSolicitado ahora: ${requestedFriendly}`);
     return;
   }
 
+  const itemPrice = saleType === 'presentacion' ? m.precio_presentacion : m.precio_unitario;
+  const displayQty = saleType === 'presentacion' 
+    ? `${qty} ${m.presentation || 'caja'}(s)` 
+    : `${qty} ${m.unidad_dispensable || 'tableta'}(s)`;
+
+  // Consolidar si coincide el mismo ID y mismo tipo de venta
+  const existingIdx = currentCart.findIndex(item => item.id === m.id && item.tipoVenta === saleType);
   if (existingIdx !== -1) {
     currentCart[existingIdx].quantity += qty;
+    currentCart[existingIdx].unidades_totales += totalUnitsToAdd;
   } else {
     currentCart.push({
-      id: selectedMedicineForSale.id,
-      name: selectedMedicineForSale.name,
-      generic: selectedMedicineForSale.generic || '',
-      presentation: selectedMedicineForSale.presentation || '',
-      price: parseFloat(selectedMedicineForSale.price),
-      quantity: qty
+      id: m.id,
+      name: m.name,
+      generic: m.generic || '',
+      presentation: m.presentation || '',
+      price: itemPrice,
+      quantity: qty,
+      tipoVenta: saleType,
+      unidades_totales: totalUnitsToAdd,
+      displayQuantity: displayQty
     });
   }
 
@@ -725,11 +891,12 @@ function finalizeExternalSale() {
     total
   };
 
-  // Reducir stock del inventario
+  // Reducir stock del inventario (usando unidades base totales de cada ítem en el carrito)
   currentCart.forEach(cartItem => {
     const catalogItem = appState.medications && appState.medications.find(m => m.id === cartItem.id || m.name === cartItem.name);
     if (catalogItem) {
-      catalogItem.stock = Math.max(0, (catalogItem.stock !== undefined ? catalogItem.stock : 120) - cartItem.quantity);
+      const unitsToDeduct = cartItem.unidades_totales !== undefined ? cartItem.unidades_totales : cartItem.quantity;
+      catalogItem.stock = Math.max(0, (catalogItem.stock !== undefined ? catalogItem.stock : 120) - unitsToDeduct);
     }
   });
 
@@ -854,7 +1021,7 @@ function printSalesVoucher(sale) {
         <strong>${item.name}</strong><br>
         <span style="font-size: 0.75rem; color: #666;">${item.generic} (${item.presentation})</span>
       </td>
-      <td style="padding: 8px 0; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
+      <td style="padding: 8px 0; border-bottom: 1px solid #eee; text-align: center;">${item.displayQuantity || item.quantity}</td>
       <td style="padding: 8px 0; border-bottom: 1px solid #eee; text-align: right;">Q ${parseFloat(item.price).toFixed(2)}</td>
       <td style="padding: 8px 0; border-bottom: 1px solid #eee; text-align: right; font-weight: bold;">Q ${parseFloat(item.price * item.quantity).toFixed(2)}</td>
     </tr>

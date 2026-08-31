@@ -779,10 +779,13 @@ export function renderConfiguracion(container) {
         if (activeCatalogType === 'medications') {
           document.getElementById('c-spec-generic').value = itemObj.generic || '';
           document.getElementById('c-spec-presentation').value = itemObj.presentation || '';
+          document.getElementById('c-spec-unidad-dispensable').value = itemObj.unidad_dispensable || 'Tableta';
+          document.getElementById('c-spec-unidades-por-presentacion').value = itemObj.unidades_por_presentacion || 30;
           document.getElementById('c-spec-category').value = itemObj.category || '';
           document.getElementById('c-spec-stock').value = itemObj.stock !== undefined ? itemObj.stock : 120;
           document.getElementById('c-spec-lote').value = itemObj.lote || '';
           document.getElementById('c-spec-vencimiento').value = itemObj.vencimiento || '';
+          setTimeout(updateConfigStockHelperText, 20);
         } else if (activeCatalogType === 'laboratoryTests') {
           document.getElementById('c-spec-category').value = itemObj.category || '';
           const unitEl = document.getElementById('c-spec-unit');
@@ -965,12 +968,16 @@ export function renderConfiguracion(container) {
       itemObj.price = price;
 
       if (activeCatalogType === 'medications') {
-        itemObj.generic = document.getElementById('c-spec-generic').value;
-        itemObj.presentation = document.getElementById('c-spec-presentation').value;
-        itemObj.category = document.getElementById('c-spec-category').value;
+        itemObj.generic = document.getElementById('c-spec-generic').value.trim();
+        itemObj.presentation = document.getElementById('c-spec-presentation').value.trim() || 'Caja';
+        itemObj.unidad_dispensable = document.getElementById('c-spec-unidad-dispensable').value.trim() || 'Tableta';
+        const factor = Math.max(1, parseInt(document.getElementById('c-spec-unidades-por-presentacion').value) || 1);
+        itemObj.unidades_por_presentacion = factor;
+        itemObj.category = document.getElementById('c-spec-category').value.trim();
         itemObj.stock = parseInt(document.getElementById('c-spec-stock').value) || 0;
-        itemObj.lote = document.getElementById('c-spec-lote').value;
+        itemObj.lote = document.getElementById('c-spec-lote').value.trim();
         itemObj.vencimiento = document.getElementById('c-spec-vencimiento').value;
+        itemObj.precio_unitario = parseFloat((price / factor).toFixed(4));
       } else if (activeCatalogType === 'laboratoryTests') {
         itemObj.category = document.getElementById('c-spec-category').value;
         const unitEl = document.getElementById('c-spec-unit');
@@ -1168,6 +1175,54 @@ function renderUsersList() {
   });
 }
 
+function updateConfigStockHelperText() {
+  const stockEl = document.getElementById('c-spec-stock');
+  const factorEl = document.getElementById('c-spec-unidades-por-presentacion');
+  const presEl = document.getElementById('c-spec-presentation');
+  const unitEl = document.getElementById('c-spec-unidad-dispensable');
+  const helperEl = document.getElementById('c-spec-stock-helper');
+
+  if (!stockEl || !factorEl || !helperEl) return;
+
+  const stock = parseInt(stockEl.value) || 0;
+  const factor = Math.max(1, parseInt(factorEl.value) || 1);
+  const pres = (presEl ? presEl.value.trim() : '') || 'Caja';
+  const unit = (unitEl ? unitEl.value.trim() : '') || 'Tableta';
+
+  const complete = Math.floor(stock / factor);
+  const remaining = stock % factor;
+
+  let text = `Equivale a: <strong>${complete}</strong> ${pres}(s)`;
+  if (remaining > 0) {
+    text += ` y <strong>${remaining}</strong> ${unit}(s) sueltas`;
+  }
+  helperEl.innerHTML = text;
+}
+
+function formatStockFriendly(stock, factor, presentacion = 'Caja', unidadDispensable = 'Tableta') {
+  const stockVal = parseInt(stock) || 0;
+  const factorVal = Math.max(1, parseInt(factor) || 1);
+  const pres = presentacion || 'Caja';
+  const unit = unidadDispensable || 'Tableta';
+
+  if (factorVal <= 1) {
+    return `${stockVal} ${unit}(s)`;
+  }
+
+  const completePacks = Math.floor(stockVal / factorVal);
+  const remainingUnits = stockVal % factorVal;
+
+  let text = `${stockVal} ${unit}(s)`;
+  if (completePacks > 0 && remainingUnits > 0) {
+    text += ` (${completePacks} ${pres}(s) y ${remainingUnits} ${unit}(s))`;
+  } else if (completePacks > 0 && remainingUnits === 0) {
+    text += ` (${completePacks} ${pres}(s) completa(s))`;
+  } else {
+    text += ` (0 ${pres}(s) completa(s))`;
+  }
+  return text;
+}
+
 function openCatalogConfig(type) {
   console.log(`[openCatalogConfig] Abriendo modal para tipo: ${type}`);
   activeCatalogType = type;
@@ -1216,17 +1271,26 @@ function openCatalogConfig(type) {
         <label for="c-spec-generic">Nombre Genérico</label>
         <input type="text" id="c-spec-generic" required placeholder="Ej. Paracetamol">
       </div>
-      <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom:0;">
-        <label for="c-spec-presentation">Presentación</label>
-        <input type="text" id="c-spec-presentation" required placeholder="Ej. Tabletas 500mg, Jarabe...">
+      <div class="form-group" style="flex: 1; min-width: 130px; margin-bottom:0;">
+        <label for="c-spec-presentation">Presentación (Caja, Frasco)</label>
+        <input type="text" id="c-spec-presentation" required placeholder="Ej. Caja, Frasco, Blíster...">
+      </div>
+      <div class="form-group" style="flex: 1; min-width: 130px; margin-bottom:0;">
+        <label for="c-spec-unidad-dispensable">Unidad Dispensable</label>
+        <input type="text" id="c-spec-unidad-dispensable" required placeholder="Ej. Tableta, ml, Cápsula...">
+      </div>
+      <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom:0;">
+        <label for="c-spec-unidades-por-presentacion">Unidades por Caja/Frasco</label>
+        <input type="number" id="c-spec-unidades-por-presentacion" required min="1" value="30">
       </div>
       <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom:0;">
         <label for="c-spec-category">Categoría</label>
         <input type="text" id="c-spec-category" required placeholder="Ej. Analgésicos, Antibióticos...">
       </div>
-      <div class="form-group" style="flex: 1; min-width: 100px; margin-bottom:0;">
-        <label for="c-spec-stock">Existencia (Stock)</label>
-        <input type="number" id="c-spec-stock" required min="0" value="100" placeholder="Ej. 100">
+      <div class="form-group" style="flex: 1; min-width: 140px; margin-bottom:0;">
+        <label for="c-spec-stock">Stock (Total Tabletas / ml)</label>
+        <input type="number" id="c-spec-stock" required min="0" value="150" placeholder="Ej. 150">
+        <small id="c-spec-stock-helper" style="display:block; color:var(--accent-secondary); font-size:0.75rem; margin-top:4px; font-weight: 500;">Equivale a: 5 Caja(s)</small>
       </div>
       <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom:0;">
         <label for="c-spec-lote">Número de Lote</label>
@@ -1237,6 +1301,19 @@ function openCatalogConfig(type) {
         <input type="date" id="c-spec-vencimiento" required>
       </div>
     `;
+
+    setTimeout(() => {
+      const stockEl = document.getElementById('c-spec-stock');
+      const factorEl = document.getElementById('c-spec-unidades-por-presentacion');
+      const presEl = document.getElementById('c-spec-presentation');
+      const unitEl = document.getElementById('c-spec-unidad-dispensable');
+
+      if (stockEl) stockEl.addEventListener('input', updateConfigStockHelperText);
+      if (factorEl) factorEl.addEventListener('input', updateConfigStockHelperText);
+      if (presEl) presEl.addEventListener('input', updateConfigStockHelperText);
+      if (unitEl) unitEl.addEventListener('input', updateConfigStockHelperText);
+      updateConfigStockHelperText();
+    }, 50);
   } else if (type === 'laboratoryTests') {
     configTitle.textContent = "🔬 Catálogo de Laboratorio y Precios";
     if (thExtraCol) thExtraCol.textContent = "Categoría del Examen";
@@ -1363,11 +1440,21 @@ function renderCatalogTable() {
 
       if (activeCatalogType === 'medications') {
         const expirationDateStr = item.vencimiento ? new Date(item.vencimiento).toLocaleDateString('es-GT') : 'N/D';
+        const stockFriendly = formatStockFriendly(
+          item.stock,
+          item.unidades_por_presentacion,
+          item.presentation,
+          item.unidad_dispensable
+        );
+        const factor = item.unidades_por_presentacion || 30;
+        const unitPrice = parseFloat(item.precio_unitario || (item.price / factor)).toFixed(2);
+
         nameCellHtml = `<strong>${item.name}</strong><br><span style="font-size: 0.8rem; color: var(--text-muted); font-style: italic;">Genérico: ${item.generic || 'N/D'}</span>`;
         extraCellHtml = `
-          ${item.presentation || 'N/A'} | <span style="font-size: 0.75rem; color: var(--accent-primary); text-transform: uppercase;">${item.category || ''}</span><br>
+          ${item.presentation || 'Caja'} (de ${factor} ${item.unidad_dispensable || 'Tableta'}(s)) | <span style="font-size: 0.75rem; color: var(--accent-primary); text-transform: uppercase;">${item.category || ''}</span><br>
           <span style="font-size: 0.75rem; color: var(--text-muted);">Lote: ${item.lote || 'N/D'} | Vence: ${expirationDateStr}</span><br>
-          <span style="font-size: 0.8rem; font-weight: bold; color: ${item.stock <= 0 ? 'var(--accent-danger)' : 'var(--accent-success)'};">Stock: ${item.stock !== undefined ? item.stock : 120}</span>
+          <span style="font-size: 0.8rem; font-weight: bold; color: ${item.stock <= 0 ? 'var(--accent-danger)' : 'var(--accent-success)'};">Stock: ${stockFriendly}</span><br>
+          <span style="font-size: 0.75rem; color: var(--accent-success); font-weight: bold;">Precio Unitario: Q${unitPrice} c/u</span>
         `;
       } else if (activeCatalogType === 'imagingStudies') {
         nameCellHtml = `<strong>${item.name}</strong>`;
@@ -2112,10 +2199,13 @@ function handleCatalogNameInput(inputEl) {
         if (activeCatalogType === 'medications') {
           document.getElementById('c-spec-generic').value = selectedItem.generic || '';
           document.getElementById('c-spec-presentation').value = selectedItem.presentation || '';
+          document.getElementById('c-spec-unidad-dispensable').value = selectedItem.unidad_dispensable || 'Tableta';
+          document.getElementById('c-spec-unidades-por-presentacion').value = selectedItem.unidades_por_presentacion || 30;
           document.getElementById('c-spec-category').value = selectedItem.category || '';
           document.getElementById('c-spec-stock').value = selectedItem.stock !== undefined ? selectedItem.stock : 100;
           document.getElementById('c-spec-lote').value = selectedItem.lote || '';
           document.getElementById('c-spec-vencimiento').value = selectedItem.vencimiento || '';
+          setTimeout(updateConfigStockHelperText, 20);
         } else if (activeCatalogType === 'laboratoryTests') {
           document.getElementById('c-spec-category').value = selectedItem.category || '';
           const unitEl = document.getElementById('c-spec-unit');
