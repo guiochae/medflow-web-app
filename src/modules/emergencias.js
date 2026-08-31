@@ -1,6 +1,7 @@
 // src/modules/emergencias.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId, router } from '../main.js';
 import { renderAdmissionForm } from './encamamiento.js';
+import logoUrl from '../assets/logo.jpg';
 
 function enrichMedication(m) {
   if (!m) return null;
@@ -128,6 +129,7 @@ export function renderEmergencias(container) {
         <div class="form-group" style="margin-top: 5px; margin-bottom: 10px;">
           <select id="emerg-sidebar-filter" style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); outline: none; font-size: 0.85rem;">
             <option value="activos">Mostrar: Activos en Emergencia</option>
+            <option value="historial">Mostrar: Con Historial de Emergencias</option>
             <option value="todos">Mostrar: Todos los Pacientes</option>
           </select>
         </div>
@@ -179,6 +181,9 @@ function renderEmergPatientList() {
       .map(e => e.patientId);
     
     basePatients = basePatients.filter(p => activeEmergIds.includes(p.id));
+  } else if (filterVal === 'historial') {
+    const emergPatientIds = (state.emergencias || []).map(e => e.patientId);
+    basePatients = basePatients.filter(p => emergPatientIds.includes(p.id));
   }
 
   // Filtrar por término de búsqueda
@@ -256,16 +261,193 @@ function renderEmergDashboard() {
     return;
   }
 
+  const dob = new Date(patient.birthdate);
+  const age = isNaN(dob.getTime()) ? 'N/A' : Math.abs(new Date(Date.now() - dob.getTime()).getUTCFullYear() - 1970);
+
   // Buscar expediente de emergencia activo
   const activeEmerg = (state.emergencias || []).find(e => e.patientId === patient.id && e.status === 'Activo');
 
   if (!activeEmerg) {
+    const patientEmergHistory = (state.emergencias || []).filter(e => e.patientId === patient.id);
+
+    if (patientEmergHistory.length > 0) {
+      dashboardArea.innerHTML = `
+        <div class="patient-top-banner glass-card" style="margin-bottom: 1.5rem; padding: 1.25rem; border-left: 4px solid var(--accent-primary);">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; width: 100%;">
+            <div>
+              <span class="status-badge" style="background: #334155; color: #94a3b8; font-size: 0.72rem; padding: 3px 8px; border-radius: 4px; font-weight: bold; margin-bottom: 5px; display: inline-block;">📁 EXPEDIENTE DE URGENCIAS | ${patientEmergHistory.length} ATENCIÓN(ES) REGISTRADA(S)</span>
+              <h2 style="margin: 0; color: var(--text-primary); font-family: var(--font-heading); font-size: 1.4rem;">${patient.name}</h2>
+              <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 5px; display: flex; gap: 15px; flex-wrap: wrap;">
+                <span><strong>DPI:</strong> ${patient.dpi || 'N/A'}</span>
+                <span><strong>Edad:</strong> ${age} años</span>
+                <span><strong>Estado Actual:</strong> <strong style="color: var(--accent-success);">Sin ingreso activo (Dado de alta)</strong></span>
+              </div>
+            </div>
+            <button class="btn btn-danger" id="btn-start-emerg-direct" style="background: var(--accent-danger); border: none; padding: 10px 16px; font-weight: bold; display: flex; align-items: center; gap: 8px;">
+              <span>🚨</span> Iniciar Nuevo Ingreso a Emergencia
+            </button>
+          </div>
+        </div>
+
+        <div class="glass-card" style="padding: 1.5rem;">
+          <h3 style="color: var(--accent-primary); margin-bottom: 1rem; font-size: 1.15rem; display: flex; align-items: center; gap: 8px;">
+            <span>📜</span> Historial Completo de Atenciones en Emergencias y Observación
+          </h3>
+          <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+            A continuación se detallan todas las atenciones previas de este paciente, incluyendo sus notas de evolución médica, órdenes y prescripciones archivadas.
+          </p>
+
+          <div style="display: flex; flex-direction: column; gap: 1.5rem;" id="emerg-history-episodes-container">
+            ${patientEmergHistory.map((ep, epIdx) => {
+              const dateIn = new Date(ep.admissionDate).toLocaleString('es-GT');
+              const dateOut = ep.dischargeDate ? new Date(ep.dischargeDate).toLocaleString('es-GT') : 'Finalizado';
+              const triageColor = ep.triageColor || 'Azul';
+              
+              let triageBg = '#3b82f6';
+              const tLow = triageColor.toLowerCase();
+              if (tLow === 'rojo') triageBg = '#ef4444';
+              else if (tLow === 'naranja') triageBg = '#f97316';
+              else if (tLow === 'amarillo') triageBg = '#eab308';
+              else if (tLow === 'verde') triageBg = '#22c55e';
+
+              const evolutionsList = ep.evolutions || [];
+              const prescriptionsList = ep.prescriptions || [];
+              const nursingList = ep.nursingNotes || [];
+
+              return `
+                <div class="history-episode-card" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-left: 4px solid ${triageBg}; border-radius: var(--radius-md); padding: 1.25rem;">
+                  <!-- Encabezado del Episodio -->
+                  <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 12px;">
+                    <div>
+                      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <span style="background: ${triageBg}; color: ${tLow === 'amarillo' ? '#000' : '#fff'}; font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; font-weight: bold;">Triage: ${triageColor}</span>
+                        <span style="font-weight: bold; color: var(--text-primary); font-size: 1rem;">Atención #${patientEmergHistory.length - epIdx} (${ep.bedName || 'Área de Emergencia'})</span>
+                        <span style="font-size: 0.8rem; color: var(--text-muted);">Folio: ${ep.id}</span>
+                      </div>
+                      <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 5px;">
+                        <span>📅 <strong>Ingreso:</strong> ${dateIn}</span> | 
+                        <span>🏁 <strong>Egreso:</strong> ${dateOut}</span> | 
+                        <span>🩺 <strong>Médico:</strong> Dr. ${ep.doctorName}</span> | 
+                        <span>Estado: <strong style="color: ${ep.status === 'Transferido' ? '#eab308' : 'var(--accent-success)'}">${ep.status}</strong></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Diagnóstico y Notas Clínicas Iniciales -->
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; background: rgba(0,0,0,0.15); padding: 10px; border-radius: 6px;">
+                    <div>
+                      <span style="font-size: 0.78rem; color: var(--accent-primary); font-weight: bold; display: block;">Motivo de Ingreso / Diagnóstico Presuntivo:</span>
+                      <p style="margin: 3px 0 0 0; font-size: 0.85rem; color: var(--text-primary);">${ep.admissionReason || 'No especificado'}</p>
+                    </div>
+                    <div>
+                      <span style="font-size: 0.78rem; color: var(--accent-secondary); font-weight: bold; display: block;">Resumen de Egreso / Epicrisis:</span>
+                      <p style="margin: 3px 0 0 0; font-size: 0.85rem; color: var(--text-primary);">${ep.epicrisis || 'Alta médica completada'}</p>
+                    </div>
+                  </div>
+
+                  <!-- Sección de Evoluciones y Prescripciones del Episodio -->
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <!-- Evoluciones Médicas Archivadas -->
+                    <div style="background: rgba(255,255,255,0.015); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px;">
+                      <h4 style="margin: 0 0 8px 0; color: var(--accent-primary); font-size: 0.88rem; display: flex; justify-content: space-between; align-items: center;">
+                        <span>🩺 Notas de Evolución Médica (${evolutionsList.length})</span>
+                      </h4>
+                      ${evolutionsList.length > 0 
+                        ? `<div style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                            ${evolutionsList.map(ev => `
+                              <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); padding: 8px 10px; border-radius: 4px; font-size: 0.82rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: var(--accent-primary); font-weight: bold; margin-bottom: 4px;">
+                                  <span>📅 ${new Date(ev.date).toLocaleString('es-GT')} | Dr. ${ev.doctorName}</span>
+                                  <button type="button" class="btn btn-secondary btn-small btn-print-history-evo" data-emerg-id="${ep.id}" data-evo-id="${ev.id}" style="padding: 2px 6px; font-size: 0.7rem;">🖨️ Imprimir</button>
+                                </div>
+                                <p style="margin: 0; white-space: pre-wrap; line-height: 1.3; color: var(--text-primary);">${ev.note}</p>
+                              </div>
+                            `).join('')}
+                          </div>`
+                        : `<p style="font-style: italic; color: var(--text-muted); font-size: 0.8rem; margin: 5px 0;">No se registraron notas de evolución en este ingreso.</p>`
+                      }
+                    </div>
+
+                    <!-- Prescripciones / Órdenes Archivadas -->
+                    <div style="background: rgba(255,255,255,0.015); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px;">
+                      <h4 style="margin: 0 0 8px 0; color: var(--accent-secondary); font-size: 0.88rem; display: flex; justify-content: space-between; align-items: center;">
+                        <span>📋 Prescripciones / Órdenes (${prescriptionsList.length})</span>
+                      </h4>
+                      ${prescriptionsList.length > 0
+                        ? `<div style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                            ${prescriptionsList.map(pr => `
+                              <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); padding: 8px 10px; border-radius: 4px; font-size: 0.82rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: var(--accent-secondary); font-weight: bold; margin-bottom: 4px;">
+                                  <span>📅 ${new Date(pr.date).toLocaleString('es-GT')} | Dr. ${pr.doctorName}</span>
+                                  <button type="button" class="btn btn-secondary btn-small btn-print-history-presc" data-emerg-id="${ep.id}" data-presc-id="${pr.id}" style="padding: 2px 6px; font-size: 0.7rem;">🖨️ Imprimir</button>
+                                </div>
+                                <p style="margin: 0; white-space: pre-wrap; line-height: 1.3; color: var(--text-primary);">${pr.orders}</p>
+                              </div>
+                            `).join('')}
+                          </div>`
+                        : `<p style="font-style: italic; color: var(--text-muted); font-size: 0.8rem; margin: 5px 0;">No se registraron prescripciones en este ingreso.</p>`
+                      }
+                    </div>
+                  </div>
+
+                  <!-- Notas de Enfermería colapsables si existen -->
+                  ${nursingList.length > 0 ? `
+                    <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border-color); font-size: 0.8rem;">
+                      <span style="font-weight: bold; color: var(--accent-success);">🩹 Notas de Enfermería registradas (${nursingList.length}):</span>
+                      <div style="margin-top: 5px; display: flex; flex-direction: column; gap: 4px;">
+                        ${nursingList.map(nn => `
+                          <div style="background: rgba(255,255,255,0.01); padding: 5px 8px; border-radius: 4px; border-left: 2px solid var(--accent-success);">
+                            <span style="font-size: 0.7rem; color: var(--accent-success); font-weight: bold;">${new Date(nn.date).toLocaleString('es-GT')} (Enf. ${nn.nurseName}):</span>
+                            <span style="color: var(--text-muted); margin-left: 5px;">${nn.note}</span>
+                          </div>
+                        `).join('')}
+                      </div>
+                    </div>
+                  ` : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+
+      // Bind print buttons from historical episodes
+      dashboardArea.querySelectorAll('.btn-print-history-evo').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const epId = btn.getAttribute('data-emerg-id');
+          const evoId = btn.getAttribute('data-evo-id');
+          const ep = (state.emergencias || []).find(e => e.id === epId);
+          if (ep && ep.evolutions) {
+            const evo = ep.evolutions.find(e => e.id === evoId);
+            if (evo) printEvoOrPrescDocument(patient, evo, 'evolution', state);
+          }
+        });
+      });
+
+      dashboardArea.querySelectorAll('.btn-print-history-presc').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const epId = btn.getAttribute('data-emerg-id');
+          const prescId = btn.getAttribute('data-presc-id');
+          const ep = (state.emergencias || []).find(e => e.id === epId);
+          if (ep && ep.prescriptions) {
+            const presc = ep.prescriptions.find(p => p.id === prescId);
+            if (presc) printEvoOrPrescDocument(patient, presc, 'prescription', state);
+          }
+        });
+      });
+
+      document.getElementById('btn-start-emerg-direct').addEventListener('click', () => {
+        renderEmergAdmissionForm(patient.id);
+      });
+      return;
+    }
+
     dashboardArea.innerHTML = `
       <div class="glass-card" style="text-align: center; padding: 4rem 2rem; border-top: 3px solid var(--accent-danger);">
         <span style="font-size: 3rem;">🩺</span>
         <h2 style="margin-top: 1rem; font-family: var(--font-heading); color: var(--text-primary);">${patient.name}</h2>
         <p style="color: var(--text-muted); margin-top: 0.5rem; max-width: 450px; margin-left: auto; margin-right: auto; line-height: 1.4; margin-bottom: 1.5rem;">
-          Este paciente no tiene una ficha de urgencia u observación activa.
+          Este paciente no tiene una ficha de urgencia u observación activa ni atenciones previas archivadas.
         </p>
         <button class="btn btn-danger" id="btn-start-emerg-direct" style="background: var(--accent-danger); border: none;">
           🚨 Iniciar Ingreso a Emergencia
@@ -280,8 +462,6 @@ function renderEmergDashboard() {
   }
 
   // Si está activo, renderizar cockpit de seguimiento
-  const dob = new Date(patient.birthdate);
-  const age = Math.abs(new Date(Date.now() - dob.getTime()).getUTCFullYear() - 1970);
   const hoursIn = Math.max(1, Math.ceil((Date.now() - new Date(activeEmerg.admissionDate).getTime()) / (1000 * 60 * 60)));
 
   // Color de Triage badge
@@ -572,6 +752,7 @@ function renderEvolucionTab(activeEmerg, patient) {
   if (!container) return;
 
   const state = getAppState();
+  const previousEmergs = (state.emergencias || []).filter(e => e.patientId === patient.id && e.id !== activeEmerg.id);
 
   container.innerHTML = `
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; flex-wrap: wrap;">
@@ -595,7 +776,7 @@ function renderEvolucionTab(activeEmerg, patient) {
         </form>
 
         <div style="max-height: 350px; overflow-y: auto;">
-          <h4 style="margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">Historial de Notas de Evolución</h4>
+          <h4 style="margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">Historial de Notas de Evolución (${(activeEmerg.evolutions || []).length})</h4>
           ${activeEmerg.evolutions && activeEmerg.evolutions.length > 0 
             ? activeEmerg.evolutions.map(e => `
                 <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 6px;">
@@ -606,7 +787,7 @@ function renderEvolucionTab(activeEmerg, patient) {
                   <p style="margin: 0; font-size: 0.85rem; color: var(--text-primary); white-space: pre-wrap; line-height: 1.3;">${e.note}</p>
                 </div>
               `).join('')
-            : `<p style="font-style: italic; color: var(--text-muted); font-size: 0.85rem;">No hay notas de evolución registradas aún.</p>`
+            : `<p style="font-style: italic; color: var(--text-muted); font-size: 0.85rem;">No hay notas de evolución registradas aún en esta atención.</p>`
           }
         </div>
       </div>
@@ -630,7 +811,7 @@ function renderEvolucionTab(activeEmerg, patient) {
         </form>
 
         <div style="max-height: 350px; overflow-y: auto;">
-          <h4 style="margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">Historial de Prescripciones</h4>
+          <h4 style="margin-bottom: 8px; font-size: 0.9rem; color: var(--text-muted);">Historial de Prescripciones (${(activeEmerg.prescriptions || []).length})</h4>
           ${activeEmerg.prescriptions && activeEmerg.prescriptions.length > 0 
             ? activeEmerg.prescriptions.map(p => `
                 <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 6px;">
@@ -641,10 +822,61 @@ function renderEvolucionTab(activeEmerg, patient) {
                   <p style="margin: 0; font-size: 0.85rem; color: var(--text-primary); white-space: pre-wrap; line-height: 1.3;">${p.orders}</p>
                 </div>
               `).join('')
-            : `<p style="font-style: italic; color: var(--text-muted); font-size: 0.85rem;">No hay prescripciones registradas aún.</p>`
+            : `<p style="font-style: italic; color: var(--text-muted); font-size: 0.85rem;">No hay prescripciones registradas aún en esta atención.</p>`
           }
         </div>
       </div>
+
+      <!-- Sección de Ingresos Anteriores si existen -->
+      ${previousEmergs.length > 0 ? `
+        <div class="glass-card" style="grid-column: span 2; padding: 1.25rem; margin-top: 10px; border-top: 3px solid var(--accent-primary);">
+          <h4 style="color: var(--accent-primary); margin-bottom: 0.75rem; font-size: 1rem; display: flex; align-items: center; gap: 8px;">
+            <span>📜</span> Historial de Ingresos Previos de Emergencia (${previousEmergs.length} atenciones anteriores)
+          </h4>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            ${previousEmergs.map(prev => `
+              <div style="background: rgba(255,255,255,0.015); border: 1px solid var(--border-color); padding: 10px 14px; border-radius: 6px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 0.82rem;">
+                  <span style="font-weight: bold; color: var(--text-primary);">Ingreso: ${new Date(prev.admissionDate).toLocaleString('es-GT')} (Cama: ${prev.bedName || 'N/A'})</span>
+                  <span style="color: var(--text-muted);">Egreso: ${prev.dischargeDate ? new Date(prev.dischargeDate).toLocaleString('es-GT') : 'Finalizado'} | Dr. ${prev.doctorName}</span>
+                </div>
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                  <strong>Motivo:</strong> ${prev.admissionReason || 'N/A'} | <strong>Epicrisis:</strong> ${prev.epicrisis || 'Alta médica completada'}
+                </div>
+
+                ${(prev.evolutions && prev.evolutions.length > 0) || (prev.prescriptions && prev.prescriptions.length > 0) ? `
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; font-size: 0.8rem;">
+                    <div>
+                      <strong style="color: var(--accent-primary);">Evoluciones Anteriores:</strong>
+                      ${(prev.evolutions || []).map(ev => `
+                        <div style="background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px; margin-top: 4px; font-size: 0.78rem;">
+                          <div style="display: flex; justify-content: space-between; font-weight: bold; color: var(--accent-primary);">
+                            <span>${new Date(ev.date).toLocaleString('es-GT')}</span>
+                            <button type="button" class="btn btn-secondary btn-small btn-print-prev-evo" data-emerg-id="${prev.id}" data-evo-id="${ev.id}" style="padding: 1px 4px; font-size: 0.68rem;">🖨️</button>
+                          </div>
+                          <div>${ev.note}</div>
+                        </div>
+                      `).join('')}
+                    </div>
+                    <div>
+                      <strong style="color: var(--accent-secondary);">Prescripciones Anteriores:</strong>
+                      ${(prev.prescriptions || []).map(pr => `
+                        <div style="background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px; margin-top: 4px; font-size: 0.78rem;">
+                          <div style="display: flex; justify-content: space-between; font-weight: bold; color: var(--accent-secondary);">
+                            <span>${new Date(pr.date).toLocaleString('es-GT')}</span>
+                            <button type="button" class="btn btn-secondary btn-small btn-print-prev-presc" data-emerg-id="${prev.id}" data-presc-id="${pr.id}" style="padding: 1px 4px; font-size: 0.68rem;">🖨️</button>
+                          </div>
+                          <div>${pr.orders}</div>
+                        </div>
+                      `).join('')}
+                    </div>
+                  </div>
+                ` : ''}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
     </div>
   `;
 
@@ -673,8 +905,8 @@ function renderEvolucionTab(activeEmerg, patient) {
     const newEvo = {
       id: 'evo-' + Date.now(),
       date: new Date().toISOString(),
-      doctorName: docObj.name,
-      doctorId: docObj.id,
+      doctorName: docObj ? docObj.name : 'Médico',
+      doctorId: docObj ? docObj.id : docId,
       note: noteVal,
       meds: [],
       labs: [],
@@ -683,6 +915,13 @@ function renderEvolucionTab(activeEmerg, patient) {
 
     activeEmerg.evolutions = activeEmerg.evolutions || [];
     activeEmerg.evolutions.push(newEvo);
+
+    // Persistir en el registro de paciente
+    const patientObj = (state.patients || []).find(p => p.id === patient.id);
+    if (patientObj) {
+      patientObj.emergencyEvolutions = patientObj.emergencyEvolutions || [];
+      patientObj.emergencyEvolutions.push({ ...newEvo, emergId: activeEmerg.id });
+    }
 
     saveAppState(state);
     alert("Nota de evolución guardada correctamente.");
@@ -699,13 +938,20 @@ function renderEvolucionTab(activeEmerg, patient) {
     const newPresc = {
       id: 'presc-' + Date.now(),
       date: new Date().toISOString(),
-      doctorName: docObj.name,
-      doctorId: docObj.id,
+      doctorName: docObj ? docObj.name : 'Médico',
+      doctorId: docObj ? docObj.id : docId,
       orders: ordersVal
     };
 
     activeEmerg.prescriptions = activeEmerg.prescriptions || [];
     activeEmerg.prescriptions.push(newPresc);
+
+    // Persistir en el registro de paciente
+    const patientObj = (state.patients || []).find(p => p.id === patient.id);
+    if (patientObj) {
+      patientObj.emergencyPrescriptions = patientObj.emergencyPrescriptions || [];
+      patientObj.emergencyPrescriptions.push({ ...newPresc, emergId: activeEmerg.id });
+    }
 
     saveAppState(state);
     alert("Prescripción guardada correctamente.");
@@ -717,7 +963,7 @@ function renderEvolucionTab(activeEmerg, patient) {
     btn.addEventListener('click', () => {
       const evoId = btn.getAttribute('data-id');
       const evo = activeEmerg.evolutions.find(e => e.id === evoId);
-      printEvoOrPrescDocument(patient, evo, 'evolution', state);
+      if (evo) printEvoOrPrescDocument(patient, evo, 'evolution', state);
     });
   });
 
@@ -726,7 +972,33 @@ function renderEvolucionTab(activeEmerg, patient) {
     btn.addEventListener('click', () => {
       const prescId = btn.getAttribute('data-id');
       const presc = activeEmerg.prescriptions.find(p => p.id === prescId);
-      printEvoOrPrescDocument(patient, presc, 'prescription', state);
+      if (presc) printEvoOrPrescDocument(patient, presc, 'prescription', state);
+    });
+  });
+
+  // Bind Print Previous Evolutions
+  container.querySelectorAll('.btn-print-prev-evo').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const epId = btn.getAttribute('data-emerg-id');
+      const evoId = btn.getAttribute('data-evo-id');
+      const ep = (state.emergencias || []).find(e => e.id === epId);
+      if (ep && ep.evolutions) {
+        const evo = ep.evolutions.find(e => e.id === evoId);
+        if (evo) printEvoOrPrescDocument(patient, evo, 'evolution', state);
+      }
+    });
+  });
+
+  // Bind Print Previous Prescriptions
+  container.querySelectorAll('.btn-print-prev-presc').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const epId = btn.getAttribute('data-emerg-id');
+      const prescId = btn.getAttribute('data-presc-id');
+      const ep = (state.emergencias || []).find(e => e.id === epId);
+      if (ep && ep.prescriptions) {
+        const presc = ep.prescriptions.find(p => p.id === prescId);
+        if (presc) printEvoOrPrescDocument(patient, presc, 'prescription', state);
+      }
     });
   });
 }
@@ -752,8 +1024,6 @@ function printEvoOrPrescDocument(patient, record, type, state) {
   const dateFormatted = new Date(record.date).toLocaleDateString('es-GT', {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
   });
-
-  const logoUrl = 'assets/logo-Db6-vjaU.jpg';
 
   previewContainer.innerHTML = `
     <div class="prescription-preview-box" style="color: #000; font-family: sans-serif; padding: 20px;">

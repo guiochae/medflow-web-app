@@ -1742,6 +1742,66 @@ function showClinicalHistoryModal(patient) {
 
   // Renders clinical report contents
   try {
+    let emergenciasHtml = '';
+    const emergHistory = (state.emergencias || []).filter(e => e.patientId === patient.id);
+    if (emergHistory.length === 0) {
+      emergenciasHtml = '<p style="color: var(--text-muted); font-size: 0.9rem;">No se registran atenciones de emergencias u observación previas.</p>';
+    } else {
+      emergenciasHtml = `
+        <div class="timeline">
+          ${emergHistory.map(em => {
+            const dateIn = new Date(em.admissionDate).toLocaleString('es-GT');
+            const dateOut = em.dischargeDate ? new Date(em.dischargeDate).toLocaleString('es-GT') : 'En curso';
+            return `
+            <div class="timeline-item" style="border-left: 2px solid var(--accent-danger); padding-left: 15px; margin-bottom: 1.5rem;">
+              <div class="timeline-date" style="font-weight: 700; color: var(--accent-danger);">Ingreso: ${dateIn} | Egreso: ${dateOut} - ${em.bedName || 'Emergencia'} (Triage: ${em.triageColor || 'Azul'})</div>
+              <div class="timeline-desc" style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; margin-top: 6px;">
+                <p><strong>Médico Tratante:</strong> Dr. ${em.doctorName || 'N/A'}</p>
+                <p><strong>Motivo de Ingreso / Dx Presuntivo:</strong> ${em.admissionReason || 'N/A'}</p>
+                ${em.admissionDetail ? `<p><strong>Detalle Clínico:</strong> ${em.admissionDetail}</p>` : ''}
+                ${em.epicrisis ? `<p><strong>Epicrisis / Resumen de Egreso:</strong> ${em.epicrisis}</p>` : ''}
+
+                ${em.evolutions && em.evolutions.length > 0 ? `
+                  <h5 style="margin-top: 10px; color: var(--accent-primary); margin-bottom: 4px;">Evoluciones Médicas Registradas:</h5>
+                  <ul style="margin-left: 15px; font-size: 0.85rem; color: var(--text-muted); list-style-type: disc;">
+                    ${em.evolutions.map(ev => `
+                      <li style="margin-bottom: 4px;">
+                        <strong>${new Date(ev.date).toLocaleString()} (${ev.doctorName}):</strong> ${ev.note}
+                      </li>
+                    `).join('')}
+                  </ul>
+                ` : ''}
+
+                ${em.prescriptions && em.prescriptions.length > 0 ? `
+                  <h5 style="margin-top: 10px; color: var(--accent-secondary); margin-bottom: 4px;">Prescripciones / Órdenes Médicas:</h5>
+                  <ul style="margin-left: 15px; font-size: 0.85rem; color: var(--text-muted); list-style-type: disc;">
+                    ${em.prescriptions.map(pr => `
+                      <li style="margin-bottom: 4px;">
+                        <strong>${new Date(pr.date).toLocaleString()} (${pr.doctorName}):</strong> ${pr.orders}
+                      </li>
+                    `).join('')}
+                  </ul>
+                ` : ''}
+
+                ${em.nursingNotes && em.nursingNotes.length > 0 ? `
+                  <h5 style="margin-top: 10px; color: var(--accent-success); margin-bottom: 4px;">Notas de Enfermería:</h5>
+                  <ul style="margin-left: 15px; font-size: 0.85rem; color: var(--text-muted); list-style-type: disc;">
+                    ${em.nursingNotes.map(nn => `
+                      <li style="margin-bottom: 4px;">
+                        <strong>${new Date(nn.date).toLocaleString()} (${nn.nurseName}):</strong> ${nn.note}
+                      </li>
+                    `).join('')}
+                  </ul>
+                ` : ''}
+                <p style="margin-top: 8px; font-weight: 600; color: var(--text-primary);">Estado: <span style="color: ${em.status === 'Activo' ? 'var(--accent-warning)' : 'var(--accent-success)'}">${em.status}</span></p>
+              </div>
+            </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
     let encamamientoHtml = '';
     const hospHistory = (state.encamamiento || []).filter(h => h.patientId === patient.id);
     if (hospHistory.length === 0) {
@@ -2166,6 +2226,11 @@ function showClinicalHistoryModal(patient) {
       <div class="report-section" style="margin-top: 2rem;">
         <div class="report-section-title">Resultados de Laboratorio Locales (MedFlow Labs)</div>
         ${localLabsHtml}
+      </div>
+
+      <div class="report-section" style="margin-top: 2rem;">
+        <div class="report-section-title">Atenciones de Emergencias y Observación</div>
+        ${emergenciasHtml}
       </div>
 
       <div class="report-section" style="margin-top: 2rem;">
