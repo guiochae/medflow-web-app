@@ -93,6 +93,7 @@ export const firestoreState = {
   roomRates: [],
   encamamiento: [],
   emergencias: [],
+  bajasInventario: [],
   administracion_compras: [],
   administracion_contabilidad: [],
   administracion_rrhh: [],
@@ -128,6 +129,7 @@ function loadStateFromLocalCache() {
         if (Array.isArray(parsed.roomRates)) firestoreState.roomRates = parsed.roomRates;
         if (Array.isArray(parsed.encamamiento)) firestoreState.encamamiento = parsed.encamamiento;
         if (Array.isArray(parsed.emergencias)) firestoreState.emergencias = parsed.emergencias;
+        if (Array.isArray(parsed.bajasInventario)) firestoreState.bajasInventario = parsed.bajasInventario;
         if (Array.isArray(parsed.administracion_compras)) firestoreState.administracion_compras = parsed.administracion_compras;
         if (Array.isArray(parsed.administracion_contabilidad)) firestoreState.administracion_contabilidad = parsed.administracion_contabilidad;
         if (Array.isArray(parsed.administracion_rrhh)) firestoreState.administracion_rrhh = parsed.administracion_rrhh;
@@ -162,6 +164,7 @@ export function saveStateToLocalCache() {
       roomRates: firestoreState.roomRates,
       encamamiento: firestoreState.encamamiento,
       emergencias: firestoreState.emergencias,
+      bajasInventario: firestoreState.bajasInventario,
       administracion_compras: firestoreState.administracion_compras,
       administracion_contabilidad: firestoreState.administracion_contabilidad,
       administracion_rrhh: firestoreState.administracion_rrhh,
@@ -289,6 +292,7 @@ export function initRealtimeFirestore(onFirstLoad) {
       const roomRatesList = [];
       const encamamientosList = [];
       const emergenciasList = [];
+      const bajasList = [];
       const compras = [];
       const contabilidad = [];
       const caja = [];
@@ -326,6 +330,10 @@ export function initRealtimeFirestore(onFirstLoad) {
           roomRatesList.push(...(dData.items || []));
           return;
         }
+        if (dId === 'catalog_bajasInventario') {
+          bajasList.push(...(dData.items || []));
+          return;
+        }
 
         const cleanDoc = { id: dId, ...dData };
         delete cleanDoc._collectionType;
@@ -338,6 +346,7 @@ export function initRealtimeFirestore(onFirstLoad) {
         else if (type === 'roomRates') roomRatesList.push(cleanDoc);
         else if (type === 'encamamiento') encamamientosList.push(cleanDoc);
         else if (type === 'emergencias') emergenciasList.push(cleanDoc);
+        else if (type === 'bajasInventario') bajasList.push(cleanDoc);
         else if (type === 'administracion_compras') compras.push(cleanDoc);
         else if (type === 'administracion_contabilidad') contabilidad.push(cleanDoc);
         else if (type === 'administracion_caja') caja.push(cleanDoc);
@@ -357,6 +366,7 @@ export function initRealtimeFirestore(onFirstLoad) {
       firestoreState.roomRates = roomRatesList;
       firestoreState.encamamiento = encamamientosList;
       firestoreState.emergencias = emergenciasList;
+      firestoreState.bajasInventario = bajasList;
       firestoreState.administracion_compras = compras;
       firestoreState.administracion_contabilidad = contabilidad;
       firestoreState.administracion_caja = caja;
@@ -382,6 +392,7 @@ export function initRealtimeFirestore(onFirstLoad) {
           const roomRatesList = [];
           const encamamientosList = [];
           const emergenciasList = [];
+          const bajasList = [];
           const compras = [];
           const contabilidad = [];
           const caja = [];
@@ -419,6 +430,10 @@ export function initRealtimeFirestore(onFirstLoad) {
               roomRatesList.push(...(dData.items || []));
               return;
             }
+            if (dId === 'catalog_bajasInventario') {
+              bajasList.push(...(dData.items || []));
+              return;
+            }
 
             const cleanDoc = { id: dId, ...dData };
             delete cleanDoc._collectionType;
@@ -431,6 +446,7 @@ export function initRealtimeFirestore(onFirstLoad) {
             else if (type === 'roomRates') roomRatesList.push(cleanDoc);
             else if (type === 'encamamiento') encamamientosList.push(cleanDoc);
             else if (type === 'emergencias') emergenciasList.push(cleanDoc);
+            else if (type === 'bajasInventario') bajasList.push(cleanDoc);
             else if (type === 'administracion_compras') compras.push(cleanDoc);
             else if (type === 'administracion_contabilidad') contabilidad.push(cleanDoc);
             else if (type === 'administracion_caja') caja.push(cleanDoc);
@@ -450,6 +466,7 @@ export function initRealtimeFirestore(onFirstLoad) {
           firestoreState.roomRates = roomRatesList;
           firestoreState.encamamiento = encamamientosList;
           firestoreState.emergencias = emergenciasList;
+          firestoreState.bajasInventario = bajasList;
           firestoreState.administracion_compras = compras;
           firestoreState.administracion_contabilidad = contabilidad;
           firestoreState.administracion_caja = caja;
@@ -624,6 +641,7 @@ export async function purgeAllFirestoreData() {
     firestoreState.consultationTypes = [];
     firestoreState.encamamiento = [];
     firestoreState.emergencias = [];
+    firestoreState.bajasInventario = [];
     firestoreState.administracion_compras = [];
     firestoreState.administracion_contabilidad = [];
     firestoreState.administracion_rrhh = [];

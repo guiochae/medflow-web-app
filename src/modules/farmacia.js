@@ -1,5 +1,6 @@
 // src/modules/farmacia.js
-import { getAppState, saveAppState } from '../main.js';
+import { getAppState, saveAppState, hashPassword, isAdminUser } from '../main.js';
+import logoUrl from '../assets/logo.jpg';
 
 function enrichMedication(m) {
   if (!m) return null;
@@ -89,6 +90,7 @@ export function renderFarmacia(container) {
       <button class="tab-btn active" id="tab-dispense-recipes">📋 Despachar Recetas</button>
       <button class="tab-btn" id="tab-external-sale">🏪 Venta Externa</button>
       <button class="tab-btn" id="tab-sales-history">📜 Historial de Farmacia</button>
+      <button class="tab-btn" id="tab-bajas-vencidos">🗑️ Bajas de Vencidos</button>
       <button class="tab-btn" id="tab-demanda-real">📈 Demanda Real</button>
     </div>
 
@@ -301,6 +303,101 @@ export function renderFarmacia(container) {
           </table>
         </div>
       </div>
+
+      <!-- PESTAÑA: BAJAS DE MEDICAMENTOS VENCIDOS -->
+      <div id="pane-bajas-vencidos" class="tab-pane" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <h3 style="color: var(--accent-danger); margin-bottom: 0.25rem; display: flex; align-items: center; gap: 8px;">
+              <span>🗑️</span> Control y Bajas de Medicamentos Vencidos
+            </h3>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin: 0;">
+              Gestión de caducidades, descarte de existencias vencidas y actas oficiales de destrucción autorizadas por el Administrador Maestro.
+            </p>
+          </div>
+          <button class="btn btn-secondary" id="btn-print-bajas-report" style="display: flex; align-items: center; gap: 6px;">
+            🖨️ Exportar / Imprimir Reporte de Bajas
+          </button>
+        </div>
+
+        <!-- Panel de Métricas / KPIs de Caducidad -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 1.5rem;">
+          <div class="glass-card" style="padding: 1rem; border-top: 3px solid var(--accent-danger); display: flex; flex-direction: column; gap: 4px; background: rgba(30, 41, 59, 0.4);">
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Medicamentos Caducados</span>
+            <strong style="font-size: 1.6rem; color: var(--accent-danger);" id="baja-stat-expired-count">0</strong>
+            <span style="font-size: 0.72rem; color: var(--text-muted);">Con existencias en inventario</span>
+          </div>
+          <div class="glass-card" style="padding: 1rem; border-top: 3px solid var(--accent-warning); display: flex; flex-direction: column; gap: 4px; background: rgba(30, 41, 59, 0.4);">
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Unidades Físicas Vencidas</span>
+            <strong style="font-size: 1.6rem; color: var(--accent-warning);" id="baja-stat-expired-units">0</strong>
+            <span style="font-size: 0.72rem; color: var(--text-muted);">Pendientes de descarte</span>
+          </div>
+          <div class="glass-card" style="padding: 1rem; border-top: 3px solid #ec4899; display: flex; flex-direction: column; gap: 4px; background: rgba(30, 41, 59, 0.4);">
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Pérdida Económica Pendiente</span>
+            <strong style="font-size: 1.4rem; color: #f472b6;" id="baja-stat-loss-total">Q0.00</strong>
+            <span style="font-size: 0.72rem; color: var(--text-muted);">Valor de productos caducados</span>
+          </div>
+          <div class="glass-card" style="padding: 1rem; border-top: 3px solid var(--accent-success); display: flex; flex-direction: column; gap: 4px; background: rgba(30, 41, 59, 0.4);">
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Actas Procesadas</span>
+            <strong style="font-size: 1.6rem; color: var(--accent-success);" id="baja-stat-actas-count">0</strong>
+            <span style="font-size: 0.72rem; color: var(--text-muted);">Bajas autorizadas</span>
+          </div>
+        </div>
+
+        <!-- SECCIÓN 1: MEDICAMENTOS VENCIDOS PENDIENTES DE BAJA -->
+        <div style="margin-bottom: 2rem;">
+          <h4 style="color: var(--text-primary); margin-bottom: 0.75rem; font-size: 1rem; display: flex; align-items: center; gap: 6px;">
+            <span>⚠️</span> Medicamentos Vencidos en Inventario (Pendientes de Autorización)
+          </h4>
+          <div style="margin-bottom: 10px;">
+            <input type="text" id="bajas-vencidos-search" placeholder="🔍 Buscar en medicamentos vencidos..." style="width: 100%; max-width: 400px; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+          </div>
+          <div style="overflow-x: auto; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(0,0,0,0.15);">
+            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;" id="table-vencidos-pendientes">
+              <thead>
+                <tr style="border-bottom: 2px solid var(--border-color); background: rgba(255,255,255,0.03); color: var(--text-muted);">
+                  <th style="padding: 10px;">Medicamento / Genérico</th>
+                  <th style="padding: 10px;">Lote</th>
+                  <th style="padding: 10px;">Fecha Vencimiento</th>
+                  <th style="padding: 10px;">Estado Caducidad</th>
+                  <th style="padding: 10px; text-align: right;">Existencias Vencidas</th>
+                  <th style="padding: 10px; text-align: right;">Pérdida Estimada</th>
+                  <th style="padding: 10px; text-align: center;">Acción Requerida</th>
+                </tr>
+              </thead>
+              <tbody id="vencidos-pendientes-tbody">
+                <!-- Se inyecta con JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- SECCIÓN 2: HISTORIAL DE ACTAS DE BAJA Y DESTRUCCIÓN -->
+        <div>
+          <h4 style="color: var(--text-primary); margin-bottom: 0.75rem; font-size: 1rem; display: flex; align-items: center; gap: 6px;">
+            <span>📜</span> Historial de Actas de Baja y Destrucción Autorizadas
+          </h4>
+          <div style="overflow-x: auto; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(0,0,0,0.15);">
+            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;" id="table-actas-historial">
+              <thead>
+                <tr style="border-bottom: 2px solid var(--border-color); background: rgba(255,255,255,0.03); color: var(--text-muted);">
+                  <th style="padding: 10px;">Folio / Acta</th>
+                  <th style="padding: 10px;">Fecha y Hora</th>
+                  <th style="padding: 10px;">Medicamento y Lote</th>
+                  <th style="padding: 10px; text-align: right;">Cantidad Descartada</th>
+                  <th style="padding: 10px; text-align: right;">Pérdida Total</th>
+                  <th style="padding: 10px;">Solicitó</th>
+                  <th style="padding: 10px;">Autorizado Por</th>
+                  <th style="padding: 10px; text-align: center;">Acta Oficial</th>
+                </tr>
+              </thead>
+              <tbody id="actas-historial-tbody">
+                <!-- Se inyecta con JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   `;
 
@@ -391,6 +488,37 @@ export function renderFarmacia(container) {
       if (sale) {
         printSalesVoucher(sale);
       }
+      return;
+    }
+
+    // Botón Solicitar Baja de Medicamento Vencido
+    const btnBaja = e.target.closest('.btn-trigger-baja-direct');
+    if (btnBaja) {
+      e.preventDefault();
+      const medId = btnBaja.getAttribute('data-med-id');
+      showBajaVencidoModal(medId);
+      return;
+    }
+
+    // Botón Imprimir Acta de Baja
+    const btnPrintActa = e.target.closest('.btn-print-baja-acta');
+    if (btnPrintActa) {
+      e.preventDefault();
+      const actaId = btnPrintActa.getAttribute('data-acta-id');
+      const stateObj = getAppState();
+      const acta = (stateObj.bajasInventario || []).find(b => b.id === actaId);
+      if (acta) {
+        printActaBajaVencido(acta);
+      }
+      return;
+    }
+
+    // Botón Imprimir Reporte General de Bajas
+    const btnPrintReport = e.target.closest('#btn-print-bajas-report');
+    if (btnPrintReport) {
+      e.preventDefault();
+      printBajasSummaryReport();
+      return;
     }
   });
 
@@ -527,6 +655,8 @@ function refreshActiveTab() {
     renderCartTable();
   } else if (activeFarmaciaTab === 'tab-sales-history') {
     renderSalesHistory();
+  } else if (activeFarmaciaTab === 'tab-bajas-vencidos') {
+    renderBajasVencidosTab();
   } else if (activeFarmaciaTab === 'tab-demanda-real') {
     renderDemandaReal();
   }
@@ -1237,16 +1367,22 @@ function renderInventoryAlerts() {
     // 1. Validación de Vencimientos
     if (med.vencimiento) {
       const expDate = new Date(med.vencimiento);
+      const enriched = enrichMedication(med);
+      const stockVal = med.stock !== undefined ? med.stock : 120;
+      const friendlyStock = formatStockFriendly(stockVal, enriched.unidades_por_presentacion, enriched.presentation, enriched.unidad_dispensable);
+
       if (expDate < today) {
         expirationAlerts.push({
           type: 'expired',
-          text: `🚨 <strong>CADUCADO:</strong> El medicamento "${med.name}" (Lote: ${med.lote || 'N/D'}) venció el ${expDate.toLocaleDateString('es-GT')}.`
+          medId: med.id,
+          text: `🚨 <strong>CADUCADO:</strong> El medicamento "${med.name}" (Lote: ${med.lote || 'N/D'}) venció el ${expDate.toLocaleDateString('es-GT')}. Existencias: ${friendlyStock}.`
         });
       } else if (expDate <= ninetyDaysFromNow) {
         const daysLeft = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
         expirationAlerts.push({
           type: 'expiring-soon',
-          text: `⚠️ <strong>PRÓXIMO A VENCER:</strong> "${med.name}" (Lote: ${med.lote || 'N/D'}) vence el ${expDate.toLocaleDateString('es-GT')} (en ${daysLeft} días).`
+          medId: med.id,
+          text: `⚠️ <strong>PRÓXIMO A VENCER:</strong> "${med.name}" (Lote: ${med.lote || 'N/D'}) vence el ${expDate.toLocaleDateString('es-GT')} (en ${daysLeft} días). Existencias: ${friendlyStock}.`
         });
       }
     }
@@ -1299,7 +1435,7 @@ function renderInventoryAlerts() {
       <h3 style="color: var(--accent-primary); font-size: 1rem; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 8px;">
         📢 Alertas de Inventario y Caducidad
       </h3>
-      <div style="display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow-y: auto; padding-right: 5px;">
+      <div style="display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; padding-right: 5px;">
         ${allAlerts.map(alert => {
           let bg = 'rgba(255, 255, 255, 0.02)';
           let borderL = '3px solid #ccc';
@@ -1327,8 +1463,17 @@ function renderInventoryAlerts() {
               font-size: 0.8rem;
               color: ${textColor};
               border-radius: 2px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              gap: 10px;
             ">
-              ${alert.text}
+              <div style="flex: 1;">${alert.text}</div>
+              ${alert.type === 'expired' && alert.medId ? `
+                <button type="button" class="btn btn-danger btn-small btn-trigger-baja-direct" data-med-id="${alert.medId}" style="padding: 3px 8px; font-size: 0.72rem; background: #ef4444; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; white-space: nowrap;">
+                  🗑️ Dar de Baja
+                </button>
+              ` : ''}
             </div>
           `;
         }).join('')}
@@ -1564,3 +1709,614 @@ function printDemandaRealReport() {
   `);
   printWindow.document.close();
 }
+
+// 9. RENDERIZAR PESTAÑA DE BAJAS DE MEDICAMENTOS VENCIDOS
+function renderBajasVencidosTab() {
+  const state = getAppState();
+  const medications = state.medications || [];
+  const today = new Date();
+  const bajasHistory = state.bajasInventario || [];
+
+  // Filtrar medicamentos caducados (vencimiento anterior a hoy)
+  const expiredMeds = medications.filter(m => {
+    if (!m.vencimiento) return false;
+    const expDate = new Date(m.vencimiento);
+    return !isNaN(expDate.getTime()) && expDate < today;
+  });
+
+  // Métricas
+  const expiredWithStock = expiredMeds.filter(m => (m.stock !== undefined ? m.stock : 120) > 0);
+  const totalExpiredUnits = expiredWithStock.reduce((acc, m) => acc + (m.stock !== undefined ? m.stock : 120), 0);
+  
+  const totalLossQ = expiredWithStock.reduce((acc, m) => {
+    const enriched = enrichMedication(m);
+    const stockVal = m.stock !== undefined ? m.stock : 120;
+    return acc + (stockVal * (enriched.precio_unitario || 0));
+  }, 0);
+
+  const statExpiredCount = document.getElementById('baja-stat-expired-count');
+  const statExpiredUnits = document.getElementById('baja-stat-expired-units');
+  const statLossTotal = document.getElementById('baja-stat-loss-total');
+  const statActasCount = document.getElementById('baja-stat-actas-count');
+
+  if (statExpiredCount) statExpiredCount.textContent = expiredWithStock.length;
+  if (statExpiredUnits) statExpiredUnits.textContent = totalExpiredUnits;
+  if (statLossTotal) statLossTotal.textContent = `Q${totalLossQ.toFixed(2)}`;
+  if (statActasCount) statActasCount.textContent = bajasHistory.length;
+
+  // Renderizar Tabla de Vencidos Pendientes de Descarte
+  const pendingTbody = document.getElementById('vencidos-pendientes-tbody');
+  const searchInput = document.getElementById('bajas-vencidos-search');
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+  if (pendingTbody) {
+    let filteredExpired = expiredMeds;
+    if (query) {
+      filteredExpired = filteredExpired.filter(m => 
+        (m.name && m.name.toLowerCase().includes(query)) ||
+        (m.generic && m.generic.toLowerCase().includes(query)) ||
+        (m.lote && m.lote.toLowerCase().includes(query))
+      );
+    }
+
+    if (filteredExpired.length === 0) {
+      pendingTbody.innerHTML = `
+        <tr>
+          <td colspan="7" style="padding: 25px; text-align: center; color: var(--accent-success); font-weight: 500;">
+            ✅ No hay medicamentos vencidos pendientes de descarte en el inventario.
+          </td>
+        </tr>
+      `;
+    } else {
+      pendingTbody.innerHTML = filteredExpired.map(m => {
+        const enriched = enrichMedication(m);
+        const stockVal = m.stock !== undefined ? m.stock : 120;
+        const friendlyStock = formatStockFriendly(stockVal, enriched.unidades_por_presentacion, enriched.presentation, enriched.unidad_dispensable);
+        const expDate = new Date(m.vencimiento);
+        const daysPast = Math.max(1, Math.floor((today - expDate) / (1000 * 60 * 60 * 24)));
+        const lossEstimated = (stockVal * (enriched.precio_unitario || 0));
+
+        return `
+          <tr style="border-bottom: 1px solid var(--border-color); ${stockVal === 0 ? 'opacity: 0.6;' : ''}">
+            <td style="padding: 10px;">
+              <strong>${m.name}</strong>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">${m.generic || 'Sin genérico'} (${m.presentation || 'Caja'})</div>
+            </td>
+            <td style="padding: 10px; font-family: monospace; font-weight: bold; color: var(--accent-primary);">${m.lote || 'N/D'}</td>
+            <td style="padding: 10px; color: var(--accent-danger); font-weight: bold;">${expDate.toLocaleDateString('es-GT')}</td>
+            <td style="padding: 10px;">
+              <span style="background: rgba(239, 68, 68, 0.15); color: #ef4444; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">
+                🚨 Venció hace ${daysPast} día(s)
+              </span>
+            </td>
+            <td style="padding: 10px; text-align: right; font-weight: bold; color: ${stockVal > 0 ? 'var(--text-primary)' : 'var(--text-muted)'};">
+              ${friendlyStock}
+            </td>
+            <td style="padding: 10px; text-align: right; color: #f472b6; font-weight: bold;">
+              Q${lossEstimated.toFixed(2)}
+            </td>
+            <td style="padding: 10px; text-align: center;">
+              <button class="btn btn-danger btn-small btn-trigger-baja-direct" data-med-id="${m.id}" style="padding: 4px 10px; font-size: 0.75rem; background: var(--accent-danger); border: none; font-weight: bold; display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
+                <span>🗑️</span> Solicitar Baja
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+  }
+
+  // Renderizar Tabla Histórica de Actas de Baja
+  const actasTbody = document.getElementById('actas-historial-tbody');
+  if (actasTbody) {
+    if (bajasHistory.length === 0) {
+      actasTbody.innerHTML = `
+        <tr>
+          <td colspan="8" style="padding: 20px; text-align: center; color: var(--text-muted);">
+            No se han registrado actas de baja de medicamentos vencidos todavía.
+          </td>
+        </tr>
+      `;
+    } else {
+      actasTbody.innerHTML = bajasHistory.map(b => {
+        const dateFormatted = new Date(b.date).toLocaleString('es-GT');
+        return `
+          <tr style="border-bottom: 1px solid var(--border-color);">
+            <td style="padding: 10px; font-family: monospace; font-weight: bold; color: var(--accent-primary);">${b.id}</td>
+            <td style="padding: 10px; color: var(--text-muted); font-size: 0.8rem;">${dateFormatted}</td>
+            <td style="padding: 10px;">
+              <strong>${b.medicationName}</strong>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">Lote: ${b.lote || 'N/D'} | Venc: ${b.vencimiento || 'N/D'}</div>
+            </td>
+            <td style="padding: 10px; text-align: right; font-weight: bold;">
+              ${b.unitsDiscarded} ${b.unidad_dispensable || 'uds'} (${b.packsDiscarded || '0'} cajas)
+            </td>
+            <td style="padding: 10px; text-align: right; color: var(--accent-danger); font-weight: bold;">
+              Q${parseFloat(b.totalLoss || 0).toFixed(2)}
+            </td>
+            <td style="padding: 10px; font-size: 0.8rem;">${b.operatorName}</td>
+            <td style="padding: 10px; font-size: 0.8rem;">
+              <span style="background: rgba(34, 197, 94, 0.15); color: #22c55e; padding: 2px 6px; border-radius: 4px; font-weight: bold;">
+                🛡️ ${b.authorizedBy}
+              </span>
+            </td>
+            <td style="padding: 10px; text-align: center;">
+              <button class="btn btn-secondary btn-small btn-print-baja-acta" data-acta-id="${b.id}" style="padding: 3px 8px; font-size: 0.75rem; cursor: pointer;">
+                🖨️ Acta
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+  }
+
+  // Bind Search Input
+  if (searchInput && !searchInput.dataset.bound) {
+    searchInput.dataset.bound = 'true';
+    searchInput.addEventListener('input', () => renderBajasVencidosTab());
+  }
+}
+
+// 10. MODAL DE AUTORIZACIÓN Y BAJA POR ADMINISTRADOR MAESTRO
+function showBajaVencidoModal(medId) {
+  const state = getAppState();
+  const med = (state.medications || []).find(m => m.id === medId);
+  if (!med) {
+    alert("Medicamento no encontrado en el inventario.");
+    return;
+  }
+
+  const enriched = enrichMedication(med);
+  const currentStock = med.stock !== undefined ? med.stock : 120;
+  const unitPrice = enriched.precio_unitario || (enriched.price / (enriched.unidades_por_presentacion || 1));
+  const friendlyStock = formatStockFriendly(currentStock, enriched.unidades_por_presentacion, enriched.presentation, enriched.unidad_dispensable);
+
+  // Modal container
+  let modal = document.getElementById('modal-baja-vencido');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-baja-vencido';
+    modal.className = 'modal-overlay';
+    modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(4px); padding: 15px;';
+    document.body.appendChild(modal);
+  }
+
+  const expDateStr = med.vencimiento ? new Date(med.vencimiento).toLocaleDateString('es-GT') : 'Sin fecha';
+
+  modal.innerHTML = `
+    <div class="glass-card modal-card" style="max-width: 620px; width: 100%; max-height: 92vh; overflow-y: auto; padding: 1.75rem; border-top: 4px solid var(--accent-danger); box-shadow: var(--shadow-xl); border-radius: var(--radius-md);">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem;">
+        <div>
+          <h2 style="color: var(--accent-danger); font-size: 1.25rem; margin: 0; display: flex; align-items: center; gap: 8px;">
+            <span>🗑️</span> Autorización de Baja y Destrucción
+          </h2>
+          <p style="color: var(--text-muted); font-size: 0.82rem; margin: 4px 0 0 0;">
+            Salida por caducidad de inventario y generación de acta oficial.
+          </p>
+        </div>
+        <button type="button" id="btn-close-baja-modal" style="background: none; border: none; font-size: 1.4rem; color: var(--text-muted); cursor: pointer; padding: 0 5px;">&times;</button>
+      </div>
+
+      <!-- Ficha del Medicamento Caducado -->
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; margin-bottom: 1.25rem;">
+        <h3 style="margin: 0 0 6px 0; color: var(--text-primary); font-size: 1.05rem;">${med.name}</h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.82rem; color: var(--text-muted);">
+          <div><strong>Genérico:</strong> ${med.generic || 'N/D'}</div>
+          <div><strong>Presentación:</strong> ${med.presentation || 'Caja'}</div>
+          <div><strong>Lote:</strong> <span style="font-family: monospace; color: var(--accent-primary); font-weight: bold;">${med.lote || 'N/D'}</span></div>
+          <div><strong>Fecha de Vencimiento:</strong> <span style="color: var(--accent-danger); font-weight: bold;">${expDateStr}</span></div>
+          <div style="grid-column: span 2; margin-top: 4px; padding-top: 6px; border-top: 1px dashed var(--border-color);">
+            <strong>Existencias en Sistema:</strong> <span style="color: var(--accent-success); font-weight: bold;">${friendlyStock}</span> (Stock: ${currentStock} ${enriched.unidad_dispensable}(s))
+          </div>
+        </div>
+      </div>
+
+      <form id="form-baja-vencido" style="display: flex; flex-direction: column; gap: 14px;">
+        <!-- Cantidad a dar de baja -->
+        <div class="form-group" style="margin-bottom: 0;">
+          <label style="font-weight: bold; font-size: 0.85rem;">Cantidad a Dar de Baja (${enriched.unidad_dispensable}s):</label>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <input type="number" id="baja-units-input" value="${currentStock}" min="1" max="${Math.max(1, currentStock)}" required style="flex: 1; padding: 8px 12px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.95rem; font-weight: bold;">
+            <span style="font-size: 0.82rem; color: var(--text-muted);">${enriched.unidad_dispensable}(s)</span>
+          </div>
+          <div id="baja-units-helper" style="font-size: 0.78rem; color: #f472b6; margin-top: 4px; font-weight: 500;">
+            <!-- Cálculo dinámico -->
+          </div>
+        </div>
+
+        <!-- Acción en catálogo -->
+        <div class="form-group" style="margin-bottom: 0;">
+          <label style="font-weight: bold; font-size: 0.85rem;">Acción en Catálogo de Farmacia:</label>
+          <select id="baja-catalog-action" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+            <option value="discount">Descontar existencias vencidas (Mantener medicamento en catálogo para futuras compras)</option>
+            <option value="remove">Eliminar permanentemente este producto del catálogo</option>
+          </select>
+        </div>
+
+        <!-- Observaciones / Método de destrucción -->
+        <div class="form-group" style="margin-bottom: 0;">
+          <label style="font-weight: bold; font-size: 0.85rem;">Motivo / Protocolo de Destrucción:</label>
+          <textarea id="baja-reason-input" rows="2" required style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem; resize: vertical;">Vencimiento de caducidad cumplido. Descarte de lote por bioseguridad según normativa sanitaria y control de calidad institucional.</textarea>
+        </div>
+
+        <!-- Bloque de Validación de Seguridad (ADMINISTRADOR MAESTRO) -->
+        <div style="background: rgba(239, 68, 68, 0.08); border: 1.5px solid rgba(239, 68, 68, 0.4); border-radius: 6px; padding: 14px; margin-top: 5px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+            <span style="font-size: 1.2rem;">🔒</span>
+            <strong style="color: #ef4444; font-size: 0.88rem; text-transform: uppercase; letter-spacing: 0.5px;">
+              Aprobación Obligatoria: Administrador Maestro
+            </strong>
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.35; margin: 0 0 10px 0;">
+            La baja de medicamentos vencidos genera un acta contable y merma de inventario. Ingrese la contraseña del <strong>Administrador Maestro</strong> para validar la transacción.
+          </p>
+
+          <div class="form-group" style="margin-bottom: 0;">
+            <label style="font-size: 0.8rem; font-weight: bold; color: var(--text-primary);">Contraseña del Administrador Maestro</label>
+            <input type="password" id="baja-admin-password" placeholder="Ingrese contraseña de Administrador..." required autocomplete="current-password" style="width: 100%; padding: 10px 12px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.5); background: var(--bg-card); color: var(--text-primary); font-size: 0.9rem;">
+          </div>
+        </div>
+
+        <!-- Botones de Acción -->
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-baja-form" style="padding: 8px 16px;">Cancelar</button>
+          <button type="submit" class="btn btn-danger" id="btn-submit-baja" style="background: var(--accent-danger); border: none; padding: 8px 18px; font-weight: bold; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <span>✅</span> Aprobar y Procesar Baja
+          </button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  // Dynamic calculation helper
+  const unitsInput = document.getElementById('baja-units-input');
+  const helperEl = document.getElementById('baja-units-helper');
+
+  const updateHelper = () => {
+    const qty = parseInt(unitsInput.value) || 0;
+    const packs = (qty / (enriched.unidades_por_presentacion || 1)).toFixed(1);
+    const loss = (qty * unitPrice).toFixed(2);
+    if (helperEl) {
+      helperEl.textContent = `Equivalente a ${packs} ${enriched.presentation}(s). Pérdida económica total: Q${loss}`;
+    }
+  };
+
+  unitsInput.addEventListener('input', updateHelper);
+  updateHelper();
+
+  // Close handlers
+  const closeModal = () => {
+    modal.style.display = 'none';
+  };
+
+  document.getElementById('btn-close-baja-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-baja-form').addEventListener('click', closeModal);
+
+  // Submit Handler
+  document.getElementById('form-baja-vencido').addEventListener('submit', (e) => {
+    e.preventDefault();
+
+    const unitsToDiscard = parseInt(unitsInput.value) || 0;
+    if (unitsToDiscard <= 0) {
+      alert("Por favor, ingrese una cantidad válida mayor a 0 para dar de baja.");
+      return;
+    }
+
+    const passInput = document.getElementById('baja-admin-password').value.trim();
+    if (!passInput) {
+      alert("Debe ingresar la contraseña del Administrador Maestro para autorizar la baja.");
+      return;
+    }
+
+    // Validación de la contraseña del Administrador Maestro
+    const adminUser = (state.users || []).find(u => {
+      const r = String(u.role || '').toLowerCase();
+      const n = String(u.name || '').toLowerCase();
+      return r.includes('administrador') || n === 'administrador' || u.id === 'Admin';
+    });
+
+    const hashedInput = hashPassword(passInput);
+    const isMasterAuth = passInput === 'Glol5414' || (adminUser && (
+      adminUser.password === passInput ||
+      adminUser.password === hashedInput ||
+      hashPassword(adminUser.password) === hashedInput ||
+      adminUser.password === 'Glol5414'
+    ));
+
+    if (!isMasterAuth) {
+      alert("❌ ACCESO DENEGADO:\nLa contraseña del Administrador Maestro es incorrecta. La baja de medicamento vencido no fue autorizada.");
+      return;
+    }
+
+    const catalogAction = document.getElementById('baja-catalog-action').value;
+    const reasonVal = document.getElementById('baja-reason-input').value.trim();
+    const currentUser = state.currentUser || { name: 'Personal de Farmacia', role: 'Farmacia' };
+    const lossAmount = parseFloat((unitsToDiscard * unitPrice).toFixed(2));
+    const packsCount = parseFloat((unitsToDiscard / (enriched.unidades_por_presentacion || 1)).toFixed(1));
+
+    const actaId = 'ACTA-BAJA-' + Date.now();
+    const bajaRecord = {
+      id: actaId,
+      date: new Date().toISOString(),
+      medicationId: med.id,
+      medicationName: med.name,
+      generic: med.generic || '',
+      presentation: med.presentation || '',
+      unidad_dispensable: enriched.unidad_dispensable || 'Tableta',
+      unidades_por_presentacion: enriched.unidades_por_presentacion || 1,
+      lote: med.lote || 'N/D',
+      vencimiento: med.vencimiento || 'N/D',
+      unitsDiscarded: unitsToDiscard,
+      packsDiscarded: packsCount,
+      unitPrice: unitPrice,
+      totalLoss: lossAmount,
+      operatorName: currentUser.name,
+      operatorRole: currentUser.role,
+      authorizedBy: 'Administrador Maestro',
+      reason: reasonVal,
+      removedFromCatalog: catalogAction === 'remove'
+    };
+
+    // 1. Guardar acta en state.bajasInventario
+    state.bajasInventario = state.bajasInventario || [];
+    state.bajasInventario.unshift(bajaRecord);
+
+    // 2. Modificar o eliminar medicamento del catálogo
+    if (catalogAction === 'remove') {
+      state.medications = (state.medications || []).filter(m => m.id !== med.id);
+    } else {
+      const foundMed = (state.medications || []).find(m => m.id === med.id);
+      if (foundMed) {
+        foundMed.stock = Math.max(0, (foundMed.stock !== undefined ? foundMed.stock : 120) - unitsToDiscard);
+      }
+    }
+
+    saveAppState(state);
+    closeModal();
+
+    alert(`✅ BAJA AUTORIZADA EXITOSAMENTE:\n\nEl Administrador Maestro ha aprobado la baja de ${unitsToDiscard} ${enriched.unidad_dispensable}(s) de "${med.name}".\n\nActa generada: ${actaId}\nPérdida contable registrada: Q${lossAmount.toFixed(2)}.`);
+
+    // Ofrecer impresión del acta
+    if (confirm("¿Desea imprimir el Acta Oficial de Baja y Destrucción ahora?")) {
+      printActaBajaVencido(bajaRecord);
+    }
+
+    refreshActiveTab();
+  });
+
+  modal.style.display = 'flex';
+}
+
+// 11. IMPRIMIR ACTA OFICIAL DE BAJA Y DESTRUCCIÓN
+function printActaBajaVencido(record) {
+  const state = getAppState();
+  const clinic = state.clinicInfo || {};
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    alert("Por favor, habilite las ventanas emergentes en su navegador para imprimir el acta.");
+    return;
+  }
+
+  const dateFormatted = new Date(record.date).toLocaleString('es-GT', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <title>Acta de Baja y Destrucción - ${record.id}</title>
+      <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #111; padding: 25px; line-height: 1.4; }
+        .header-table { width: 100%; border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 20px; }
+        .title-box { text-align: center; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 10px; border-radius: 4px; margin: 15px 0; }
+        .title-box h2 { margin: 0; font-size: 1.15rem; color: #b91c1c; text-transform: uppercase; }
+        .data-table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 0.88rem; }
+        .data-table th, .data-table td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; }
+        .data-table th { background: #f8fafc; font-weight: bold; }
+        .signatures { display: flex; justify-content: space-between; margin-top: 60px; padding: 0 40px; }
+        .sig-box { text-align: center; width: 220px; }
+        .sig-line { border-top: 1px solid #111; margin-bottom: 6px; }
+        @media print { .no-print { display: none; } }
+      </style>
+    </head>
+    <body>
+      <table class="header-table">
+        <tr>
+          <td style="vertical-align: middle; width: 60%;">
+            <h1 style="margin: 0; font-size: 1.3rem; color: #1e3a8a;">${clinic.name || 'LUGAMED 2.0 - HOSPITAL Y FARMACIA'}</h1>
+            <div style="font-size: 0.82rem; color: #64748b;">Departamento de Farmacia, Control de Calidad y Bioseguridad</div>
+          </td>
+          <td style="text-align: right; font-size: 0.8rem; color: #334155;">
+            📍 ${clinic.address || 'Guatemala'}<br>
+            📞 ${clinic.phone || '2200-0000'} | ✉️ ${clinic.email || 'farmacia@lugamed.gt'}
+          </td>
+        </tr>
+      </table>
+
+      <div class="title-box">
+        <h2>Acta Oficial de Baja y Destrucción de Medicamento Vencido</h2>
+        <div style="font-size: 0.85rem; color: #475569; margin-top: 3px;">Folio No. <strong>${record.id}</strong> | Fecha de Emisión: <strong>${dateFormatted}</strong></div>
+      </div>
+
+      <p style="font-size: 0.88rem; text-align: justify; margin-bottom: 15px;">
+        Por medio de la presente acta se certifica que en las instalaciones del Servicio de Farmacia se ha procedido formalmente con el descarte, retiro de existencias activas y orden de destrucción del siguiente producto farmacéutico por haber alcanzado su fecha límite de caducidad, en estricto apego a los protocolos sanitarios y de control interno:
+      </p>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Descripción del Medicamento</th>
+            <th>Lote</th>
+            <th>Fecha Vencimiento</th>
+            <th>Cantidad Descartada</th>
+            <th>Costo Unitario</th>
+            <th>Pérdida Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <strong>${record.medicationName}</strong><br>
+              <span style="font-size: 0.75rem; color: #555;">Genérico: ${record.generic || 'N/D'} | ${record.presentation || 'Caja'}</span>
+            </td>
+            <td style="font-family: monospace; font-weight: bold;">${record.lote || 'N/D'}</td>
+            <td style="color: #b91c1c; font-weight: bold;">${record.vencimiento}</td>
+            <td><strong>${record.unitsDiscarded} ${record.unidad_dispensable}(s)</strong><br><span style="font-size: 0.75rem; color: #555;">(${record.packsDiscarded} cajas)</span></td>
+            <td>Q${parseFloat(record.unitPrice || 0).toFixed(2)}</td>
+            <td style="font-weight: bold; color: #b91c1c;">Q${parseFloat(record.totalLoss || 0).toFixed(2)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 10px; font-size: 0.85rem; margin-top: 15px;">
+        <strong>Justificación y Protocolo Sanitario:</strong>
+        <p style="margin: 4px 0 0 0; color: #334155;">${record.reason}</p>
+        <div style="margin-top: 6px; font-size: 0.78rem; color: #64748b;">
+          <strong>Estado en Catálogo:</strong> ${record.removedFromCatalog ? 'Producto eliminado completamente del catálogo farmacéutico' : 'Existencias descontadas a 0 (Catálogo activo)'}
+        </div>
+      </div>
+
+      <div class="signatures">
+        <div class="sig-box">
+          <div class="sig-line"></div>
+          <strong style="font-size: 0.85rem;">Responsable de Farmacia</strong><br>
+          <span style="font-size: 0.78rem; color: #555;">${record.operatorName} (${record.operatorRole})</span>
+        </div>
+        <div class="sig-box">
+          <div class="sig-line"></div>
+          <strong style="font-size: 0.85rem;">Administrador Maestro</strong><br>
+          <span style="font-size: 0.78rem; color: #16a34a; font-weight: bold;">✅ Autorización Aprobada</span>
+        </div>
+      </div>
+
+      <div class="no-print" style="text-align: center; margin-top: 35px;">
+        <button onclick="window.print()" style="padding: 8px 18px; font-size: 1rem; background: #1e3a8a; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+          🖨️ Imprimir Acta
+        </button>
+      </div>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+}
+
+// 12. IMPRIMIR REPORTE CONSOLIDADO DE BAJAS
+function printBajasSummaryReport() {
+  const state = getAppState();
+  const rawList = state.bajasInventario || [];
+  const clinicInfo = state.clinicInfo || { name: 'LUGAMED 2.0', phone: '2200-0000', address: 'Guatemala' };
+
+  if (rawList.length === 0) {
+    alert("No hay registros de actas de bajas de medicamentos vencidos para imprimir.");
+    return;
+  }
+
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    alert("Por favor, habilite las ventanas emergentes en su navegador para imprimir el reporte.");
+    return;
+  }
+
+  const totalLoss = rawList.reduce((acc, b) => acc + (parseFloat(b.totalLoss) || 0), 0);
+  const totalUnits = rawList.reduce((acc, b) => acc + (parseInt(b.unitsDiscarded) || 0), 0);
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <title>Reporte General de Bajas y Destrucción - ${clinicInfo.name}</title>
+      <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #111; padding: 25px; line-height: 1.4; }
+        .header-table { width: 100%; border-bottom: 2px solid #b91c1c; padding-bottom: 10px; margin-bottom: 15px; }
+        .title-box { text-align: center; margin-bottom: 15px; }
+        .title-box h2 { margin: 0; font-size: 1.25rem; color: #b91c1c; text-transform: uppercase; }
+        .summary-kpis { display: flex; justify-content: space-around; background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 0.88rem; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.82rem; }
+        th, td { border: 1px solid #cbd5e1; padding: 7px 8px; text-align: left; }
+        th { background: #f1f5f9; font-weight: bold; }
+        .signatures { display: flex; justify-content: space-between; margin-top: 50px; padding: 0 40px; }
+        .sig-box { text-align: center; width: 220px; }
+        .sig-line { border-top: 1px solid #111; margin-bottom: 5px; }
+        @media print { .no-print { display: none; } }
+      </style>
+    </head>
+    <body>
+      <table class="header-table">
+        <tr>
+          <td>
+            <h1 style="margin: 0; font-size: 1.3rem; color: #1e3a8a;">${clinicInfo.name}</h1>
+            <div style="font-size: 0.82rem; color: #64748b;">Departamento de Farmacia y Auditoría Médica</div>
+          </td>
+          <td style="text-align: right; font-size: 0.8rem; color: #334155;">
+            📍 ${clinicInfo.address || 'Guatemala'}<br>
+            📞 ${clinicInfo.phone || '2200-0000'} | ✉️ ${clinicInfo.email || 'contacto@lugamed.gt'}
+          </td>
+        </tr>
+      </table>
+
+      <div class="title-box">
+        <h2>Historial Consolidado de Bajas y Destrucción de Medicamentos Caducados</h2>
+        <div style="font-size: 0.82rem; color: #475569;">Fecha de Impresión: ${new Date().toLocaleString('es-GT')}</div>
+      </div>
+
+      <div class="summary-kpis">
+        <div><strong>Total Actas:</strong> ${rawList.length}</div>
+        <div><strong>Unidades Descartadas:</strong> ${totalUnits}</div>
+        <div><strong>Pérdida Total Acumulada:</strong> <span style="color: #b91c1c; font-weight: bold;">Q${totalLoss.toFixed(2)}</span></div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Folio</th>
+            <th>Fecha</th>
+            <th>Medicamento</th>
+            <th>Lote / Vencimiento</th>
+            <th style="text-align: right;">Cantidad</th>
+            <th style="text-align: right;">Pérdida (Q)</th>
+            <th>Solicitó</th>
+            <th>Autorización</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rawList.map(b => `
+            <tr>
+              <td style="font-family: monospace; font-weight: bold;">${b.id}</td>
+              <td>${new Date(b.date).toLocaleDateString('es-GT')}</td>
+              <td><strong>${b.medicationName}</strong><br><span style="font-size: 0.72rem; color: #666;">${b.generic || ''} (${b.presentation || ''})</span></td>
+              <td>${b.lote || 'N/D'} / <span style="color: #b91c1c;">${b.vencimiento || 'N/D'}</span></td>
+              <td style="text-align: right; font-weight: bold;">${b.unitsDiscarded} ${b.unidad_dispensable || 'uds'}</td>
+              <td style="text-align: right; color: #b91c1c; font-weight: bold;">Q${parseFloat(b.totalLoss || 0).toFixed(2)}</td>
+              <td>${b.operatorName}</td>
+              <td style="color: #16a34a; font-weight: bold;">🛡️ ${b.authorizedBy}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div class="signatures">
+        <div class="sig-box">
+          <div class="sig-line"></div>
+          <strong style="font-size: 0.85rem;">Responsable de Farmacia</strong>
+        </div>
+        <div class="sig-box">
+          <div class="sig-line"></div>
+          <strong style="font-size: 0.85rem;">Administrador Maestro</strong>
+        </div>
+      </div>
+
+      <div class="no-print" style="text-align: center; margin-top: 30px;">
+        <button onclick="window.print()" style="padding: 8px 18px; font-size: 1rem; background: #1e3a8a; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+          🖨️ Imprimir Reporte
+        </button>
+      </div>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+}
+

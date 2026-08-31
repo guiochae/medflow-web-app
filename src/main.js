@@ -176,6 +176,7 @@ export function getAppState() {
     roomRates: [],
     encamamiento: [],
     emergencias: [],
+    bajasInventario: [],
     administracion_compras: [],
     administracion_contabilidad: [],
     administracion_rrhh: [],
@@ -221,6 +222,7 @@ export async function saveAppState(state) {
   if (state.roomRates) firestoreState.roomRates = state.roomRates;
   if (state.encamamiento) firestoreState.encamamiento = state.encamamiento;
   if (state.emergencias) firestoreState.emergencias = state.emergencias;
+  if (state.bajasInventario) firestoreState.bajasInventario = state.bajasInventario;
   if (state.administracion_compras) firestoreState.administracion_compras = state.administracion_compras;
   if (state.administracion_contabilidad) firestoreState.administracion_contabilidad = state.administracion_contabilidad;
   if (state.administracion_rrhh) firestoreState.administracion_rrhh = state.administracion_rrhh;
@@ -371,6 +373,17 @@ export async function saveAppState(state) {
           }
         }
       });
+    }
+
+    // Sincronizar Bajas de Medicamentos Vencidos
+    if (state.bajasInventario && Array.isArray(state.bajasInventario)) {
+      const prevBajas = lastSyncedState && lastSyncedState.bajasInventario;
+      const hasChanged = !prevBajas || JSON.stringify(prevBajas) !== JSON.stringify(state.bajasInventario);
+      if (hasChanged) {
+        const docRef = doc(db, 'multimedica', 'catalog_bajasInventario');
+        batch.set(docRef, { _collectionType: 'catalog_bajasInventario', items: state.bajasInventario });
+        hasWrites = true;
+      }
     }
 
     // Sincronizar Compras (solo modificados)
