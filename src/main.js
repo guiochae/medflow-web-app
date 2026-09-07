@@ -113,7 +113,7 @@ export function getAppState() {
 
       // Auto-inyección del módulo Quirófano para roles autorizados
       const rLower = String(u.role || '').toLowerCase();
-      if (rLower.includes('admin') || rLower.includes('medico') || rLower.includes('médico') || rLower.includes('enfermero') || rLower.includes('enfermera')) {
+      if (rLower.includes('admin') || rLower.includes('medico') || rLower.includes('médico') || rLower.includes('enfermero') || rLower.includes('enfermera') || rLower.includes('recepcionista') || rLower.includes('recep')) {
         u.modules = u.modules || [];
         if (!u.modules.includes('quirofano')) {
           u.modules.push('quirofano');
@@ -149,7 +149,7 @@ export function getAppState() {
       try {
         const parsed = JSON.parse(loggedUser);
         const rLower = String(parsed.role || '').toLowerCase();
-        if (rLower.includes('admin') || rLower.includes('medico') || rLower.includes('médico') || rLower.includes('enfermero') || rLower.includes('enfermera')) {
+        if (rLower.includes('admin') || rLower.includes('medico') || rLower.includes('médico') || rLower.includes('enfermero') || rLower.includes('enfermera') || rLower.includes('recepcionista') || rLower.includes('recep')) {
           parsed.modules = parsed.modules || [];
           if (!parsed.modules.includes('quirofano')) {
             parsed.modules.push('quirofano');
@@ -941,8 +941,9 @@ function initializeSidebar(loggedUser) {
       hasAccess = isFullAdmin || roleLower.includes('administrador') || roleLower.includes('admin') || isDoctor || isNurse;
     }
 
-    // Aplicar restricción específica para Quirófano (Administrador, Médicos, Enfermeros)
+    // Aplicar restricción específica para Quirófano (Administrador, Médicos, Enfermeros, Recepcionista)
     if (target === 'quirofano') {
+      const isRecepcionista = roleLower.includes('recepcionista') || roleLower.includes('recep');
       hasAccess = isFullAdmin || 
                   roleLower.includes('administrador') ||
                   roleLower.includes('admin') ||
@@ -950,6 +951,7 @@ function initializeSidebar(loggedUser) {
                   roleLower.includes('médico') ||
                   roleLower.includes('enfermera') ||
                   roleLower.includes('enfermero') ||
+                  isRecepcionista ||
                   userModules.includes('quirofano');
     }
 
