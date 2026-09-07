@@ -177,6 +177,15 @@ export function getAppState() {
     encamamiento: [],
     emergencias: [],
     bajasInventario: [],
+    almacenKardexPEPS: [],
+    recepcionesTecnicas: [],
+    requisicionesHospitalarias: [],
+    bajasDisposicion: [],
+    bitacoraTemperatura: [],
+    unidosis24h: [],
+    liquidacionesUnidosis: [],
+    auditoriasInventario: [],
+    autorizacionesEspeciales: [],
     administracion_compras: [],
     administracion_contabilidad: [],
     administracion_rrhh: [],
@@ -187,8 +196,8 @@ export function getAppState() {
     external_doctors: [],
     accounts_payable: [],
     clinicInfo: {
-      name: "LUGAMED 2.0 - Clínica Médica y Hospital",
-      address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
+      name: "LUGAMED 2.0 - Hospital Privado Multimédica Sayaxché",
+      address: "Sayaxché, Petén, Guatemala",
       phone: "2200-0000",
       email: "contacto@lugamed.gt"
     }
@@ -223,6 +232,15 @@ export async function saveAppState(state) {
   if (state.encamamiento) firestoreState.encamamiento = state.encamamiento;
   if (state.emergencias) firestoreState.emergencias = state.emergencias;
   if (state.bajasInventario) firestoreState.bajasInventario = state.bajasInventario;
+  if (state.almacenKardexPEPS) firestoreState.almacenKardexPEPS = state.almacenKardexPEPS;
+  if (state.recepcionesTecnicas) firestoreState.recepcionesTecnicas = state.recepcionesTecnicas;
+  if (state.requisicionesHospitalarias) firestoreState.requisicionesHospitalarias = state.requisicionesHospitalarias;
+  if (state.bajasDisposicion) firestoreState.bajasDisposicion = state.bajasDisposicion;
+  if (state.bitacoraTemperatura) firestoreState.bitacoraTemperatura = state.bitacoraTemperatura;
+  if (state.unidosis24h) firestoreState.unidosis24h = state.unidosis24h;
+  if (state.liquidacionesUnidosis) firestoreState.liquidacionesUnidosis = state.liquidacionesUnidosis;
+  if (state.auditoriasInventario) firestoreState.auditoriasInventario = state.auditoriasInventario;
+  if (state.autorizacionesEspeciales) firestoreState.autorizacionesEspeciales = state.autorizacionesEspeciales;
   if (state.administracion_compras) firestoreState.administracion_compras = state.administracion_compras;
   if (state.administracion_contabilidad) firestoreState.administracion_contabilidad = state.administracion_contabilidad;
   if (state.administracion_rrhh) firestoreState.administracion_rrhh = state.administracion_rrhh;
@@ -382,6 +400,96 @@ export async function saveAppState(state) {
       if (hasChanged) {
         const docRef = doc(db, 'multimedica', 'catalog_bajasInventario');
         batch.set(docRef, { _collectionType: 'catalog_bajasInventario', items: state.bajasInventario });
+        hasWrites = true;
+      }
+    }
+
+    // Sincronizar Kardex PEPS (Lotes de Almacén)
+    if (state.almacenKardexPEPS && Array.isArray(state.almacenKardexPEPS)) {
+      const prevK = lastSyncedState && lastSyncedState.almacenKardexPEPS;
+      if (!prevK || JSON.stringify(prevK) !== JSON.stringify(state.almacenKardexPEPS)) {
+        const docRef = doc(db, 'multimedica', 'catalog_almacenKardexPEPS');
+        batch.set(docRef, { _collectionType: 'catalog_almacenKardexPEPS', items: state.almacenKardexPEPS });
+        hasWrites = true;
+      }
+    }
+
+    // Sincronizar Recepciones Técnicas (HMM-ALM-F01)
+    if (state.recepcionesTecnicas && Array.isArray(state.recepcionesTecnicas)) {
+      const prevRec = lastSyncedState && lastSyncedState.recepcionesTecnicas;
+      if (!prevRec || JSON.stringify(prevRec) !== JSON.stringify(state.recepcionesTecnicas)) {
+        const docRef = doc(db, 'multimedica', 'catalog_recepcionesTecnicas');
+        batch.set(docRef, { _collectionType: 'catalog_recepcionesTecnicas', items: state.recepcionesTecnicas });
+        hasWrites = true;
+      }
+    }
+
+    // Sincronizar Requisiciones Hospitalarias (HMM-ALM-F02)
+    if (state.requisicionesHospitalarias && Array.isArray(state.requisicionesHospitalarias)) {
+      const prevReq = lastSyncedState && lastSyncedState.requisicionesHospitalarias;
+      if (!prevReq || JSON.stringify(prevReq) !== JSON.stringify(state.requisicionesHospitalarias)) {
+        const docRef = doc(db, 'multimedica', 'catalog_requisicionesHospitalarias');
+        batch.set(docRef, { _collectionType: 'catalog_requisicionesHospitalarias', items: state.requisicionesHospitalarias });
+        hasWrites = true;
+      }
+    }
+
+    // Sincronizar Bajas y Disposición (HMM-ALM-F03)
+    if (state.bajasDisposicion && Array.isArray(state.bajasDisposicion)) {
+      const prevBD = lastSyncedState && lastSyncedState.bajasDisposicion;
+      if (!prevBD || JSON.stringify(prevBD) !== JSON.stringify(state.bajasDisposicion)) {
+        const docRef = doc(db, 'multimedica', 'catalog_bajasDisposicion');
+        batch.set(docRef, { _collectionType: 'catalog_bajasDisposicion', items: state.bajasDisposicion });
+        hasWrites = true;
+      }
+    }
+
+    // Sincronizar Bitácora de Temperatura (HMM-ALM-F05)
+    if (state.bitacoraTemperatura && Array.isArray(state.bitacoraTemperatura)) {
+      const prevBit = lastSyncedState && lastSyncedState.bitacoraTemperatura;
+      if (!prevBit || JSON.stringify(prevBit) !== JSON.stringify(state.bitacoraTemperatura)) {
+        const docRef = doc(db, 'multimedica', 'catalog_bitacoraTemperatura');
+        batch.set(docRef, { _collectionType: 'catalog_bitacoraTemperatura', items: state.bitacoraTemperatura });
+        hasWrites = true;
+      }
+    }
+
+    // Sincronizar Unidosis 24H (HMM-ALM-F06)
+    if (state.unidosis24h && Array.isArray(state.unidosis24h)) {
+      const prevUni = lastSyncedState && lastSyncedState.unidosis24h;
+      if (!prevUni || JSON.stringify(prevUni) !== JSON.stringify(state.unidosis24h)) {
+        const docRef = doc(db, 'multimedica', 'catalog_unidosis24h');
+        batch.set(docRef, { _collectionType: 'catalog_unidosis24h', items: state.unidosis24h });
+        hasWrites = true;
+      }
+    }
+
+    // Sincronizar Liquidaciones Unidosis (HMM-ALM-F07)
+    if (state.liquidacionesUnidosis && Array.isArray(state.liquidacionesUnidosis)) {
+      const prevLiq = lastSyncedState && lastSyncedState.liquidacionesUnidosis;
+      if (!prevLiq || JSON.stringify(prevLiq) !== JSON.stringify(state.liquidacionesUnidosis)) {
+        const docRef = doc(db, 'multimedica', 'catalog_liquidacionesUnidosis');
+        batch.set(docRef, { _collectionType: 'catalog_liquidacionesUnidosis', items: state.liquidacionesUnidosis });
+        hasWrites = true;
+      }
+    }
+
+    // Sincronizar Auditorías Cíclicas de Inventario
+    if (state.auditoriasInventario && Array.isArray(state.auditoriasInventario)) {
+      const prevAud = lastSyncedState && lastSyncedState.auditoriasInventario;
+      if (!prevAud || JSON.stringify(prevAud) !== JSON.stringify(state.auditoriasInventario)) {
+        const docRef = doc(db, 'multimedica', 'catalog_auditoriasInventario');
+        batch.set(docRef, { _collectionType: 'catalog_auditoriasInventario', items: state.auditoriasInventario });
+        hasWrites = true;
+      }
+    }
+
+    // Sincronizar Autorizaciones Especiales (Niveles 2 y 3)
+    if (state.autorizacionesEspeciales && Array.isArray(state.autorizacionesEspeciales)) {
+      const prevAut = lastSyncedState && lastSyncedState.autorizacionesEspeciales;
+      if (!prevAut || JSON.stringify(prevAut) !== JSON.stringify(state.autorizacionesEspeciales)) {
+        const docRef = doc(db, 'multimedica', 'catalog_autorizacionesEspeciales');
+        batch.set(docRef, { _collectionType: 'catalog_autorizacionesEspeciales', items: state.autorizacionesEspeciales });
         hasWrites = true;
       }
     }

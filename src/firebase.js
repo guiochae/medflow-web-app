@@ -94,6 +94,15 @@ export const firestoreState = {
   encamamiento: [],
   emergencias: [],
   bajasInventario: [],
+  almacenKardexPEPS: [],
+  recepcionesTecnicas: [],
+  requisicionesHospitalarias: [],
+  bajasDisposicion: [],
+  bitacoraTemperatura: [],
+  unidosis24h: [],
+  liquidacionesUnidosis: [],
+  auditoriasInventario: [],
+  autorizacionesEspeciales: [],
   administracion_compras: [],
   administracion_contabilidad: [],
   administracion_rrhh: [],
@@ -104,8 +113,8 @@ export const firestoreState = {
   external_doctors: [],
   accounts_payable: [],
   clinicInfo: {
-    name: "LUGAMED 2.0 - Clínica Médica y Hospital",
-    address: "Avenida Las Américas 1-02 Zona 14, Ciudad de Guatemala",
+    name: "LUGAMED 2.0 - Hospital Privado Multimédica Sayaxché",
+    address: "Sayaxché, Petén, Guatemala",
     phone: "2200-0000",
     email: "contacto@lugamed.gt"
   },
@@ -130,6 +139,15 @@ function loadStateFromLocalCache() {
         if (Array.isArray(parsed.encamamiento)) firestoreState.encamamiento = parsed.encamamiento;
         if (Array.isArray(parsed.emergencias)) firestoreState.emergencias = parsed.emergencias;
         if (Array.isArray(parsed.bajasInventario)) firestoreState.bajasInventario = parsed.bajasInventario;
+        if (Array.isArray(parsed.almacenKardexPEPS)) firestoreState.almacenKardexPEPS = parsed.almacenKardexPEPS;
+        if (Array.isArray(parsed.recepcionesTecnicas)) firestoreState.recepcionesTecnicas = parsed.recepcionesTecnicas;
+        if (Array.isArray(parsed.requisicionesHospitalarias)) firestoreState.requisicionesHospitalarias = parsed.requisicionesHospitalarias;
+        if (Array.isArray(parsed.bajasDisposicion)) firestoreState.bajasDisposicion = parsed.bajasDisposicion;
+        if (Array.isArray(parsed.bitacoraTemperatura)) firestoreState.bitacoraTemperatura = parsed.bitacoraTemperatura;
+        if (Array.isArray(parsed.unidosis24h)) firestoreState.unidosis24h = parsed.unidosis24h;
+        if (Array.isArray(parsed.liquidacionesUnidosis)) firestoreState.liquidacionesUnidosis = parsed.liquidacionesUnidosis;
+        if (Array.isArray(parsed.auditoriasInventario)) firestoreState.auditoriasInventario = parsed.auditoriasInventario;
+        if (Array.isArray(parsed.autorizacionesEspeciales)) firestoreState.autorizacionesEspeciales = parsed.autorizacionesEspeciales;
         if (Array.isArray(parsed.administracion_compras)) firestoreState.administracion_compras = parsed.administracion_compras;
         if (Array.isArray(parsed.administracion_contabilidad)) firestoreState.administracion_contabilidad = parsed.administracion_contabilidad;
         if (Array.isArray(parsed.administracion_rrhh)) firestoreState.administracion_rrhh = parsed.administracion_rrhh;
@@ -165,6 +183,15 @@ export function saveStateToLocalCache() {
       encamamiento: firestoreState.encamamiento,
       emergencias: firestoreState.emergencias,
       bajasInventario: firestoreState.bajasInventario,
+      almacenKardexPEPS: firestoreState.almacenKardexPEPS,
+      recepcionesTecnicas: firestoreState.recepcionesTecnicas,
+      requisicionesHospitalarias: firestoreState.requisicionesHospitalarias,
+      bajasDisposicion: firestoreState.bajasDisposicion,
+      bitacoraTemperatura: firestoreState.bitacoraTemperatura,
+      unidosis24h: firestoreState.unidosis24h,
+      liquidacionesUnidosis: firestoreState.liquidacionesUnidosis,
+      auditoriasInventario: firestoreState.auditoriasInventario,
+      autorizacionesEspeciales: firestoreState.autorizacionesEspeciales,
       administracion_compras: firestoreState.administracion_compras,
       administracion_contabilidad: firestoreState.administracion_contabilidad,
       administracion_rrhh: firestoreState.administracion_rrhh,
@@ -293,6 +320,15 @@ export function initRealtimeFirestore(onFirstLoad) {
       const encamamientosList = [];
       const emergenciasList = [];
       const bajasList = [];
+      const kardexList = [];
+      const recepcionesList = [];
+      const requisicionesList = [];
+      const bajasDispList = [];
+      const bitacoraList = [];
+      const unidosisList = [];
+      const liquidacionesList = [];
+      const auditoriasList = [];
+      const autorizacionesList = [];
       const compras = [];
       const contabilidad = [];
       const caja = [];
@@ -334,6 +370,42 @@ export function initRealtimeFirestore(onFirstLoad) {
           bajasList.push(...(dData.items || []));
           return;
         }
+        if (dId === 'catalog_almacenKardexPEPS') {
+          kardexList.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_recepcionesTecnicas') {
+          recepcionesList.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_requisicionesHospitalarias') {
+          requisicionesList.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_bajasDisposicion') {
+          bajasDispList.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_bitacoraTemperatura') {
+          bitacoraList.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_unidosis24h') {
+          unidosisList.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_liquidacionesUnidosis') {
+          liquidacionesList.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_auditoriasInventario') {
+          auditoriasList.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_autorizacionesEspeciales') {
+          autorizacionesList.push(...(dData.items || []));
+          return;
+        }
 
         const cleanDoc = { id: dId, ...dData };
         delete cleanDoc._collectionType;
@@ -347,6 +419,15 @@ export function initRealtimeFirestore(onFirstLoad) {
         else if (type === 'encamamiento') encamamientosList.push(cleanDoc);
         else if (type === 'emergencias') emergenciasList.push(cleanDoc);
         else if (type === 'bajasInventario') bajasList.push(cleanDoc);
+        else if (type === 'almacenKardexPEPS') kardexList.push(cleanDoc);
+        else if (type === 'recepcionesTecnicas') recepcionesList.push(cleanDoc);
+        else if (type === 'requisicionesHospitalarias') requisicionesList.push(cleanDoc);
+        else if (type === 'bajasDisposicion') bajasDispList.push(cleanDoc);
+        else if (type === 'bitacoraTemperatura') bitacoraList.push(cleanDoc);
+        else if (type === 'unidosis24h') unidosisList.push(cleanDoc);
+        else if (type === 'liquidacionesUnidosis') liquidacionesList.push(cleanDoc);
+        else if (type === 'auditoriasInventario') auditoriasList.push(cleanDoc);
+        else if (type === 'autorizacionesEspeciales') autorizacionesList.push(cleanDoc);
         else if (type === 'administracion_compras') compras.push(cleanDoc);
         else if (type === 'administracion_contabilidad') contabilidad.push(cleanDoc);
         else if (type === 'administracion_caja') caja.push(cleanDoc);
@@ -367,6 +448,15 @@ export function initRealtimeFirestore(onFirstLoad) {
       firestoreState.encamamiento = encamamientosList;
       firestoreState.emergencias = emergenciasList;
       firestoreState.bajasInventario = bajasList;
+      firestoreState.almacenKardexPEPS = kardexList;
+      firestoreState.recepcionesTecnicas = recepcionesList;
+      firestoreState.requisicionesHospitalarias = requisicionesList;
+      firestoreState.bajasDisposicion = bajasDispList;
+      firestoreState.bitacoraTemperatura = bitacoraList;
+      firestoreState.unidosis24h = unidosisList;
+      firestoreState.liquidacionesUnidosis = liquidacionesList;
+      firestoreState.auditoriasInventario = auditoriasList;
+      firestoreState.autorizacionesEspeciales = autorizacionesList;
       firestoreState.administracion_compras = compras;
       firestoreState.administracion_contabilidad = contabilidad;
       firestoreState.administracion_caja = caja;
@@ -393,6 +483,15 @@ export function initRealtimeFirestore(onFirstLoad) {
           const encamamientosList = [];
           const emergenciasList = [];
           const bajasList = [];
+          const kardexList = [];
+          const recepcionesList = [];
+          const requisicionesList = [];
+          const bajasDispList = [];
+          const bitacoraList = [];
+          const unidosisList = [];
+          const liquidacionesList = [];
+          const auditoriasList = [];
+          const autorizacionesList = [];
           const compras = [];
           const contabilidad = [];
           const caja = [];
@@ -434,6 +533,42 @@ export function initRealtimeFirestore(onFirstLoad) {
               bajasList.push(...(dData.items || []));
               return;
             }
+            if (dId === 'catalog_almacenKardexPEPS') {
+              kardexList.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_recepcionesTecnicas') {
+              recepcionesList.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_requisicionesHospitalarias') {
+              requisicionesList.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_bajasDisposicion') {
+              bajasDispList.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_bitacoraTemperatura') {
+              bitacoraList.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_unidosis24h') {
+              unidosisList.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_liquidacionesUnidosis') {
+              liquidacionesList.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_auditoriasInventario') {
+              auditoriasList.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_autorizacionesEspeciales') {
+              autorizacionesList.push(...(dData.items || []));
+              return;
+            }
 
             const cleanDoc = { id: dId, ...dData };
             delete cleanDoc._collectionType;
@@ -447,6 +582,15 @@ export function initRealtimeFirestore(onFirstLoad) {
             else if (type === 'encamamiento') encamamientosList.push(cleanDoc);
             else if (type === 'emergencias') emergenciasList.push(cleanDoc);
             else if (type === 'bajasInventario') bajasList.push(cleanDoc);
+            else if (type === 'almacenKardexPEPS') kardexList.push(cleanDoc);
+            else if (type === 'recepcionesTecnicas') recepcionesList.push(cleanDoc);
+            else if (type === 'requisicionesHospitalarias') requisicionesList.push(cleanDoc);
+            else if (type === 'bajasDisposicion') bajasDispList.push(cleanDoc);
+            else if (type === 'bitacoraTemperatura') bitacoraList.push(cleanDoc);
+            else if (type === 'unidosis24h') unidosisList.push(cleanDoc);
+            else if (type === 'liquidacionesUnidosis') liquidacionesList.push(cleanDoc);
+            else if (type === 'auditoriasInventario') auditoriasList.push(cleanDoc);
+            else if (type === 'autorizacionesEspeciales') autorizacionesList.push(cleanDoc);
             else if (type === 'administracion_compras') compras.push(cleanDoc);
             else if (type === 'administracion_contabilidad') contabilidad.push(cleanDoc);
             else if (type === 'administracion_caja') caja.push(cleanDoc);
@@ -467,6 +611,15 @@ export function initRealtimeFirestore(onFirstLoad) {
           firestoreState.encamamiento = encamamientosList;
           firestoreState.emergencias = emergenciasList;
           firestoreState.bajasInventario = bajasList;
+          firestoreState.almacenKardexPEPS = kardexList;
+          firestoreState.recepcionesTecnicas = recepcionesList;
+          firestoreState.requisicionesHospitalarias = requisicionesList;
+          firestoreState.bajasDisposicion = bajasDispList;
+          firestoreState.bitacoraTemperatura = bitacoraList;
+          firestoreState.unidosis24h = unidosisList;
+          firestoreState.liquidacionesUnidosis = liquidacionesList;
+          firestoreState.auditoriasInventario = auditoriasList;
+          firestoreState.autorizacionesEspeciales = autorizacionesList;
           firestoreState.administracion_compras = compras;
           firestoreState.administracion_contabilidad = contabilidad;
           firestoreState.administracion_caja = caja;
@@ -642,6 +795,15 @@ export async function purgeAllFirestoreData() {
     firestoreState.encamamiento = [];
     firestoreState.emergencias = [];
     firestoreState.bajasInventario = [];
+    firestoreState.almacenKardexPEPS = [];
+    firestoreState.recepcionesTecnicas = [];
+    firestoreState.requisicionesHospitalarias = [];
+    firestoreState.bajasDisposicion = [];
+    firestoreState.bitacoraTemperatura = [];
+    firestoreState.unidosis24h = [];
+    firestoreState.liquidacionesUnidosis = [];
+    firestoreState.auditoriasInventario = [];
+    firestoreState.autorizacionesEspeciales = [];
     firestoreState.administracion_compras = [];
     firestoreState.administracion_contabilidad = [];
     firestoreState.administracion_rrhh = [];
