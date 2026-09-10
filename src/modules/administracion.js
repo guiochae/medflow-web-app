@@ -83,12 +83,13 @@ export function renderAdministracion(container) {
     </div>
 
     <!-- Pestañas Principales del Módulo -->
-    <div class="tabs-container" style="display: flex; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 1px; margin-bottom: 1.5rem;">
+    <div class="tabs-container" style="display: flex; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 1px; margin-bottom: 1.5rem; overflow-x: auto;">
       <button class="tab-btn ${activeAdminTab === 'caja' ? 'active' : ''}" id="admin-tab-caja">💳 Facturación y Caja</button>
       <button class="tab-btn ${activeAdminTab === 'contabilidad' ? 'active' : ''}" id="admin-tab-contabilidad">📊 Contabilidad</button>
       <button class="tab-btn ${activeAdminTab === 'compras' ? 'active' : ''}" id="admin-tab-compras">🛒 Compras</button>
       <button class="tab-btn ${activeAdminTab === 'rrhh' ? 'active' : ''}" id="admin-tab-rrhh">👥 Recursos Humanos</button>
       <button class="tab-btn ${activeAdminTab === 'medicos' ? 'active' : ''}" id="admin-tab-medicos">🩺 Médicos Externos</button>
+      <button class="tab-btn ${activeAdminTab === 'activos_fijos' ? 'active' : ''}" id="admin-tab-activos-fijos">🏷️ Activos Fijos</button>
     </div>
 
     <div id="admin-module-content">
@@ -102,6 +103,7 @@ export function renderAdministracion(container) {
   document.getElementById('admin-tab-compras').addEventListener('click', () => { activeAdminTab = 'compras'; renderAdminContent(state); });
   document.getElementById('admin-tab-rrhh').addEventListener('click', () => { activeAdminTab = 'rrhh'; renderAdminContent(state); });
   document.getElementById('admin-tab-medicos').addEventListener('click', () => { activeAdminTab = 'medicos'; renderAdminContent(state); });
+  document.getElementById('admin-tab-activos-fijos').addEventListener('click', () => { activeAdminTab = 'activos_fijos'; renderAdminContent(state); });
 
   // Cargar contenido
   renderAdminContent(state);
@@ -130,6 +132,8 @@ function renderAdminContent(state) {
     renderRrhhTab(contentArea, state);
   } else if (activeAdminTab === 'medicos') {
     renderExternalDoctorsTab(contentArea, state);
+  } else if (activeAdminTab === 'activos_fijos') {
+    renderActivosFijosTab(contentArea, state);
   }
 }
 
@@ -2642,3 +2646,1604 @@ export function renderExternalDoctorsTab(container, state) {
     });
   });
 }
+
+// =========================================================================
+// 🏷️ SUBMÓDULO: INVENTARIO DE ACTIVOS FIJOS Y CONTROL PATRIMONIAL
+// =========================================================================
+
+function ensureActivosFijos(state) {
+  state.administracion_activos_fijos = state.administracion_activos_fijos || [];
+  if (state.administracion_activos_fijos.length === 0) {
+    state.administracion_activos_fijos = [
+      {
+        id: 'AF-QUI-001',
+        codigoActivo: 'AF-QUI-001',
+        nombre: 'Máquina de Anestesia y Monitor Multiparámetro',
+        categoria: 'Equipo Médico y Quirúrgico',
+        marca: 'Mindray',
+        modelo: 'WATO EX-35 Pro',
+        serie: 'SN-MN-984201',
+        oficinaServicio: 'Quirófano 1 (Centro Quirúrgico)',
+        responsable: 'Dr. Alejandro Morales',
+        cargoResponsable: 'Jefe de Quirófano y Anestesiología',
+        fechaAdquisicion: '2024-03-15',
+        valorAdquisicion: 145000.00,
+        proveedor: 'Medik Instruments Guatemala S.A.',
+        facturaCompra: 'FAC-77491',
+        estadoFisico: 'Excelente / Operativo',
+        vidaUtilAnios: 5,
+        frecuenciaMantenimiento: 'Semestral',
+        proximoMantenimiento: '2026-10-15',
+        observaciones: 'Incluye vaporizador de Sevoflurano e Isoflurano, mangueras corrugadas y sensor de O2 certificado.',
+        historialMovimientos: [
+          {
+            fecha: '2024-03-15T09:00:00.000Z',
+            deResponsable: 'Almacén Central',
+            aResponsable: 'Dr. Alejandro Morales',
+            deUbicacion: 'Recepción Técnica',
+            aUbicacion: 'Quirófano 1 (Centro Quirúrgico)',
+            motivo: 'Alta y asignación inicial de equipo nuevo',
+            usuario: 'Administrador Maestro'
+          }
+        ],
+        activo: true
+      },
+      {
+        id: 'AF-IMG-002',
+        codigoActivo: 'AF-IMG-002',
+        nombre: 'Ultrasonido Doppler Color 4D Estacionario',
+        categoria: 'Equipo de Diagnóstico e Imagenología',
+        marca: 'GE Healthcare',
+        modelo: 'Voluson E8 Expert',
+        serie: 'SN-GE-448109',
+        oficinaServicio: 'Imagenología y Ultrasonido',
+        responsable: 'Dra. Patricia Lima',
+        cargoResponsable: 'Especialista en Radiología e Imágenes',
+        fechaAdquisicion: '2024-06-20',
+        valorAdquisicion: 210000.00,
+        proveedor: 'Equipos Médicos del Norte S.A.',
+        facturaCompra: 'FAC-88102',
+        estadoFisico: 'Bueno / Operativo',
+        vidaUtilAnios: 5,
+        frecuenciaMantenimiento: 'Semestral',
+        proximoMantenimiento: '2026-12-20',
+        observaciones: 'Cuenta con 3 transductores (Convexo, Endovaginal y Lineal vascular). Calibración biomédica al día.',
+        historialMovimientos: [
+          {
+            fecha: '2024-06-20T11:30:00.000Z',
+            deResponsable: 'Almacén Central',
+            aResponsable: 'Dra. Patricia Lima',
+            deUbicacion: 'Recepción Técnica',
+            aUbicacion: 'Imagenología y Ultrasonido',
+            motivo: 'Asignación de equipo para diagnóstico prenatal y vascular',
+            usuario: 'Administrador Maestro'
+          }
+        ],
+        activo: true
+      },
+      {
+        id: 'AF-ENC-003',
+        codigoActivo: 'AF-ENC-003',
+        nombre: 'Cama Hospitalaria Eléctrica de 4 Posiciones con Barandales',
+        categoria: 'Mobiliario Hospitalario y Clínico',
+        marca: 'Paramount Bed',
+        modelo: 'A5 Series Med',
+        serie: 'SN-PB-302194',
+        oficinaServicio: 'Encamamiento Piso 2 (Habitación 201)',
+        responsable: 'Licda. Elena Méndez',
+        cargoResponsable: 'Jefa de Enfermería Hospitalaria',
+        fechaAdquisicion: '2024-01-10',
+        valorAdquisicion: 18500.00,
+        proveedor: 'Distribuidora Hospitalaria Sayaxché',
+        facturaCompra: 'FAC-10294',
+        estadoFisico: 'Excelente / Operativo',
+        vidaUtilAnios: 10,
+        frecuenciaMantenimiento: 'Anual',
+        proximoMantenimiento: '2027-01-10',
+        observaciones: 'Incluye colchón antiescaras viscoelástico con forro impermeable antibacteriano.',
+        historialMovimientos: [
+          {
+            fecha: '2024-01-10T14:00:00.000Z',
+            deResponsable: 'Almacén Central',
+            aResponsable: 'Licda. Elena Méndez',
+            deUbicacion: 'Almacén General',
+            aUbicacion: 'Encamamiento Piso 2 (Habitación 201)',
+            motivo: 'Equipamiento de suite de encamamiento',
+            usuario: 'Administrador Maestro'
+          }
+        ],
+        activo: true
+      },
+      {
+        id: 'AF-LAB-004',
+        codigoActivo: 'AF-LAB-004',
+        nombre: 'Analizador Hematológico Automatizado de 5 Diferenciales',
+        categoria: 'Equipo de Diagnóstico e Imagenología',
+        marca: 'Sysmex',
+        modelo: 'XN-350 Compact',
+        serie: 'SN-SX-771802',
+        oficinaServicio: 'Laboratorio Clínico y Banco de Sangre',
+        responsable: 'Lic. Roberto Alvarado',
+        cargoResponsable: 'Químico Biólogo / Jefe de Laboratorio',
+        fechaAdquisicion: '2024-08-05',
+        valorAdquisicion: 88000.00,
+        proveedor: 'Diagnóstica de Centroamérica S.A.',
+        facturaCompra: 'FAC-93402',
+        estadoFisico: 'Excelente / Operativo',
+        vidaUtilAnios: 5,
+        frecuenciaMantenimiento: 'Trimestral',
+        proximoMantenimiento: '2026-11-05',
+        observaciones: 'Equipo para hemogramas completos con tecnología de citometría de flujo fluorescente.',
+        historialMovimientos: [
+          {
+            fecha: '2024-08-05T10:00:00.000Z',
+            deResponsable: 'Almacén Central',
+            aResponsable: 'Lic. Roberto Alvarado',
+            deUbicacion: 'Recepción Técnica',
+            aUbicacion: 'Laboratorio Clínico y Banco de Sangre',
+            motivo: 'Instalación y validación técnica',
+            usuario: 'Administrador Maestro'
+          }
+        ],
+        activo: true
+      },
+      {
+        id: 'AF-ADM-005',
+        codigoActivo: 'AF-ADM-005',
+        nombre: 'Servidor Principal de Base de Datos y Computadora Central',
+        categoria: 'Equipo de Cómputo y Telecomunicaciones',
+        marca: 'Dell',
+        modelo: 'PowerEdge T350 Xeon 32GB',
+        serie: 'SN-DL-552093',
+        oficinaServicio: 'Dirección Médica y Administrativa',
+        responsable: 'Ing. David Robles',
+        cargoResponsable: 'Encargado de Sistemas e Informática',
+        fechaAdquisicion: '2025-02-12',
+        valorAdquisicion: 32500.00,
+        proveedor: 'Tech Solutions Guatemala',
+        facturaCompra: 'FAC-66190',
+        estadoFisico: 'Excelente / Operativo',
+        vidaUtilAnios: 5,
+        frecuenciaMantenimiento: 'Trimestral',
+        proximoMantenimiento: '2026-11-12',
+        observaciones: 'Servidor con respaldo UPS APC 2200VA y almacenamiento en arreglo RAID-10 para alta disponibilidad.',
+        historialMovimientos: [
+          {
+            fecha: '2025-02-12T16:00:00.000Z',
+            deResponsable: 'Proveedor Tech',
+            aResponsable: 'Ing. David Robles',
+            deUbicacion: 'Data Center',
+            aUbicacion: 'Dirección Médica y Administrativa',
+            motivo: 'Puesta en marcha del nodo hospitalario LUGAMED',
+            usuario: 'Administrador Maestro'
+          }
+        ],
+        activo: true
+      },
+      {
+        id: 'AF-EME-006',
+        codigoActivo: 'AF-EME-006',
+        nombre: 'Desfibrilador Bifásico con Marcapasos Externo y ECG',
+        categoria: 'Equipo Médico y Quirúrgico',
+        marca: 'Zoll',
+        modelo: 'R Series Plus',
+        serie: 'SN-ZL-110482',
+        oficinaServicio: 'Emergencias y Sala de Observación',
+        responsable: 'Dr. Fernando Quiñónez',
+        cargoResponsable: 'Médico Coordinador de Emergencias',
+        fechaAdquisicion: '2024-05-18',
+        valorAdquisicion: 62000.00,
+        proveedor: 'CardioTech Guatemala',
+        facturaCompra: 'FAC-55280',
+        estadoFisico: 'Bueno / Operativo',
+        vidaUtilAnios: 5,
+        frecuenciaMantenimiento: 'Semestral',
+        proximoMantenimiento: '2026-11-18',
+        observaciones: 'Carro de paro cardiopulmonar en shock room. Baterías de litio sustituidas en último mantenimiento.',
+        historialMovimientos: [
+          {
+            fecha: '2024-05-18T08:00:00.000Z',
+            deResponsable: 'Almacén Central',
+            aResponsable: 'Dr. Fernando Quiñónez',
+            deUbicacion: 'Recepción Técnica',
+            aUbicacion: 'Emergencias y Sala de Observación',
+            motivo: 'Asignación inmediata a sala de choque',
+            usuario: 'Administrador Maestro'
+          }
+        ],
+        activo: true
+      }
+    ];
+    saveAppState(state);
+  }
+}
+
+// Cálculo contable de depreciación en línea recta (Normativa NIIF / SAT Guatemala)
+function calculateDepreciationAndBookValue(activo) {
+  const cost = parseFloat(activo.valorAdquisicion) || 0;
+  const usefulYears = Math.max(1, parseInt(activo.vidaUtilAnios) || 5);
+  const totalMonths = usefulYears * 12;
+  
+  const acqDate = new Date(activo.fechaAdquisicion || Date.now());
+  const now = new Date();
+  
+  let monthsElapsed = (now.getFullYear() - acqDate.getFullYear()) * 12 + (now.getMonth() - acqDate.getMonth());
+  if (monthsElapsed < 0) monthsElapsed = 0;
+  
+  const monthlyDep = cost / totalMonths;
+  const accDep = Math.min(cost, monthsElapsed * monthlyDep);
+  const bookVal = Math.max(0, cost - accDep);
+  const depPct = ((accDep / Math.max(1, cost)) * 100).toFixed(1);
+
+  return {
+    costo: cost,
+    mesesTranscurridos: monthsElapsed,
+    depreciacionAcumulada: parseFloat(accDep.toFixed(2)),
+    valorEnLibros: parseFloat(bookVal.toFixed(2)),
+    porcentajeDepreciado: depPct
+  };
+}
+
+// Variables de estado para filtros de Activos Fijos
+let afSearchQuery = '';
+let afCategoryFilter = 'all';
+let afLocationFilter = 'all';
+let afConditionFilter = 'all';
+
+function renderActivosFijosTab(container, state) {
+  ensureActivosFijos(state);
+  const activosList = (state.administracion_activos_fijos || []).filter(a => a.activo !== false);
+
+  // 1. Métricas / KPIs del Patrimonio
+  const totalActivos = activosList.length;
+  let totalAdquisicion = 0;
+  let totalValorLibros = 0;
+  let operativosCount = 0;
+  let mantenimientoCount = 0;
+
+  activosList.forEach(a => {
+    const calc = calculateDepreciationAndBookValue(a);
+    totalAdquisicion += calc.costo;
+    totalValorLibros += calc.valorEnLibros;
+    const cond = String(a.estadoFisico || '').toLowerCase();
+    if (cond.includes('excelente') || cond.includes('bueno')) {
+      operativosCount++;
+    } else {
+      mantenimientoCount++;
+    }
+  });
+
+  // 2. Extraer listas únicas para los selectores de filtro
+  const categories = [...new Set(activosList.map(a => a.categoria).filter(Boolean))];
+  const locations = [...new Set(activosList.map(a => a.oficinaServicio).filter(Boolean))];
+
+  // 3. Filtrar lista según controles
+  const filteredList = activosList.filter(a => {
+    const q = afSearchQuery.toLowerCase().trim();
+    const matchText = !q || 
+      (a.codigoActivo && a.codigoActivo.toLowerCase().includes(q)) ||
+      (a.nombre && a.nombre.toLowerCase().includes(q)) ||
+      (a.marca && a.marca.toLowerCase().includes(q)) ||
+      (a.modelo && a.modelo.toLowerCase().includes(q)) ||
+      (a.serie && a.serie.toLowerCase().includes(q)) ||
+      (a.responsable && a.responsable.toLowerCase().includes(q)) ||
+      (a.oficinaServicio && a.oficinaServicio.toLowerCase().includes(q));
+
+    const matchCat = afCategoryFilter === 'all' || a.categoria === afCategoryFilter;
+    const matchLoc = afLocationFilter === 'all' || a.oficinaServicio === afLocationFilter;
+    const matchCond = afConditionFilter === 'all' || (a.estadoFisico && a.estadoFisico.includes(afConditionFilter));
+
+    return matchText && matchCat && matchLoc && matchCond;
+  });
+
+  container.innerHTML = `
+    <!-- Header del Submódulo -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 12px;">
+      <div>
+        <h2 style="font-family: var(--font-heading); color: var(--accent-primary); margin: 0; font-size: 1.35rem; display: flex; align-items: center; gap: 8px;">
+          <span>🏷️</span> Inventario de Activos Fijos y Control Patrimonial
+        </h2>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin: 4px 0 0 0;">
+          Gestión de bienes institucionales, codificación manual, asignación de custodia y emisión de tarjetas de responsabilidad (HMM-ADM-TAR-01).
+        </p>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button class="btn btn-primary" id="btn-new-activo-fijo" style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem;">
+          <span>➕</span> Registrar Activo Fijo
+        </button>
+        <button class="btn btn-secondary" id="btn-print-consolidated-card" style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem;">
+          <span>📄</span> Tarjeta por Custodio / Servicio
+        </button>
+        <button class="btn btn-secondary" id="btn-print-general-af-report" style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem;">
+          <span>🖨️</span> Reporte de Inventario
+        </button>
+      </div>
+    </div>
+
+    <!-- KPI Summary Cards -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 15px; margin-bottom: 1.5rem;">
+      <div class="glass-card" style="padding: 1.1rem; border-top: 3px solid var(--accent-primary); background: rgba(30, 41, 59, 0.4);">
+        <span style="font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Total Activos Registrados</span>
+        <strong style="font-size: 1.8rem; color: var(--text-primary); display: block; margin: 4px 0;" id="kpi-af-total-count">${totalActivos}</strong>
+        <span style="font-size: 0.72rem; color: var(--text-muted);">Bienes en catálogo patrimonial</span>
+      </div>
+
+      <div class="glass-card" style="padding: 1.1rem; border-top: 3px solid #38bdf8; background: rgba(30, 41, 59, 0.4);">
+        <span style="font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Valor Total Adquisición</span>
+        <strong style="font-size: 1.5rem; color: #38bdf8; display: block; margin: 4px 0;">Q${totalAdquisicion.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+        <span style="font-size: 0.72rem; color: var(--text-muted);">Costo histórico en libros</span>
+      </div>
+
+      <div class="glass-card" style="padding: 1.1rem; border-top: 3px solid #10b981; background: rgba(30, 41, 59, 0.4);">
+        <span style="font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Valor Neto en Libros</span>
+        <strong style="font-size: 1.5rem; color: #10b981; display: block; margin: 4px 0;">Q${totalValorLibros.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+        <span style="font-size: 0.72rem; color: #10b981;">Con depreciación acumulada</span>
+      </div>
+
+      <div class="glass-card" style="padding: 1.1rem; border-top: 3px solid #f59e0b; background: rgba(30, 41, 59, 0.4);">
+        <span style="font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Estado Operativo</span>
+        <div style="display: flex; gap: 12px; align-items: baseline; margin: 4px 0;">
+          <strong style="font-size: 1.4rem; color: #10b981;">${operativosCount}</strong> <span style="font-size: 0.75rem; color: var(--text-muted);">Operativos</span>
+          <strong style="font-size: 1.4rem; color: #f59e0b;">${mantenimientoCount}</strong> <span style="font-size: 0.75rem; color: var(--text-muted);">Revisión</span>
+        </div>
+        <span style="font-size: 0.72rem; color: var(--text-muted);">Disponibilidad hospitalaria</span>
+      </div>
+    </div>
+
+    <!-- Barra de Búsqueda y Filtros Múltiples -->
+    <div class="glass-card" style="padding: 1rem; margin-bottom: 1.5rem; background: rgba(0,0,0,0.2);">
+      <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 10px; align-items: center;">
+        <div style="position: relative;">
+          <input type="text" id="af-search-input" value="${afSearchQuery}" placeholder="🔍 Buscar por código manual, nombre, serie, marca, custodio o servicio..." style="
+            width: 100%;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 0.85rem;
+          ">
+        </div>
+
+        <div>
+          <select id="af-category-select" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.82rem;">
+            <option value="all">📁 Todas las Categorías</option>
+            ${categories.map(c => `<option value="${c}" ${afCategoryFilter === c ? 'selected' : ''}>${c}</option>`).join('')}
+          </select>
+        </div>
+
+        <div>
+          <select id="af-location-select" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.82rem;">
+            <option value="all">📍 Todas las Oficinas / Servicios</option>
+            ${locations.map(l => `<option value="${l}" ${afLocationFilter === l ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </div>
+
+        <div>
+          <select id="af-condition-select" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.82rem;">
+            <option value="all" ${afConditionFilter === 'all' ? 'selected' : ''}>🩺 Todo Estado Físico</option>
+            <option value="Excelente" ${afConditionFilter === 'Excelente' ? 'selected' : ''}>Excelente / Operativo</option>
+            <option value="Bueno" ${afConditionFilter === 'Bueno' ? 'selected' : ''}>Bueno / Operativo</option>
+            <option value="Regular" ${afConditionFilter === 'Regular' ? 'selected' : ''}>Regular / Mantenimiento</option>
+            <option value="Malo" ${afConditionFilter === 'Malo' ? 'selected' : ''}>Malo / Fuera de Servicio</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabla Principal de Activos Fijos -->
+    <div style="overflow-x: auto; border: 1px solid var(--border-color); border-radius: 8px; background: rgba(0,0,0,0.15);">
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.82rem;" id="table-activos-fijos">
+        <thead>
+          <tr style="background: rgba(255,255,255,0.03); border-bottom: 2px solid var(--border-color); color: var(--text-muted);">
+            <th style="padding: 10px;">Código (Manual)</th>
+            <th style="padding: 10px;">Activo / Descripción</th>
+            <th style="padding: 10px;">Categoría</th>
+            <th style="padding: 10px;">Oficina / Servicio</th>
+            <th style="padding: 10px;">Responsable / Custodio</th>
+            <th style="padding: 10px; text-align: right;">Costo (Q)</th>
+            <th style="padding: 10px; text-align: right;">Valor Libros</th>
+            <th style="padding: 10px; text-align: center;">Estado Físico</th>
+            <th style="padding: 10px; text-align: center; width: 140px;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="activos-fijos-tbody">
+          ${filteredList.length === 0 ? `
+            <tr>
+              <td colspan="9" style="padding: 30px; text-align: center; color: var(--text-muted); font-style: italic;">
+                No se encontraron activos fijos con los criterios de búsqueda seleccionados.
+              </td>
+            </tr>
+          ` : filteredList.map(a => {
+            const dep = calculateDepreciationAndBookValue(a);
+            let condColor = '#10b981';
+            let condBg = 'rgba(16, 185, 129, 0.12)';
+            if (a.estadoFisico && a.estadoFisico.includes('Regular')) {
+              condColor = '#f59e0b';
+              condBg = 'rgba(245, 158, 11, 0.12)';
+            } else if (a.estadoFisico && a.estadoFisico.includes('Malo')) {
+              condColor = '#ef4444';
+              condBg = 'rgba(239, 68, 68, 0.12)';
+            }
+
+            return `
+              <tr style="border-bottom: 1px solid var(--border-color); transition: background-color 0.15s;">
+                <td style="padding: 10px; font-family: var(--font-mono); font-weight: bold; color: var(--accent-primary);">
+                  ${a.codigoActivo || a.id}
+                </td>
+                <td style="padding: 10px;">
+                  <strong style="color: var(--text-primary); font-size: 0.85rem;">${a.nombre}</strong><br>
+                  <span style="font-size: 0.72rem; color: var(--text-muted);">
+                    ${a.marca ? `Marca: ${a.marca}` : ''} ${a.modelo ? `| Mod: ${a.modelo}` : ''} ${a.serie ? `| S/N: ${a.serie}` : ''}
+                  </span>
+                </td>
+                <td style="padding: 10px; color: var(--text-muted); font-size: 0.78rem;">
+                  ${a.categoria || 'Equipo General'}
+                </td>
+                <td style="padding: 10px;">
+                  <span style="font-weight: 600; color: #38bdf8;">📍 ${a.oficinaServicio || 'Almacén Central'}</span>
+                </td>
+                <td style="padding: 10px;">
+                  <strong style="color: var(--text-primary);">${a.responsable || 'Sin Asignar'}</strong><br>
+                  <span style="font-size: 0.7rem; color: var(--text-muted);">${a.cargoResponsable || ''}</span>
+                </td>
+                <td style="padding: 10px; text-align: right; color: var(--text-muted);">
+                  Q${dep.costo.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+                <td style="padding: 10px; text-align: right; font-weight: bold; color: #10b981;">
+                  Q${dep.valorEnLibros.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<br>
+                  <span style="font-size: 0.68rem; color: var(--text-muted);">(-${dep.porcentajeDepreciado}%)</span>
+                </td>
+                <td style="padding: 10px; text-align: center;">
+                  <span style="background: ${condBg}; color: ${condColor}; padding: 3px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: bold; white-space: nowrap;">
+                    ${a.estadoFisico || 'Operativo'}
+                  </span>
+                </td>
+                <td style="padding: 10px; text-align: center;">
+                  <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
+                    <button class="btn btn-secondary btn-small btn-print-af-tarjeta" data-id="${a.id}" title="Imprimir Tarjeta de Responsabilidad (HMM-ADM-TAR-01)" style="padding: 3px 6px; font-size: 0.72rem;">
+                      📄 Tarjeta
+                    </button>
+                    <button class="btn btn-secondary btn-small btn-print-af-label" data-id="${a.id}" title="Imprimir Viñeta / Código de Activo" style="padding: 3px 6px; font-size: 0.72rem;">
+                      🏷️
+                    </button>
+                    <button class="btn btn-secondary btn-small btn-transfer-af" data-id="${a.id}" title="Reasignar Custodio o Trasladar Ubicación" style="padding: 3px 6px; font-size: 0.72rem;">
+                      🔄
+                    </button>
+                    <button class="btn btn-secondary btn-small btn-edit-af" data-id="${a.id}" title="Editar Información del Activo" style="padding: 3px 6px; font-size: 0.72rem;">
+                      ✏️
+                    </button>
+                    <button class="btn btn-danger btn-small btn-delete-af" data-id="${a.id}" title="Dar de Baja o Eliminar Activo" style="padding: 3px 6px; font-size: 0.72rem;">
+                      🗑️
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  // Bind Eventos de Filtros y Búsqueda
+  const searchInput = container.querySelector('#af-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      afSearchQuery = e.target.value;
+      renderActivosFijosTab(container, state);
+      // Restaurar foco al final del input
+      const newInp = container.querySelector('#af-search-input');
+      if (newInp) {
+        newInp.focus();
+        newInp.setSelectionRange(newInp.value.length, newInp.value.length);
+      }
+    });
+  }
+
+  const catSelect = container.querySelector('#af-category-select');
+  if (catSelect) {
+    catSelect.addEventListener('change', (e) => {
+      afCategoryFilter = e.target.value;
+      renderActivosFijosTab(container, state);
+    });
+  }
+
+  const locSelect = container.querySelector('#af-location-select');
+  if (locSelect) {
+    locSelect.addEventListener('change', (e) => {
+      afLocationFilter = e.target.value;
+      renderActivosFijosTab(container, state);
+    });
+  }
+
+  const condSelect = container.querySelector('#af-condition-select');
+  if (condSelect) {
+    condSelect.addEventListener('change', (e) => {
+      afConditionFilter = e.target.value;
+      renderActivosFijosTab(container, state);
+    });
+  }
+
+  // Bind Botón Nuevo Activo Fijo
+  const btnNew = container.querySelector('#btn-new-activo-fijo');
+  if (btnNew) {
+    btnNew.addEventListener('click', () => {
+      showActivoFijoModal(null, container, state);
+    });
+  }
+
+  // Bind Botón Tarjeta Consolidada
+  const btnConsolidated = container.querySelector('#btn-print-consolidated-card');
+  if (btnConsolidated) {
+    btnConsolidated.addEventListener('click', () => {
+      showResponsabilidadConsolidadaModal(container, state);
+    });
+  }
+
+  // Bind Botón Reporte General
+  const btnGeneralReport = container.querySelector('#btn-print-general-af-report');
+  if (btnGeneralReport) {
+    btnGeneralReport.addEventListener('click', () => {
+      printReporteGeneralActivosFijos(filteredList, {
+        categoria: afCategoryFilter,
+        ubicacion: afLocationFilter,
+        condicion: afConditionFilter
+      }, state.clinicInfo);
+    });
+  }
+
+  // Bind Acciones en Filas de la Tabla
+  container.querySelectorAll('.btn-print-af-tarjeta').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const activo = state.administracion_activos_fijos.find(a => a.id === id);
+      if (activo) printTarjetaResponsabilidadIndividual(activo, state.clinicInfo);
+    });
+  });
+
+  container.querySelectorAll('.btn-print-af-label').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const activo = state.administracion_activos_fijos.find(a => a.id === id);
+      if (activo) printEtiquetaActivoFijo(activo, state.clinicInfo);
+    });
+  });
+
+  container.querySelectorAll('.btn-transfer-af').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      showTrasladoActivoModal(id, container, state);
+    });
+  });
+
+  container.querySelectorAll('.btn-edit-af').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      showActivoFijoModal(id, container, state);
+    });
+  });
+
+  container.querySelectorAll('.btn-delete-af').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const activo = state.administracion_activos_fijos.find(a => a.id === id);
+      if (!activo) return;
+
+      const reason = prompt(`⚠️ DAR DE BAJA ACTIVO FIJO (${activo.codigoActivo}):\nIngrese el motivo de la baja (ej. Desgaste cumplido, obsolescencia, daño irreparable o descarte):`);
+      if (reason === null || reason.trim() === '') return;
+
+      if (confirm(`¿Confirma procesar la baja del activo fijo "${activo.nombre}" (Código: ${activo.codigoActivo})?`)) {
+        activo.activo = false;
+        activo.estadoFisico = 'Dado de Baja / Descarte';
+        activo.bajaInfo = {
+          fecha: new Date().toISOString(),
+          motivo: reason.trim(),
+          autorizadoPor: state.currentUser?.name || 'Administrador Maestro'
+        };
+        saveAppState(state);
+        alert(`✅ Activo fijo ${activo.codigoActivo} dado de baja exitosamente.`);
+        renderActivosFijosTab(container, state);
+      }
+    });
+  });
+}
+
+// Modal para Alta y Edición de Activo Fijo (Código Manual, Responsable, Servicio, etc.)
+function showActivoFijoModal(activoId = null, mainContainer, state) {
+  const isEdit = !!activoId;
+  const activo = isEdit ? state.administracion_activos_fijos.find(a => a.id === activoId) : null;
+
+  let modal = document.getElementById('modal-activo-fijo-crud');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-activo-fijo-crud';
+    modal.className = 'modal-overlay';
+    modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(5px); padding: 15px;';
+    document.body.appendChild(modal);
+  }
+
+  // Lista de empleados registrados para autocompletar responsables
+  const employees = state.administracion_employees || [];
+  const empOptions = employees.map(e => `<option value="${e.name}">${e.name} (${e.role || e.department || 'Personal'})</option>`).join('');
+
+  modal.innerHTML = `
+    <div class="glass-card modal-card" style="max-width: 680px; width: 100%; max-height: 92vh; overflow-y: auto; padding: 1.75rem; border-top: 4px solid var(--accent-primary); border-radius: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem;">
+        <div>
+          <h3 style="color: var(--accent-primary); margin: 0; font-size: 1.2rem;">
+            ${isEdit ? '✏️ Modificar Ficha de Activo Fijo' : '➕ Registrar Nuevo Activo Fijo Patrimonial'}
+          </h3>
+          <p style="color: var(--text-muted); font-size: 0.82rem; margin: 4px 0 0 0;">
+            Hospital Privado Multimédica Sayaxché | Ingrese el código manual y datos de asignación.
+          </p>
+        </div>
+        <button type="button" id="btn-close-af-modal" style="background: none; border: none; font-size: 1.4rem; color: var(--text-muted); cursor: pointer;">&times;</button>
+      </div>
+
+      <form id="form-activo-fijo" style="display: flex; flex-direction: column; gap: 12px;">
+        
+        <!-- Código Manual y Categoría -->
+        <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 12px;">
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 0.82rem; font-weight: bold; color: var(--accent-primary);">Código del Activo (Manual) *:</label>
+            <input type="text" id="af-input-codigo" value="${activo ? (activo.codigoActivo || activo.id) : ''}" placeholder="Ej. AF-MED-007, AF-QUI-012" required style="
+              width: 100%;
+              padding: 8px 10px;
+              border-radius: 4px;
+              border: 1.5px solid var(--accent-primary);
+              background: var(--bg-card);
+              color: var(--text-primary);
+              font-family: var(--font-mono);
+              font-weight: bold;
+              font-size: 0.9rem;
+            ">
+          </div>
+
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 0.82rem; font-weight: bold;">Categoría del Bien *:</label>
+            <select id="af-input-categoria" required style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+              <option value="Equipo Médico y Quirúrgico" ${activo?.categoria === 'Equipo Médico y Quirúrgico' ? 'selected' : ''}>Equipo Médico y Quirúrgico</option>
+              <option value="Equipo de Diagnóstico e Imagenología" ${activo?.categoria === 'Equipo de Diagnóstico e Imagenología' ? 'selected' : ''}>Equipo de Diagnóstico e Imagenología</option>
+              <option value="Mobiliario Hospitalario y Clínico" ${activo?.categoria === 'Mobiliario Hospitalario y Clínico' ? 'selected' : ''}>Mobiliario Hospitalario y Clínico</option>
+              <option value="Mobiliario y Equipo de Oficina" ${activo?.categoria === 'Mobiliario y Equipo de Oficina' ? 'selected' : ''}>Mobiliario y Equipo de Oficina</option>
+              <option value="Equipo de Cómputo y Telecomunicaciones" ${activo?.categoria === 'Equipo de Cómputo y Telecomunicaciones' ? 'selected' : ''}>Equipo de Cómputo y Telecomunicaciones</option>
+              <option value="Instrumental Quirúrgico Especializado" ${activo?.categoria === 'Instrumental Quirúrgico Especializado' ? 'selected' : ''}>Instrumental Quirúrgico Especializado</option>
+              <option value="Equipo Electromecánico e Infraestructura" ${activo?.categoria === 'Equipo Electromecánico e Infraestructura' ? 'selected' : ''}>Equipo Electromecánico e Infraestructura</option>
+              <option value="Vehículos y Transporte (Ambulancias)" ${activo?.categoria === 'Vehículos y Transporte (Ambulancias)' ? 'selected' : ''}>Vehículos y Transporte (Ambulancias)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Nombre / Descripción del Activo -->
+        <div class="form-group" style="margin: 0;">
+          <label style="font-size: 0.82rem; font-weight: bold;">Descripción / Nombre del Activo *:</label>
+          <input type="text" id="af-input-nombre" value="${activo ? activo.nombre : ''}" placeholder="Ej. Monitor de Signos Vitales Multiparámetro con ECG y PNI" required style="width: 100%; padding: 8px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.88rem;">
+        </div>
+
+        <!-- Marca, Modelo y Serie -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 10px;">
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 0.82rem; font-weight: bold;">Marca:</label>
+            <input type="text" id="af-input-marca" value="${activo?.marca || ''}" placeholder="Ej. Mindray, GE, Dell" style="width: 100%; padding: 7px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 0.82rem; font-weight: bold;">Modelo:</label>
+            <input type="text" id="af-input-modelo" value="${activo?.modelo || ''}" placeholder="Ej. uMEC12, OptiPlex" style="width: 100%; padding: 7px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 0.82rem; font-weight: bold;">Número de Serie / Placa:</label>
+            <input type="text" id="af-input-serie" value="${activo?.serie || ''}" placeholder="Ej. SN-8849204" style="width: 100%; padding: 7px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem; font-family: var(--font-mono);">
+          </div>
+        </div>
+
+        <!-- Ubicación / Servicio y Responsable / Custodio -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: rgba(0, 242, 254, 0.02); border: 1px solid rgba(0, 242, 254, 0.15); padding: 10px; border-radius: 6px;">
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 0.82rem; font-weight: bold; color: #38bdf8;">Oficina / Servicio Ubicado *:</label>
+            <input type="text" id="af-input-ubicacion" value="${activo?.oficinaServicio || 'Quirófano 1 (Centro Quirúrgico)'}" list="list-servicios-hospital" placeholder="Seleccione o escriba..." required style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+            <datalist id="list-servicios-hospital">
+              <option value="Dirección Médica y Administrativa">
+              <option value="Recepción y Caja Principal">
+              <option value="Consulta Externa (Clínica 1)">
+              <option value="Consulta Externa (Clínica 2)">
+              <option value="Encamamiento Piso 2 (Habitaciones)">
+              <option value="Emergencias y Sala de Observación">
+              <option value="Quirófano 1 (Centro Quirúrgico)">
+              <option value="Quirófano 2 (Centro Quirúrgico)">
+              <option value="Unidad de Cuidados Intensivos (UCI)">
+              <option value="Laboratorio Clínico y Banco de Sangre">
+              <option value="Imagenología y Ultrasonido">
+              <option value="Farmacia Hospitalaria y Almacén General">
+              <option value="Central de Esterilización (CEyE)">
+              <option value="Mantenimiento e Informática">
+            </datalist>
+          </div>
+
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 0.82rem; font-weight: bold; color: #38bdf8;">Responsable / Custodio Asignado *:</label>
+            <input type="text" id="af-input-responsable" value="${activo?.responsable || ''}" list="list-empleados-hospital" placeholder="Nombre del custodio..." required style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+            <datalist id="list-empleados-hospital">
+              ${empOptions}
+              <option value="Dr. Alejandro Morales">
+              <option value="Dra. Patricia Lima">
+              <option value="Licda. Elena Méndez">
+              <option value="Lic. Roberto Alvarado">
+              <option value="Ing. David Robles">
+              <option value="Dr. Fernando Quiñónez">
+              <option value="Administrador Maestro">
+            </datalist>
+          </div>
+
+          <div class="form-group" style="margin: 0; grid-column: span 2;">
+            <label style="font-size: 0.82rem; font-weight: bold;">Cargo / Puesto del Responsable:</label>
+            <input type="text" id="af-input-cargo" value="${activo?.cargoResponsable || ''}" placeholder="Ej. Jefe de Quirófano, Enfermera Jefe, Químico Biólogo" style="width: 100%; padding: 7px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+          </div>
+        </div>
+
+        <!-- Adquisición, Costo y Factura -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 0.82rem; font-weight: bold;">Fecha de Adquisición *:</label>
+            <input type="date" id="af-input-fecha" value="${activo?.fechaAdquisicion || new Date().toISOString().substring(0, 10)}" required style="width: 100%; padding: 7px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+          </div>
+
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 0.82rem; font-weight: bold;">Costo / Valor Adquisición (Q) *:</label>
+            <input type="number" step="0.01" id="af-input-costo" value="${activo?.valorAdquisicion || ''}" placeholder="0.00" required style="width: 100%; padding: 7px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem; font-weight: bold;">
+          </div>
+
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 0.82rem; font-weight: bold;">Vida Útil Estimada (Años):</label>
+            <input type="number" id="af-input-vida" value="${activo?.vidaUtilAnios || 5}" min="1" max="50" required style="width: 100%; padding: 7px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+          </div>
+        </div>
+
+        <!-- Proveedor y Factura -->
+        <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 10px;">
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 0.82rem; font-weight: bold;">Proveedor / Casa Comercial:</label>
+            <input type="text" id="af-input-proveedor" value="${activo?.proveedor || ''}" placeholder="Ej. Medik Instruments Guatemala" style="width: 100%; padding: 7px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+          </div>
+
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 0.82rem; font-weight: bold;">No. Factura / Documento:</label>
+            <input type="text" id="af-input-factura" value="${activo?.facturaCompra || ''}" placeholder="Ej. FAC-77491" style="width: 100%; padding: 7px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+          </div>
+        </div>
+
+        <!-- Estado Físico y Mantenimiento -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 0.82rem; font-weight: bold;">Estado Físico / Condición *:</label>
+            <select id="af-input-estado" required style="width: 100%; padding: 7px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+              <option value="Excelente / Operativo" ${activo?.estadoFisico === 'Excelente / Operativo' ? 'selected' : ''}>Excelente / Operativo</option>
+              <option value="Bueno / Operativo" ${activo?.estadoFisico === 'Bueno / Operativo' ? 'selected' : ''}>Bueno / Operativo</option>
+              <option value="Regular / Requiere Mantenimiento" ${activo?.estadoFisico === 'Regular / Requiere Mantenimiento' ? 'selected' : ''}>Regular / Requiere Mantenimiento</option>
+              <option value="Malo / Fuera de Servicio" ${activo?.estadoFisico === 'Malo / Fuera de Servicio' ? 'selected' : ''}>Malo / Fuera de Servicio</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 0.82rem; font-weight: bold;">Ciclo de Mantenimiento:</label>
+            <select id="af-input-ciclo-mantenimiento" style="width: 100%; padding: 7px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+              <option value="Trimestral" ${activo?.frecuenciaMantenimiento === 'Trimestral' ? 'selected' : ''}>Trimestral</option>
+              <option value="Semestral" ${activo?.frecuenciaMantenimiento === 'Semestral' ? 'selected' : ''}>Semestral</option>
+              <option value="Anual" ${activo?.frecuenciaMantenimiento === 'Anual' ? 'selected' : ''}>Anual</option>
+              <option value="N/A" ${activo?.frecuenciaMantenimiento === 'N/A' ? 'selected' : ''}>No Aplica</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 0.82rem; font-weight: bold;">Próximo Mantenimiento:</label>
+            <input type="date" id="af-input-prox-mantenimiento" value="${activo?.proximoMantenimiento || ''}" style="width: 100%; padding: 7px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+          </div>
+        </div>
+
+        <!-- Observaciones -->
+        <div class="form-group" style="margin: 0;">
+          <label style="font-size: 0.82rem; font-weight: bold;">Observaciones / Accesorios / Garantía:</label>
+          <textarea id="af-input-obs" rows="2" placeholder="Detalles de accesorios incluidos, certificaciones biomédicas o números de contrato..." style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">${activo?.observaciones || ''}</textarea>
+        </div>
+
+        <!-- Botones de Acción -->
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-af-modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary" style="font-weight: bold;">
+            ${isEdit ? '💾 Guardar Cambios' : '✅ Registrar Activo Fijo'}
+          </button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  const close = () => { modal.style.display = 'none'; };
+  modal.querySelector('#btn-close-af-modal').addEventListener('click', close);
+  modal.querySelector('#btn-cancel-af-modal').addEventListener('click', close);
+
+  modal.querySelector('#form-activo-fijo').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const codigoVal = modal.querySelector('#af-input-codigo').value.trim().toUpperCase();
+    if (!codigoVal) {
+      alert("Por favor ingrese el código manual del activo fijo.");
+      return;
+    }
+
+    // Validar unicidad del código manual si es nuevo o si cambió
+    const existingCode = state.administracion_activos_fijos.find(a => 
+      (a.codigoActivo === codigoVal || a.id === codigoVal) && a.id !== activoId && a.activo !== false
+    );
+    if (existingCode) {
+      alert(`❌ Ya existe un activo fijo registrado con el código "${codigoVal}" (${existingCode.nombre}). Ingrese un código único.`);
+      return;
+    }
+
+    const nombreVal = modal.querySelector('#af-input-nombre').value.trim();
+    const categoriaVal = modal.querySelector('#af-input-categoria').value;
+    const marcaVal = modal.querySelector('#af-input-marca').value.trim();
+    const modeloVal = modal.querySelector('#af-input-modelo').value.trim();
+    const serieVal = modal.querySelector('#af-input-serie').value.trim();
+    const ubicacionVal = modal.querySelector('#af-input-ubicacion').value.trim();
+    const responsableVal = modal.querySelector('#af-input-responsable').value.trim();
+    const cargoVal = modal.querySelector('#af-input-cargo').value.trim();
+    const fechaVal = modal.querySelector('#af-input-fecha').value;
+    const costoVal = parseFloat(modal.querySelector('#af-input-costo').value) || 0;
+    const vidaVal = parseInt(modal.querySelector('#af-input-vida').value) || 5;
+    const proveedorVal = modal.querySelector('#af-input-proveedor').value.trim();
+    const facturaVal = modal.querySelector('#af-input-factura').value.trim();
+    const estadoVal = modal.querySelector('#af-input-estado').value;
+    const cicloVal = modal.querySelector('#af-input-ciclo-mantenimiento').value;
+    const proxMantVal = modal.querySelector('#af-input-prox-mantenimiento').value;
+    const obsVal = modal.querySelector('#af-input-obs').value.trim();
+
+    if (isEdit && activo) {
+      // Registrar en historial si cambió de responsable o ubicación
+      if (activo.responsable !== responsableVal || activo.oficinaServicio !== ubicacionVal) {
+        activo.historialMovimientos = activo.historialMovimientos || [];
+        activo.historialMovimientos.push({
+          fecha: new Date().toISOString(),
+          deResponsable: activo.responsable || 'Sin Asignar',
+          aResponsable: responsableVal,
+          deUbicacion: activo.oficinaServicio || 'Sin Ubicación',
+          aUbicacion: ubicacionVal,
+          motivo: 'Actualización en ficha de activo fijo',
+          usuario: state.currentUser?.name || 'Administrador'
+        });
+      }
+
+      activo.codigoActivo = codigoVal;
+      activo.nombre = nombreVal;
+      activo.categoria = categoriaVal;
+      activo.marca = marcaVal;
+      activo.modelo = modeloVal;
+      activo.serie = serieVal;
+      activo.oficinaServicio = ubicacionVal;
+      activo.responsable = responsableVal;
+      activo.cargoResponsable = cargoVal;
+      activo.fechaAdquisicion = fechaVal;
+      activo.valorAdquisicion = costoVal;
+      activo.vidaUtilAnios = vidaVal;
+      activo.proveedor = proveedorVal;
+      activo.facturaCompra = facturaVal;
+      activo.estadoFisico = estadoVal;
+      activo.frecuenciaMantenimiento = cicloVal;
+      activo.proximoMantenimiento = proxMantVal;
+      activo.observaciones = obsVal;
+
+      alert(`✅ Activo fijo "${codigoVal}" actualizado exitosamente.`);
+    } else {
+      const newActivo = {
+        id: codigoVal,
+        codigoActivo: codigoVal,
+        nombre: nombreVal,
+        categoria: categoriaVal,
+        marca: marcaVal,
+        modelo: modeloVal,
+        serie: serieVal,
+        oficinaServicio: ubicacionVal,
+        responsable: responsableVal,
+        cargoResponsable: cargoVal,
+        fechaAdquisicion: fechaVal,
+        valorAdquisicion: costoVal,
+        vidaUtilAnios: vidaVal,
+        proveedor: proveedorVal,
+        facturaCompra: facturaVal,
+        estadoFisico: estadoVal,
+        frecuenciaMantenimiento: cicloVal,
+        proximoMantenimiento: proxMantVal,
+        observaciones: obsVal,
+        historialMovimientos: [
+          {
+            fecha: new Date().toISOString(),
+            deResponsable: 'Recepción / Alta',
+            aResponsable: responsableVal,
+            deUbicacion: 'Almacén Central',
+            aUbicacion: ubicacionVal,
+            motivo: 'Registro y asignación inicial de bien',
+            usuario: state.currentUser?.name || 'Administrador'
+          }
+        ],
+        activo: true
+      };
+
+      state.administracion_activos_fijos.push(newActivo);
+      alert(`🎉 Activo fijo "${codigoVal} - ${nombreVal}" registrado exitosamente.`);
+    }
+
+    saveAppState(state);
+    close();
+    renderActivosFijosTab(mainContainer, state);
+  });
+}
+
+// Modal de Traslado / Reasignación de Custodio y Ubicación
+function showTrasladoActivoModal(activoId, mainContainer, state) {
+  const activo = state.administracion_activos_fijos.find(a => a.id === activoId);
+  if (!activo) return;
+
+  let modal = document.getElementById('modal-traslado-af');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-traslado-af';
+    modal.className = 'modal-overlay';
+    modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(5px); padding: 15px;';
+    document.body.appendChild(modal);
+  }
+
+  const employees = state.administracion_employees || [];
+  const empOptions = employees.map(e => `<option value="${e.name}">${e.name} (${e.role || 'Personal'})</option>`).join('');
+
+  modal.innerHTML = `
+    <div class="glass-card modal-card" style="max-width: 550px; width: 100%; padding: 1.75rem; border-top: 4px solid #38bdf8; border-radius: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+        <div>
+          <h3 style="color: #38bdf8; margin: 0; font-size: 1.15rem;">
+            🔄 Reasignación de Custodio / Traslado de Activo Fijo
+          </h3>
+          <p style="color: var(--text-muted); font-size: 0.82rem; margin: 4px 0 0 0;">
+            Activo: <strong>${activo.codigoActivo}</strong> - ${activo.nombre}
+          </p>
+        </div>
+        <button type="button" id="btn-close-traslado-modal" style="background: none; border: none; font-size: 1.4rem; color: var(--text-muted); cursor: pointer;">&times;</button>
+      </div>
+
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 10px; border-radius: 6px; margin-bottom: 1rem; font-size: 0.82rem;">
+        <div><strong>Custodio Actual:</strong> ${activo.responsable} (${activo.cargoResponsable || 'N/D'})</div>
+        <div style="margin-top: 4px;"><strong>Ubicación Actual:</strong> 📍 ${activo.oficinaServicio}</div>
+      </div>
+
+      <form id="form-traslado-af" style="display: flex; flex-direction: column; gap: 10px;">
+        <div class="form-group" style="margin: 0;">
+          <label style="font-size: 0.82rem; font-weight: bold; color: #38bdf8;">Nuevo Responsable / Custodio *:</label>
+          <input type="text" id="af-tras-nuevo-resp" list="list-emp-traslado" value="${activo.responsable}" required style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+          <datalist id="list-emp-traslado">
+            ${empOptions}
+            <option value="Dr. Alejandro Morales">
+            <option value="Dra. Patricia Lima">
+            <option value="Licda. Elena Méndez">
+            <option value="Lic. Roberto Alvarado">
+            <option value="Ing. David Robles">
+            <option value="Dr. Fernando Quiñónez">
+          </datalist>
+        </div>
+
+        <div class="form-group" style="margin: 0;">
+          <label style="font-size: 0.82rem; font-weight: bold; color: #38bdf8;">Nueva Oficina / Servicio Ubicado *:</label>
+          <input type="text" id="af-tras-nueva-ubic" list="list-serv-traslado" value="${activo.oficinaServicio}" required style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+          <datalist id="list-serv-traslado">
+            <option value="Dirección Médica y Administrativa">
+            <option value="Recepción y Caja Principal">
+            <option value="Consulta Externa (Clínica 1)">
+            <option value="Encamamiento Piso 2 (Habitaciones)">
+            <option value="Emergencias y Sala de Observación">
+            <option value="Quirófano 1 (Centro Quirúrgico)">
+            <option value="Quirófano 2 (Centro Quirúrgico)">
+            <option value="Unidad de Cuidados Intensivos (UCI)">
+            <option value="Laboratorio Clínico y Banco de Sangre">
+            <option value="Imagenología y Ultrasonido">
+            <option value="Farmacia Hospitalaria y Almacén General">
+            <option value="Central de Esterilización (CEyE)">
+            <option value="Mantenimiento e Informática">
+          </datalist>
+        </div>
+
+        <div class="form-group" style="margin: 0;">
+          <label style="font-size: 0.82rem; font-weight: bold;">Motivo del Traslado / Reasignación *:</label>
+          <textarea id="af-tras-motivo" rows="2" required placeholder="Indique la causa del traslado (ej. Cambio de turno, reubicación de área, renovación de equipo)..." style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">Reasignación formal de custodia y traslado físico por requerimiento operativo.</textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-traslado">Cancelar</button>
+          <button type="submit" class="btn btn-primary" style="background: #38bdf8; color: #000; font-weight: bold; border: none;">
+            🔄 Confirmar y Registrar Traslado
+          </button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  const close = () => { modal.style.display = 'none'; };
+  modal.querySelector('#btn-close-traslado-modal').addEventListener('click', close);
+  modal.querySelector('#btn-cancel-traslado').addEventListener('click', close);
+
+  modal.querySelector('#form-traslado-af').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const newResp = modal.querySelector('#af-tras-nuevo-resp').value.trim();
+    const newUbic = modal.querySelector('#af-tras-nueva-ubic').value.trim();
+    const motivo = modal.querySelector('#af-tras-motivo').value.trim();
+
+    activo.historialMovimientos = activo.historialMovimientos || [];
+    activo.historialMovimientos.push({
+      fecha: new Date().toISOString(),
+      deResponsable: activo.responsable || 'Sin Asignar',
+      aResponsable: newResp,
+      deUbicacion: activo.oficinaServicio || 'Sin Ubicación',
+      aUbicacion: newUbic,
+      motivo,
+      usuario: state.currentUser?.name || 'Administrador'
+    });
+
+    activo.responsable = newResp;
+    activo.oficinaServicio = newUbic;
+
+    saveAppState(state);
+    close();
+    alert(`🎉 Traslado registrado exitosamente. Custodio actual: ${newResp} | Ubicación: ${newUbic}.`);
+    renderActivosFijosTab(mainContainer, state);
+  });
+}
+
+// Modal para emitir Tarjeta de Responsabilidad Consolidada (por empleado o servicio)
+function showResponsabilidadConsolidadaModal(mainContainer, state) {
+  const activosList = (state.administracion_activos_fijos || []).filter(a => a.activo !== false);
+  const responsables = [...new Set(activosList.map(a => a.responsable).filter(Boolean))];
+  const ubicaciones = [...new Set(activosList.map(a => a.oficinaServicio).filter(Boolean))];
+
+  let modal = document.getElementById('modal-consolidada-af');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-consolidada-af';
+    modal.className = 'modal-overlay';
+    modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(5px); padding: 15px;';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="glass-card modal-card" style="max-width: 520px; width: 100%; padding: 1.75rem; border-top: 4px solid var(--accent-primary); border-radius: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+        <div>
+          <h3 style="color: var(--accent-primary); margin: 0; font-size: 1.15rem;">
+            📄 Generar Tarjeta de Responsabilidad Consolidada
+          </h3>
+          <p style="color: var(--text-muted); font-size: 0.82rem; margin: 4px 0 0 0;">
+            Seleccione si desea agrupar por Custodio (Persona) o por Oficina/Servicio.
+          </p>
+        </div>
+        <button type="button" id="btn-close-cons-modal" style="background: none; border: none; font-size: 1.4rem; color: var(--text-muted); cursor: pointer;">&times;</button>
+      </div>
+
+      <form id="form-consolidada-af" style="display: flex; flex-direction: column; gap: 12px;">
+        <div class="form-group" style="margin: 0;">
+          <label style="font-size: 0.82rem; font-weight: bold;">Criterio de Agrupación:</label>
+          <select id="cons-criterio" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+            <option value="responsable">👤 Por Custodio / Empleado Responsable</option>
+            <option value="servicio">📍 Por Oficina / Servicio Hospitalario</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="group-select-resp" style="margin: 0;">
+          <label style="font-size: 0.82rem; font-weight: bold;">Seleccione Custodio Responsable:</label>
+          <select id="cons-select-responsable" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+            ${responsables.map(r => {
+              const count = activosList.filter(a => a.responsable === r).length;
+              return `<option value="${r}">${r} (${count} activos asignados)</option>`;
+            }).join('')}
+          </select>
+        </div>
+
+        <div class="form-group" id="group-select-serv" style="margin: 0; display: none;">
+          <label style="font-size: 0.82rem; font-weight: bold;">Seleccione Oficina / Servicio:</label>
+          <select id="cons-select-servicio" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-size: 0.85rem;">
+            ${ubicaciones.map(u => {
+              const count = activosList.filter(a => a.oficinaServicio === u).length;
+              return `<option value="${u}">${u} (${count} activos)</option>`;
+            }).join('')}
+          </select>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-cons">Cancelar</button>
+          <button type="submit" class="btn btn-primary" style="font-weight: bold;">
+            🖨️ Imprimir Tarjeta de Responsabilidad
+          </button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  const close = () => { modal.style.display = 'none'; };
+  modal.querySelector('#btn-close-cons-modal').addEventListener('click', close);
+  modal.querySelector('#btn-cancel-cons').addEventListener('click', close);
+
+  const critSelect = modal.querySelector('#cons-criterio');
+  const grpResp = modal.querySelector('#group-select-resp');
+  const grpServ = modal.querySelector('#group-select-serv');
+
+  critSelect.addEventListener('change', () => {
+    if (critSelect.value === 'responsable') {
+      grpResp.style.display = 'block';
+      grpServ.style.display = 'none';
+    } else {
+      grpResp.style.display = 'none';
+      grpServ.style.display = 'block';
+    }
+  });
+
+  modal.querySelector('#form-consolidada-af').addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (critSelect.value === 'responsable') {
+      const respName = modal.querySelector('#cons-select-responsable').value;
+      const filtered = activosList.filter(a => a.responsable === respName);
+      printTarjetaResponsabilidadConsolidada(respName, 'Todas las ubicaciones asignadas', filtered, state.clinicInfo);
+    } else {
+      const servName = modal.querySelector('#cons-select-servicio').value;
+      const filtered = activosList.filter(a => a.oficinaServicio === servName);
+      printTarjetaResponsabilidadConsolidada('Jefatura / Personal del Servicio', servName, filtered, state.clinicInfo);
+    }
+    close();
+  });
+}
+
+// =========================================================================
+// 🖨️ GENERADORES DE REPORTES Y TARJETAS DE RESPONSABILIDAD (ACTIVOS FIJOS)
+// =========================================================================
+
+// 1. Tarjeta de Responsabilidad Individual (HMM-ADM-TAR-01)
+export function printTarjetaResponsabilidadIndividual(activo, clinic = {}) {
+  const dep = calculateDepreciationAndBookValue(activo);
+  const w = window.open('', '_blank');
+  if (!w) {
+    alert("Por favor habilite las ventanas emergentes en su navegador para imprimir.");
+    return;
+  }
+
+  w.document.write(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <title>Tarjeta de Responsabilidad de Activo Fijo - ${activo.codigoActivo}</title>
+      <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #111; margin: 30px; line-height: 1.4; }
+        .header-table { width: 100%; border-bottom: 2px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 15px; }
+        .title-box { text-align: center; background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; border-radius: 4px; margin-bottom: 15px; }
+        .title-box h2 { margin: 0; font-size: 1.2rem; color: #1e3a8a; text-transform: uppercase; }
+        .doc-code { font-size: 0.8rem; font-weight: bold; color: #64748b; margin-top: 3px; }
+        .data-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 0.85rem; }
+        .data-table th, .data-table td { border: 1px solid #cbd5e1; padding: 7px 10px; text-align: left; }
+        .data-table th { background: #f1f5f9; font-weight: bold; width: 30%; }
+        .legal-clause { background: #fffbeb; border: 1px solid #fef3c7; border-left: 4px solid #f59e0b; padding: 10px 14px; font-size: 0.8rem; text-align: justify; margin: 15px 0; color: #92400e; border-radius: 3px; }
+        .signatures { display: flex; justify-content: space-between; margin-top: 50px; padding: 0 20px; }
+        .sig-box { text-align: center; width: 28%; }
+        .sig-line { border-top: 1px solid #111; margin-bottom: 5px; }
+        @media print { .no-print { display: none; } }
+      </style>
+    </head>
+    <body>
+      <table class="header-table">
+        <tr>
+          <td>
+            <h1 style="margin: 0; font-size: 1.25rem; color: #1e3a8a;">${clinic.name || 'HOSPITAL PRIVADO MULTIMÉDICA SAYAXCHÉ'}</h1>
+            <div style="font-size: 0.82rem; color: #64748b;">Departamento de Administración, Contabilidad y Control Patrimonial</div>
+          </td>
+          <td style="text-align: right; font-size: 0.8rem; color: #334155;">
+            📍 Sayaxché, Petén, Guatemala<br>
+            📞 PBX: 2200-0000 | ✉️ administracion@lugamed.gt
+          </td>
+        </tr>
+      </table>
+
+      <div class="title-box">
+        <h2>Ficha de Asignación y Tarjeta de Responsabilidad de Activo Fijo</h2>
+        <div class="doc-code">CÓDIGO DOCUMENTAL: HMM-ADM-TAR-01 (VERSIÓN 5.0) | SISTEMA LUGAMED</div>
+      </div>
+
+      <table class="data-table">
+        <tr>
+          <th>Código del Activo (Manual):</th>
+          <td style="font-family: monospace; font-size: 1rem; font-weight: bold; color: #1e3a8a;">${activo.codigoActivo || activo.id}</td>
+        </tr>
+        <tr>
+          <th>Descripción / Nombre del Bien:</th>
+          <td><strong>${activo.nombre}</strong></td>
+        </tr>
+        <tr>
+          <th>Categoría Patrimonial:</th>
+          <td>${activo.categoria || 'Equipo General'}</td>
+        </tr>
+        <tr>
+          <th>Marca / Modelo / Serie:</th>
+          <td>${activo.marca || 'N/D'} / ${activo.modelo || 'N/D'} / <span style="font-family: monospace; font-weight: bold;">${activo.serie || 'N/D'}</span></td>
+        </tr>
+        <tr>
+          <th>Oficina / Servicio Ubicado:</th>
+          <td style="font-weight: bold; color: #0284c7;">📍 ${activo.oficinaServicio || 'Almacén Central'}</td>
+        </tr>
+        <tr>
+          <th>Custodio / Responsable Asignado:</th>
+          <td><strong>${activo.responsable}</strong> ${activo.cargoResponsable ? `(${activo.cargoResponsable})` : ''}</td>
+        </tr>
+        <tr>
+          <th>Fecha y Factura de Compra:</th>
+          <td>${activo.fechaAdquisicion || 'N/D'} | Fac: ${activo.facturaCompra || 'N/D'} (Prov: ${activo.proveedor || 'N/D'})</td>
+        </tr>
+        <tr>
+          <th>Valor Histórico de Adquisición:</th>
+          <td><strong>Q ${dep.costo.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></td>
+        </tr>
+        <tr>
+          <th>Depreciación Acumulada / Libros:</th>
+          <td>Depreciado: <strong>Q ${dep.depreciacionAcumulada.toLocaleString('es-GT', { minimumFractionDigits: 2 })}</strong> (-${dep.porcentajeDepreciado}%) | Valor Neto en Libros: <strong style="color: #16a34a;">Q ${dep.valorEnLibros.toLocaleString('es-GT', { minimumFractionDigits: 2 })}</strong></td>
+        </tr>
+        <tr>
+          <th>Estado Físico y Mantenimiento:</th>
+          <td><strong>${activo.estadoFisico || 'Operativo'}</strong> | Calibración: ${activo.frecuenciaMantenimiento || 'N/A'} (Próx: ${activo.proximoMantenimiento || 'N/D'})</td>
+        </tr>
+        <tr>
+          <th>Observaciones y Accesorios:</th>
+          <td>${activo.observaciones || 'Ninguna'}</td>
+        </tr>
+      </table>
+
+      <div class="legal-clause">
+        <strong>CLÁUSULA DE RESPONSABILIDAD Y CUSTODIA PATRIMONIAL:</strong><br>
+        El firmante abajo consignado declara recibir formalmente bajo su custodia, guarda y conservación el activo fijo anteriormente detallado, el cual es propiedad exclusiva del Hospital Privado Multimédica Sayaxché. Se compromete a destinarlo únicamente a las labores institucionales asignadas, mantenerlo en óptimas condiciones de funcionamiento, reportar de inmediato cualquier desperfecto o mantenimiento preventivo, y responder ante cualquier extravío o daño derivado de negligencia o mal uso según el reglamento interno de trabajo.
+      </div>
+
+      <div class="signatures">
+        <div class="sig-box">
+          <div class="sig-line"></div>
+          <strong style="font-size: 0.82rem;">${activo.responsable}</strong><br>
+          <span style="font-size: 0.75rem; color: #555;">Custodio Responsable<br>Firma y DPI</span>
+        </div>
+        <div class="sig-box">
+          <div class="sig-line"></div>
+          <strong style="font-size: 0.82rem;">Encargado de Activos Fijos</strong><br>
+          <span style="font-size: 0.75rem; color: #555;">Control Patrimonial<br>Hospital Multimédica</span>
+        </div>
+        <div class="sig-box">
+          <div class="sig-line"></div>
+          <strong style="font-size: 0.82rem;">Gerencia Administrativa</strong><br>
+          <span style="font-size: 0.75rem; color: #555;">Visto Bueno y Autorización<br>Dirección General</span>
+        </div>
+      </div>
+
+      <div class="no-print" style="text-align: center; margin-top: 35px;">
+        <button onclick="window.print()" style="padding: 10px 22px; font-size: 1rem; background: #1e3a8a; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+          🖨️ Imprimir Tarjeta de Responsabilidad
+        </button>
+      </div>
+      <script>window.onload = function(){ window.print(); };</script>
+    </body>
+    </html>
+  `);
+  w.document.close();
+}
+
+// 2. Tarjeta de Responsabilidad Consolidada (Grupo de Activos por Custodio o Servicio)
+export function printTarjetaResponsabilidadConsolidada(responsableName, locationName, activosList, clinic = {}) {
+  const w = window.open('', '_blank');
+  if (!w) {
+    alert("Por favor habilite las ventanas emergentes en su navegador para imprimir.");
+    return;
+  }
+
+  let totalCosto = 0;
+  let totalLibros = 0;
+
+  const rows = activosList.map((a, idx) => {
+    const dep = calculateDepreciationAndBookValue(a);
+    totalCosto += dep.costo;
+    totalLibros += dep.valorEnLibros;
+
+    return `
+      <tr>
+        <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
+        <td style="font-family: monospace; font-weight: bold; color: #1e3a8a;">${a.codigoActivo || a.id}</td>
+        <td>
+          <strong>${a.nombre}</strong><br>
+          <span style="font-size: 0.72rem; color: #555;">${a.marca || ''} ${a.modelo ? `Mod: ${a.modelo}` : ''} ${a.serie ? `S/N: ${a.serie}` : ''}</span>
+        </td>
+        <td>${a.oficinaServicio || locationName}</td>
+        <td>${a.estadoFisico || 'Operativo'}</td>
+        <td style="text-align: right;">Q ${dep.costo.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        <td style="text-align: right; font-weight: bold; color: #16a34a;">Q ${dep.valorEnLibros.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+      </tr>
+    `;
+  }).join('');
+
+  w.document.write(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <title>Tarjeta Consolidada de Responsabilidad Patrimonial</title>
+      <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #111; margin: 25px; font-size: 0.85rem; line-height: 1.35; }
+        .header-table { width: 100%; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; margin-bottom: 12px; }
+        .title-box { text-align: center; background: #f8fafc; border: 1px solid #cbd5e1; padding: 8px; border-radius: 4px; margin-bottom: 12px; }
+        .title-box h2 { margin: 0; font-size: 1.15rem; color: #1e3a8a; text-transform: uppercase; }
+        table.inventory-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 0.8rem; }
+        table.inventory-table th, table.inventory-table td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+        table.inventory-table th { background: #f1f5f9; font-weight: bold; }
+        .total-row td { background: #f8fafc; font-weight: bold; border-top: 2px solid #334155; }
+        .legal-box { background: #fffbeb; border: 1px solid #fef3c7; border-left: 4px solid #f59e0b; padding: 8px 12px; font-size: 0.78rem; text-align: justify; margin: 12px 0; color: #92400e; }
+        .signatures { display: flex; justify-content: space-between; margin-top: 45px; padding: 0 30px; }
+        .sig-box { text-align: center; width: 35%; }
+        .sig-line { border-top: 1px solid #111; margin-bottom: 4px; }
+        @media print { .no-print { display: none; } }
+      </style>
+    </head>
+    <body>
+      <table class="header-table">
+        <tr>
+          <td>
+            <h1 style="margin: 0; font-size: 1.2rem; color: #1e3a8a;">${clinic.name || 'HOSPITAL PRIVADO MULTIMÉDICA SAYAXCHÉ'}</h1>
+            <div style="font-size: 0.8rem; color: #64748b;">Control de Activos Fijos y Tarjeta de Custodia Colectiva</div>
+          </td>
+          <td style="text-align: right; font-size: 0.78rem; color: #334155;">
+            Sayaxché, Petén, Guatemala<br>Fecha: ${new Date().toLocaleDateString('es-GT')}
+          </td>
+        </tr>
+      </table>
+
+      <div class="title-box">
+        <h2>Tarjeta de Responsabilidad y Custodia Patrimonial Colectiva</h2>
+        <div style="font-size: 0.8rem; color: #64748b;">HMM-ADM-TAR-01 (CONSOLIDADA) | SISTEMA LUGAMED</div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; font-size: 0.85rem; background: #f8fafc; padding: 8px 12px; border-radius: 4px; border: 1px solid #e2e8f0;">
+        <div><strong>Custodio Responsable:</strong> ${responsableName}</div>
+        <div><strong>Oficina / Servicio:</strong> ${locationName}</div>
+        <div><strong>Total de Bienes Asignados:</strong> ${activosList.length} ítems</div>
+        <div><strong>Fecha de Emisión:</strong> ${new Date().toLocaleString('es-GT')}</div>
+      </div>
+
+      <table class="inventory-table">
+        <thead>
+          <tr>
+            <th style="width: 25px; text-align: center;">No.</th>
+            <th>Código Manual</th>
+            <th>Descripción del Activo</th>
+            <th>Ubicación</th>
+            <th>Estado</th>
+            <th style="text-align: right;">Costo Adquisición</th>
+            <th style="text-align: right;">Valor en Libros</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+          <tr class="total-row">
+            <td colspan="5" style="text-align: right;">TOTAL GENERAL ASIGNADO:</td>
+            <td style="text-align: right;">Q ${totalCosto.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td style="text-align: right; color: #16a34a;">Q ${totalLibros.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="legal-box">
+        <strong>COMPROMISO DE CUSTODIA Y BUEN USO:</strong> Por medio de la presente, el responsable firma de recibido conforme de los ${activosList.length} activos fijos detallados anteriormente, asumiendo la guarda, cuidado y correcta utilización institucional de cada bien, obligándose a responder por los mismos hasta la entrega formal o descargo debidamente autorizado.
+      </div>
+
+      <div class="signatures">
+        <div class="sig-box">
+          <div class="sig-line"></div>
+          <strong>${responsableName}</strong><br>
+          <span style="font-size: 0.75rem; color: #555;">Firma del Custodio Responsable</span>
+        </div>
+        <div class="sig-box">
+          <div class="sig-line"></div>
+          <strong>Encargado de Activos Fijos y Gerencia</strong><br>
+          <span style="font-size: 0.75rem; color: #555;">Firma y Sello de Autorización</span>
+        </div>
+      </div>
+
+      <div class="no-print" style="text-align: center; margin-top: 30px;">
+        <button onclick="window.print()" style="padding: 8px 20px; font-size: 0.95rem; background: #1e3a8a; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+          🖨️ Imprimir Tarjeta Consolidada
+        </button>
+      </div>
+      <script>window.onload = function(){ window.print(); };</script>
+    </body>
+    </html>
+  `);
+  w.document.close();
+}
+
+// 3. Reporte General de Inventario de Activos Fijos
+export function printReporteGeneralActivosFijos(activosList, filters = {}, clinic = {}) {
+  const w = window.open('', '_blank');
+  if (!w) {
+    alert("Por favor habilite las ventanas emergentes en su navegador para imprimir.");
+    return;
+  }
+
+  let totalCosto = 0;
+  let totalDep = 0;
+  let totalLibros = 0;
+
+  const rows = activosList.map((a, idx) => {
+    const dep = calculateDepreciationAndBookValue(a);
+    totalCosto += dep.costo;
+    totalDep += dep.depreciacionAcumulada;
+    totalLibros += dep.valorEnLibros;
+
+    return `
+      <tr>
+        <td style="text-align: center;">${idx + 1}</td>
+        <td style="font-family: monospace; font-weight: bold; color: #1e3a8a;">${a.codigoActivo || a.id}</td>
+        <td>
+          <strong>${a.nombre}</strong><br>
+          <span style="font-size: 0.7rem; color: #555;">${a.marca || ''} ${a.modelo ? `Mod: ${a.modelo}` : ''} ${a.serie ? `S/N: ${a.serie}` : ''}</span>
+        </td>
+        <td>${a.categoria || ''}</td>
+        <td>${a.oficinaServicio || ''}</td>
+        <td>${a.responsable || ''}</td>
+        <td style="text-align: center;">${a.fechaAdquisicion || ''}</td>
+        <td style="text-align: right;">Q ${dep.costo.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        <td style="text-align: right; color: #dc2626;">Q ${dep.depreciacionAcumulada.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        <td style="text-align: right; font-weight: bold; color: #16a34a;">Q ${dep.valorEnLibros.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        <td style="text-align: center; font-size: 0.75rem;">${a.estadoFisico || 'Operativo'}</td>
+      </tr>
+    `;
+  }).join('');
+
+  w.document.write(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <title>Reporte General de Inventario de Activos Fijos</title>
+      <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #111; margin: 25px; font-size: 0.8rem; line-height: 1.35; }
+        .header-table { width: 100%; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; margin-bottom: 12px; }
+        .title-box { text-align: center; background: #f8fafc; border: 1px solid #cbd5e1; padding: 8px; border-radius: 4px; margin-bottom: 12px; }
+        .title-box h2 { margin: 0; font-size: 1.2rem; color: #1e3a8a; text-transform: uppercase; }
+        .summary-kpis { display: flex; justify-content: space-around; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 8px; border-radius: 4px; margin-bottom: 12px; font-size: 0.82rem; }
+        table.inventory-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; margin-bottom: 15px; }
+        table.inventory-table th, table.inventory-table td { border: 1px solid #cbd5e1; padding: 5px 6px; text-align: left; }
+        table.inventory-table th { background: #e2e8f0; font-weight: bold; color: #1e293b; }
+        .total-row td { background: #f8fafc; font-weight: bold; border-top: 2px solid #334155; }
+        .signatures { display: flex; justify-content: space-between; margin-top: 45px; padding: 0 30px; }
+        .sig-box { text-align: center; width: 28%; }
+        .sig-line { border-top: 1px solid #111; margin-bottom: 4px; }
+        @media print { .no-print { display: none; } }
+      </style>
+    </head>
+    <body>
+      <table class="header-table">
+        <tr>
+          <td>
+            <h1 style="margin: 0; font-size: 1.2rem; color: #1e3a8a;">${clinic.name || 'HOSPITAL PRIVADO MULTIMÉDICA SAYAXCHÉ'}</h1>
+            <div style="font-size: 0.8rem; color: #64748b;">Departamento de Contabilidad y Control Patrimonial</div>
+          </td>
+          <td style="text-align: right; font-size: 0.78rem; color: #334155;">
+            📍 Sayaxché, Petén, Guatemala<br>
+            Fecha de Generación: ${new Date().toLocaleString('es-GT')}
+          </td>
+        </tr>
+      </table>
+
+      <div class="title-box">
+        <h2>Informe Consolidado de Inventario de Activos Fijos</h2>
+        <div style="font-size: 0.78rem; color: #64748b;">REPORTE CONTABLE Y AUDITORÍA PATRIMONIAL | SISTEMA LUGAMED</div>
+      </div>
+
+      <div class="summary-kpis">
+        <div><strong>Total Activos:</strong> ${activosList.length}</div>
+        <div><strong>Valor Histórico Adquisición:</strong> Q ${totalCosto.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+        <div><strong>Depreciación Acumulada:</strong> Q ${totalDep.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+        <div><strong>Valor Neto en Libros:</strong> <span style="color: #16a34a; font-weight: bold;">Q ${totalLibros.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+      </div>
+
+      <table class="inventory-table">
+        <thead>
+          <tr>
+            <th style="width: 20px; text-align: center;">No.</th>
+            <th>Código</th>
+            <th>Descripción / Marca / Serie</th>
+            <th>Categoría</th>
+            <th>Ubicación</th>
+            <th>Custodio</th>
+            <th style="text-align: center;">Fecha Adq.</th>
+            <th style="text-align: right;">Costo (Q)</th>
+            <th style="text-align: right;">Depreciación</th>
+            <th style="text-align: right;">Valor Libros</th>
+            <th style="text-align: center;">Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+          <tr class="total-row">
+            <td colspan="7" style="text-align: right;">TOTALES DEL PATRIMONIO:</td>
+            <td style="text-align: right;">Q ${totalCosto.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td style="text-align: right; color: #dc2626;">Q ${totalDep.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td style="text-align: right; color: #16a34a;">Q ${totalLibros.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="signatures">
+        <div class="sig-box">
+          <div class="sig-line"></div>
+          <strong>Encargado de Activos Fijos</strong><br>
+          <span style="font-size: 0.72rem; color: #555;">Inventario Físico</span>
+        </div>
+        <div class="sig-box">
+          <div class="sig-line"></div>
+          <strong>Contador General</strong><br>
+          <span style="font-size: 0.72rem; color: #555;">Revisión y Depreciaciones</span>
+        </div>
+        <div class="sig-box">
+          <div class="sig-line"></div>
+          <strong>Gerencia Administrativa</strong><br>
+          <span style="font-size: 0.72rem; color: #555;">Auditoría y Aprobación</span>
+        </div>
+      </div>
+
+      <div class="no-print" style="text-align: center; margin-top: 30px;">
+        <button onclick="window.print()" style="padding: 8px 20px; font-size: 0.95rem; background: #1e3a8a; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+          🖨️ Imprimir Reporte de Inventario
+        </button>
+      </div>
+      <script>window.onload = function(){ window.print(); };</script>
+    </body>
+    </html>
+  `);
+  w.document.close();
+}
+
+// 4. Etiqueta / Viñeta Adhesiva de Identificación Física de Activo Fijo
+export function printEtiquetaActivoFijo(activo, clinic = {}) {
+  const w = window.open('', '_blank');
+  if (!w) {
+    alert("Por favor habilite las ventanas emergentes en su navegador para imprimir.");
+    return;
+  }
+
+  w.document.write(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <title>Etiqueta de Activo Fijo - ${activo.codigoActivo}</title>
+      <style>
+        @page { size: 60mm 35mm; margin: 0; }
+        body { font-family: 'Courier New', monospace; font-size: 9px; margin: 3px; padding: 4px; border: 1.5px solid #000; border-radius: 4px; color: #000; }
+        .hdr { font-weight: bold; font-size: 10px; border-bottom: 1px solid #000; text-align: center; padding-bottom: 2px; margin-bottom: 3px; text-transform: uppercase; }
+        .barcode { text-align: center; font-size: 14px; letter-spacing: 2px; font-weight: bold; margin-top: 4px; }
+        .code-display { font-size: 12px; font-weight: bold; text-align: center; margin-top: 1px; color: #000; }
+      </style>
+    </head>
+    <body>
+      <div class="hdr">MULTIMÉDICA SAYAXCHÉ</div>
+      <div><strong>ACTIVO:</strong> ${activo.nombre.slice(0, 30)}</div>
+      <div><strong>SERIE:</strong> ${activo.serie || 'N/D'} | <strong>MARCA:</strong> ${activo.marca || 'N/D'}</div>
+      <div><strong>UBIC:</strong> ${activo.oficinaServicio.slice(0, 24)}</div>
+      <div><strong>CUSTODIO:</strong> ${activo.responsable.slice(0, 24)}</div>
+      <div class="barcode">||| | |||| | || |||| | |||</div>
+      <div class="code-display">${activo.codigoActivo || activo.id}</div>
+      <script>window.onload = function(){ window.print(); };</script>
+    </body>
+    </html>
+  `);
+  w.document.close();
+}
+

@@ -110,6 +110,7 @@ export const firestoreState = {
   administracion_employees: [],
   administracion_nominas: [],
   administracion_bancos: [],
+  administracion_activos_fijos: [],
   external_doctors: [],
   accounts_payable: [],
   clinicInfo: {
@@ -155,6 +156,7 @@ function loadStateFromLocalCache() {
         if (Array.isArray(parsed.administracion_employees)) firestoreState.administracion_employees = parsed.administracion_employees;
         if (Array.isArray(parsed.administracion_nominas)) firestoreState.administracion_nominas = parsed.administracion_nominas;
         if (Array.isArray(parsed.administracion_bancos)) firestoreState.administracion_bancos = parsed.administracion_bancos;
+        if (Array.isArray(parsed.administracion_activos_fijos)) firestoreState.administracion_activos_fijos = parsed.administracion_activos_fijos;
         if (Array.isArray(parsed.external_doctors)) firestoreState.external_doctors = parsed.external_doctors;
         if (Array.isArray(parsed.accounts_payable)) firestoreState.accounts_payable = parsed.accounts_payable;
         if (parsed.clinicInfo) firestoreState.clinicInfo = parsed.clinicInfo;
@@ -199,6 +201,7 @@ export function saveStateToLocalCache() {
       administracion_employees: firestoreState.administracion_employees,
       administracion_nominas: firestoreState.administracion_nominas,
       administracion_bancos: firestoreState.administracion_bancos,
+      administracion_activos_fijos: firestoreState.administracion_activos_fijos,
       external_doctors: firestoreState.external_doctors,
       accounts_payable: firestoreState.accounts_payable,
       clinicInfo: firestoreState.clinicInfo
@@ -335,6 +338,7 @@ export function initRealtimeFirestore(onFirstLoad) {
       const employees = [];
       const nominas = [];
       const bancos = [];
+      const activosFijos = [];
       const doctors = [];
       const payables = [];
       let clinic = null;
@@ -406,6 +410,10 @@ export function initRealtimeFirestore(onFirstLoad) {
           autorizacionesList.push(...(dData.items || []));
           return;
         }
+        if (dId === 'catalog_administracion_activos_fijos') {
+          activosFijos.push(...(dData.items || []));
+          return;
+        }
 
         const cleanDoc = { id: dId, ...dData };
         delete cleanDoc._collectionType;
@@ -434,6 +442,7 @@ export function initRealtimeFirestore(onFirstLoad) {
         else if (type === 'administracion_employees') employees.push(cleanDoc);
         else if (type === 'administracion_nominas') nominas.push(cleanDoc);
         else if (type === 'administracion_bancos') bancos.push(cleanDoc);
+        else if (type === 'administracion_activos_fijos') activosFijos.push(cleanDoc);
         else if (type === 'external_doctors') doctors.push(cleanDoc);
         else if (type === 'accounts_payable') payables.push(cleanDoc);
         else if (type === 'clinicInfo') clinic = cleanDoc;
@@ -463,6 +472,7 @@ export function initRealtimeFirestore(onFirstLoad) {
       firestoreState.administracion_employees = employees;
       firestoreState.administracion_nominas = nominas;
       firestoreState.administracion_bancos = bancos;
+      firestoreState.administracion_activos_fijos = activosFijos;
       firestoreState.external_doctors = doctors;
       firestoreState.accounts_payable = payables;
       if (clinic) firestoreState.clinicInfo = clinic;
@@ -498,6 +508,7 @@ export function initRealtimeFirestore(onFirstLoad) {
           const employees = [];
           const nominas = [];
           const bancos = [];
+          const activosFijos = [];
           const doctors = [];
           const payables = [];
           let clinic = null;
@@ -569,6 +580,10 @@ export function initRealtimeFirestore(onFirstLoad) {
               autorizacionesList.push(...(dData.items || []));
               return;
             }
+            if (dId === 'catalog_administracion_activos_fijos') {
+              activosFijos.push(...(dData.items || []));
+              return;
+            }
 
             const cleanDoc = { id: dId, ...dData };
             delete cleanDoc._collectionType;
@@ -597,6 +612,7 @@ export function initRealtimeFirestore(onFirstLoad) {
             else if (type === 'administracion_employees') employees.push(cleanDoc);
             else if (type === 'administracion_nominas') nominas.push(cleanDoc);
             else if (type === 'administracion_bancos') bancos.push(cleanDoc);
+            else if (type === 'administracion_activos_fijos') activosFijos.push(cleanDoc);
             else if (type === 'external_doctors') doctors.push(cleanDoc);
             else if (type === 'accounts_payable') payables.push(cleanDoc);
             else if (type === 'clinicInfo') clinic = cleanDoc;
@@ -626,6 +642,7 @@ export function initRealtimeFirestore(onFirstLoad) {
           firestoreState.administracion_employees = employees;
           firestoreState.administracion_nominas = nominas;
           firestoreState.administracion_bancos = bancos;
+          firestoreState.administracion_activos_fijos = activosFijos;
           firestoreState.external_doctors = doctors;
           firestoreState.accounts_payable = payables;
           if (clinic) firestoreState.clinicInfo = clinic;
@@ -764,7 +781,7 @@ export async function purgeAllFirestoreData() {
       }
     }
 
-    // 3.b Purgar colecciones de administración (Caja, Contabilidad, Compras, RRHH)
+    // 3.b Purgar colecciones de administración (Caja, Contabilidad, Compras, RRHH, Activos Fijos)
     const adminColNames = [
       'multimedica_administracion_compras',
       'multimedica_administracion_contabilidad',
@@ -772,6 +789,7 @@ export async function purgeAllFirestoreData() {
       'multimedica_administracion_employees',
       'multimedica_administracion_nominas',
       'multimedica_administracion_bancos',
+      'multimedica_administracion_activos_fijos',
       'multimedica_external_doctors',
       'multimedica_accounts_payable'
     ];
@@ -811,6 +829,7 @@ export async function purgeAllFirestoreData() {
     firestoreState.administracion_employees = [];
     firestoreState.administracion_nominas = [];
     firestoreState.administracion_bancos = [];
+    firestoreState.administracion_activos_fijos = [];
     firestoreState.external_doctors = [];
     firestoreState.accounts_payable = [];
     firestoreState.clinicInfo = {

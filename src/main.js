@@ -193,6 +193,7 @@ export function getAppState() {
     administracion_employees: [],
     administracion_nominas: [],
     administracion_bancos: [],
+    administracion_activos_fijos: [],
     external_doctors: [],
     accounts_payable: [],
     clinicInfo: {
@@ -248,6 +249,7 @@ export async function saveAppState(state) {
   if (state.administracion_employees) firestoreState.administracion_employees = state.administracion_employees;
   if (state.administracion_nominas) firestoreState.administracion_nominas = state.administracion_nominas;
   if (state.administracion_bancos) firestoreState.administracion_bancos = state.administracion_bancos;
+  if (state.administracion_activos_fijos) firestoreState.administracion_activos_fijos = state.administracion_activos_fijos;
   if (state.external_doctors) firestoreState.external_doctors = state.external_doctors;
   if (state.accounts_payable) firestoreState.accounts_payable = state.accounts_payable;
   if (state.clinicInfo) firestoreState.clinicInfo = state.clinicInfo;
@@ -564,6 +566,16 @@ export async function saveAppState(state) {
           }
         }
       });
+    }
+
+    // Sincronizar Inventario de Activos Fijos
+    if (state.administracion_activos_fijos && Array.isArray(state.administracion_activos_fijos)) {
+      const prevAF = lastSyncedState && lastSyncedState.administracion_activos_fijos;
+      if (!prevAF || JSON.stringify(prevAF) !== JSON.stringify(state.administracion_activos_fijos)) {
+        const docRef = doc(db, 'multimedica', 'catalog_administracion_activos_fijos');
+        batch.set(docRef, { _collectionType: 'catalog_administracion_activos_fijos', items: state.administracion_activos_fijos });
+        hasWrites = true;
+      }
     }
 
     // Sincronizar Médicos Externos (solo modificados)
