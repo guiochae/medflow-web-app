@@ -114,12 +114,35 @@ function getPatientVitalsHeaderHtml(patient) {
   `;
 }
 
-// Estado temporal de la consulta activa (diagnósticos, estudios y tratamientos aceptados)
+// Catálogo estándar de procedimientos clínicos menores en consulta con costos de referencia
+export const COMMON_PROCEDURES_CATALOG = [
+  { name: 'Curación Simple (Herida pequeña / quemadura)', defaultCost: 75.00 },
+  { name: 'Curación Mayor / Compleja / Dehiscencia', defaultCost: 150.00 },
+  { name: 'Paracentesis Diagnóstica / Evacuadora', defaultCost: 350.00 },
+  { name: 'Toracocentesis', defaultCost: 450.00 },
+  { name: 'Sutura de Herida Menor (1 a 4 puntos)', defaultCost: 150.00 },
+  { name: 'Sutura de Herida Mayor / Compleja (+5 puntos)', defaultCost: 250.00 },
+  { name: 'Retiro de Puntos / Grapas Quirúrgicas', defaultCost: 50.00 },
+  { name: 'Nebulización Simple con Medicamento', defaultCost: 60.00 },
+  { name: 'Colocación de Sonda Foley (Vesical)', defaultCost: 125.00 },
+  { name: 'Colocación de Sonda Nasogástrica (SNG)', defaultCost: 150.00 },
+  { name: 'Lavado de Oído / Extracción de Cerumen', defaultCost: 100.00 },
+  { name: 'Drenaje de Absceso / Hematoma', defaultCost: 175.00 },
+  { name: 'Infiltración Intraarticular / Terapéutica', defaultCost: 200.00 },
+  { name: 'Cauterización / Crioterapia de Verrugas/Lesión', defaultCost: 125.00 },
+  { name: 'Extracción de Cuerpo Extraño (Ojo, Nariz, Oído, Piel)', defaultCost: 125.00 },
+  { name: 'Canalización de Vía Venosa / Venoclisis', defaultCost: 50.00 },
+  { name: 'Toma de Biopsia de Piel / Punción', defaultCost: 300.00 },
+  { name: 'Inmovilización / Férula de Yeso', defaultCost: 180.00 }
+];
+
+// Estado temporal de la consulta activa (diagnósticos, estudios, tratamientos y procedimientos aceptados)
 let activeConsultationState = {
-  diagnoses: [],  // { code, description }
-  labs: [],       // string names
-  imaging: [],    // string names
-  treatments: []  // string names
+  diagnoses: [],   // { code, description }
+  labs: [],        // string names
+  imaging: [],     // string names
+  treatments: [],  // string names
+  procedures: []   // { id, name, cost, notes }
 };
 
 // Bandera para redirección diferida a recetario tras grabar consulta
@@ -624,6 +647,44 @@ export function showPastConsultationDetail(consultation, patient, onSaveCallback
     </div>
 
     ${gyoHtml}
+${(() => {
+  const pastProcedures = consultation.procedures || [];
+  if (pastProcedures.length === 0) return '';
+  const totalProcCost = pastProcedures.reduce((sum, p) => sum + (parseFloat(p.cost) || 0), 0);
+  return `
+    <div class="report-section" style="margin-bottom: 1rem;">
+      <div class="report-section-title" style="font-weight: bold; color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">
+        🩹 Procedimientos Realizados en Consulta (${pastProcedures.length})
+      </div>
+      <div style="background: rgba(0, 242, 254, 0.02); border: 1px solid rgba(0, 242, 254, 0.15); padding: 12px; border-radius: 6px; font-size: 0.88rem;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="border-bottom: 1px solid var(--border-color); text-align: left; color: var(--text-muted); font-size: 0.8rem;">
+              <th style="padding: 4px 8px;">Procedimiento</th>
+              <th style="padding: 4px 8px;">Observaciones / Detalle</th>
+              <th style="padding: 4px 8px; text-align: right;">Costo (Q)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${pastProcedures.map(pr => `
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                <td style="padding: 6px 8px; font-weight: bold; color: var(--accent-primary);">🩹 ${pr.name}</td>
+                <td style="padding: 6px 8px; color: var(--text-muted); font-size: 0.8rem;">${pr.notes || '<span style="font-style:italic;">Sin observaciones</span>'}</td>
+                <td style="padding: 6px 8px; text-align: right; font-weight: bold; color: var(--accent-success); font-family: monospace;">Q${parseFloat(pr.cost || 0).toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+          <tfoot>
+            <tr style="border-top: 1px solid var(--border-color); font-weight: bold;">
+              <td colspan="2" style="padding: 8px; text-align: right;">Subtotal Procedimientos:</td>
+              <td style="padding: 8px; text-align: right; color: var(--accent-success); font-family: monospace;">Q${totalProcCost.toFixed(2)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  `;
+})()}
 
     <div class="report-section" style="margin-bottom: 1.5rem;">
       <div class="report-section-title" style="font-weight: bold; color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Diagnóstico y Auxiliares (CIE-10)</div>
@@ -754,7 +815,8 @@ function renderConsultationForm(patient, doctors) {
     diagnoses: [],
     labs: [],
     imaging: [],
-    treatments: []
+    treatments: [],
+    procedures: []
   };
 
   shouldRedirectToPrescriptionOnSave = false;
@@ -939,6 +1001,81 @@ function renderConsultationForm(patient, doctors) {
           <textarea id="c-clinical-diagnosis" required placeholder="Escriba el Diagnóstico Clínico del médico (Ej. Amigdalitis Aguda Bacteriana, Síndrome Febril, HTA no controlada...)" style="min-height: 90px; border: 1px solid var(--accent-primary); border-radius: var(--radius-sm);"></textarea>
         </div>
 
+        <!-- SECCIÓN: PROCEDIMIENTOS REALIZADOS EN CONSULTA (CURACIONES, PARACENTESIS, SUTURAS, ETC.) -->
+        <div class="glass-card" style="background: rgba(0, 242, 254, 0.03); border: 1px solid rgba(0, 242, 254, 0.2); padding: 1.25rem; border-radius: var(--radius-sm); margin-top: 1.5rem; margin-bottom: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 8px;">
+            <div>
+              <h4 style="margin: 0; color: var(--accent-primary); display: flex; align-items: center; gap: 8px; font-size: 1rem; font-family: var(--font-heading);">
+                <span>🩹</span> Procedimientos Clínicos en Consulta (Curaciones, Paracentesis, etc.)
+              </h4>
+              <p style="font-size: 0.8rem; color: var(--text-muted); margin: 3px 0 0 0;">
+                Registre curaciones, punciones o procedimientos menores efectuados. El costo se asigna manualmente y se sumará a la factura del paciente.
+              </p>
+            </div>
+            <div id="procedures-total-badge" style="background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-primary); padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: bold; color: var(--accent-primary);">
+              Subtotal Procedimientos: Q0.00
+            </div>
+          </div>
+
+          <!-- Entradas para agregar procedimiento -->
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1.5fr auto; gap: 10px; align-items: flex-end; background: rgba(255,255,255,0.02); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color);">
+            <div class="form-group" style="margin: 0;">
+              <label for="proc-name-input" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Procedimiento Realizado:</label>
+              <input type="text" id="proc-name-input" list="list-common-procedures" placeholder="Ej. Curación simple, Paracentesis..." style="width: 100%; padding: 8px; font-size: 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+              <datalist id="list-common-procedures">
+                ${COMMON_PROCEDURES_CATALOG.map(cp => `<option value="${cp.name}">${cp.name} (Sugerido: Q${cp.defaultCost.toFixed(2)})</option>`).join('')}
+              </datalist>
+            </div>
+
+            <div class="form-group" style="margin: 0;">
+              <label for="proc-cost-input" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Costo Manual (Q) *:</label>
+              <input type="number" id="proc-cost-input" step="0.01" min="0" placeholder="0.00" style="width: 100%; padding: 8px; font-size: 0.85rem; font-weight: bold; border-radius: var(--radius-sm); border: 1.5px solid var(--accent-primary); background: var(--bg-card); color: var(--accent-primary);">
+            </div>
+
+            <div class="form-group" style="margin: 0;">
+              <label for="proc-notes-input" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Detalle / Observación:</label>
+              <input type="text" id="proc-notes-input" placeholder="Ej. 3 puntos nylon 4-0 en ceja izquierda" style="width: 100%; padding: 8px; font-size: 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+            </div>
+
+            <div>
+              <button type="button" class="btn btn-primary" id="btn-add-procedure-row" style="padding: 8px 14px; font-size: 0.85rem; height: 36px; display: flex; align-items: center; gap: 6px; font-weight: bold; white-space: nowrap;">
+                <span>➕</span> Agregar
+              </button>
+            </div>
+          </div>
+
+          <!-- Accesos Rápidos de Procedimientos Comunes -->
+          <div style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+            <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: bold;">Accesos rápidos:</span>
+            <button type="button" class="btn-quick-proc" data-name="Curación Simple" data-cost="75.00" style="font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer;">🩹 Curación (Q75)</button>
+            <button type="button" class="btn-quick-proc" data-name="Paracentesis" data-cost="350.00" style="font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer;">💧 Paracentesis (Q350)</button>
+            <button type="button" class="btn-quick-proc" data-name="Sutura de Herida" data-cost="150.00" style="font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer;">🧵 Sutura (Q150)</button>
+            <button type="button" class="btn-quick-proc" data-name="Nebulización" data-cost="60.00" style="font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer;">💨 Nebulización (Q60)</button>
+            <button type="button" class="btn-quick-proc" data-name="Colocación de Sonda Foley" data-cost="125.00" style="font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer;">💉 Sonda Foley (Q125)</button>
+            <button type="button" class="btn-quick-proc" data-name="Lavado de Oído" data-cost="100.00" style="font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer;">👂 Lavado Oído (Q100)</button>
+            <button type="button" class="btn-quick-proc" data-name="Drenaje de Absceso" data-cost="175.00" style="font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer;">🔪 Drenaje Absceso (Q175)</button>
+            <button type="button" class="btn-quick-proc" data-name="Retiro de Puntos" data-cost="50.00" style="font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer;">✂️ Retiro Puntos (Q50)</button>
+            <button type="button" class="btn-quick-proc" data-name="Toracocentesis" data-cost="450.00" style="font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer;">🫁 Toracocentesis (Q450)</button>
+          </div>
+
+          <!-- Listado tabular de procedimientos agregados -->
+          <div id="procedures-table-container" style="margin-top: 12px; display: none; background: rgba(0,0,0,0.15); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+              <thead>
+                <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted); text-align: left;">
+                  <th style="padding: 6px 8px;">Procedimiento</th>
+                  <th style="padding: 6px 8px;">Detalle / Observaciones</th>
+                  <th style="padding: 6px 8px; text-align: right; width: 120px;">Costo (Q)</th>
+                  <th style="padding: 6px 8px; text-align: center; width: 50px;"></th>
+                </tr>
+              </thead>
+              <tbody id="procedures-table-body">
+                <!-- Se inyecta dinámicamente -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <!-- Interconsulta / Referencia Médica -->
         <div style="background: rgba(157, 78, 221, 0.04); border: 1px solid rgba(157, 78, 221, 0.25); padding: 1.25rem; border-radius: var(--radius-sm); margin-top: 1.5rem; margin-bottom: 1.5rem;">
           <h4 style="margin-bottom: 0.5rem; color: var(--accent-secondary); display: flex; align-items: center; gap: 8px;">
@@ -978,12 +1115,15 @@ function renderConsultationForm(patient, doctors) {
           </div>
         </div>
 
-        <div class="form-row" style="margin-top: 1.5rem; align-items: flex-end;">
-          <div class="form-group" style="max-width: 250px; margin-bottom: 0;">
-            <label for="c-fee">Cobro de la Consulta (Q)</label>
+        <div class="form-row" style="margin-top: 1.5rem; align-items: flex-end; flex-wrap: wrap; gap: 15px;">
+          <div class="form-group" style="max-width: 200px; margin-bottom: 0;">
+            <label for="c-fee">Cobro Consulta (Q)</label>
             <input type="number" id="c-fee" value="200.00" step="1" min="0" required>
           </div>
-          <div id="assistant-action-buttons-container" style="display: flex; gap: 10px; align-items: center; margin-bottom: 0; padding-bottom: 0;">
+          <div id="total-consult-factura-badge" style="background: rgba(16, 185, 129, 0.1); border: 1.5px solid var(--accent-success); padding: 8px 14px; border-radius: 6px; font-size: 0.88rem; color: var(--accent-success); font-weight: bold; display: flex; align-items: center; gap: 8px; margin-bottom: 0;">
+            <span>🧾 Total Factura (Consulta + Procedimientos):</span> <strong id="lbl-total-factura-amount">Q200.00</strong>
+          </div>
+          <div id="assistant-action-buttons-container" style="display: flex; gap: 10px; align-items: center; margin-bottom: 0; padding-bottom: 0; margin-left: auto;">
             <!-- Botones de acciones del asistente se renderizan aquí -->
           </div>
         </div>
@@ -1009,6 +1149,129 @@ function renderConsultationForm(patient, doctors) {
 
   reasonInput.addEventListener('input', handleInputTrigger);
   symptomsInput.addEventListener('input', handleInputTrigger);
+
+  // Manejador de Procedimientos Clínicos y Curaciones
+  const procNameInput = document.getElementById('proc-name-input');
+  const procCostInput = document.getElementById('proc-cost-input');
+  const procNotesInput = document.getElementById('proc-notes-input');
+  const btnAddProc = document.getElementById('btn-add-procedure-row');
+  const procTableContainer = document.getElementById('procedures-table-container');
+  const procTableBody = document.getElementById('procedures-table-body');
+  const procTotalBadge = document.getElementById('procedures-total-badge');
+  const lblTotalFactura = document.getElementById('lbl-total-factura-amount');
+  const feeInput = document.getElementById('c-fee');
+
+  // Auto-completar costo sugerido si se selecciona del catálogo común
+  if (procNameInput) {
+    procNameInput.addEventListener('input', () => {
+      const val = procNameInput.value.trim();
+      const matched = COMMON_PROCEDURES_CATALOG.find(c => c.name.toLowerCase() === val.toLowerCase());
+      if (matched && (!procCostInput.value || procCostInput.value === '0' || procCostInput.value === '0.00' || procCostInput.value === '')) {
+        procCostInput.value = matched.defaultCost.toFixed(2);
+      }
+    });
+  }
+
+  // Quick Chips de Procedimientos
+  container.querySelectorAll('.btn-quick-proc').forEach(chip => {
+    chip.addEventListener('click', (e) => {
+      e.preventDefault();
+      const name = chip.getAttribute('data-name');
+      const cost = chip.getAttribute('data-cost');
+      if (procNameInput) procNameInput.value = name;
+      if (procCostInput) procCostInput.value = cost;
+      if (procNotesInput) procNotesInput.focus();
+    });
+  });
+
+  const updateProceduresUI = () => {
+    const list = activeConsultationState.procedures || [];
+    const totalProcCost = list.reduce((sum, p) => sum + (parseFloat(p.cost) || 0), 0);
+    const consultFee = parseFloat(feeInput ? feeInput.value : 200) || 0;
+    const grandTotal = consultFee + totalProcCost;
+
+    if (procTotalBadge) {
+      procTotalBadge.textContent = `Subtotal Procedimientos: Q${totalProcCost.toFixed(2)}`;
+    }
+    if (lblTotalFactura) {
+      lblTotalFactura.textContent = `Q${grandTotal.toFixed(2)}`;
+    }
+
+    if (list.length === 0) {
+      if (procTableContainer) procTableContainer.style.display = 'none';
+      if (procTableBody) procTableBody.innerHTML = '';
+      return;
+    }
+
+    if (procTableContainer) procTableContainer.style.display = 'block';
+    if (procTableBody) {
+      procTableBody.innerHTML = list.map((pr, idx) => `
+        <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+          <td style="padding: 6px 8px; font-weight: bold; color: var(--accent-primary);">
+            🩹 ${pr.name}
+          </td>
+          <td style="padding: 6px 8px; color: var(--text-muted); font-size: 0.8rem;">
+            ${pr.notes || '<span style="font-style:italic;">Sin observaciones</span>'}
+          </td>
+          <td style="padding: 6px 8px; text-align: right; font-weight: bold; color: var(--accent-success); font-family: monospace;">
+            Q${parseFloat(pr.cost || 0).toFixed(2)}
+          </td>
+          <td style="padding: 6px 8px; text-align: center;">
+            <button type="button" class="btn-del-proc-item" data-idx="${idx}" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 0.9rem; line-height: 1;" title="Eliminar Procedimiento">🗑️</button>
+          </td>
+        </tr>
+      `).join('');
+
+      procTableBody.querySelectorAll('.btn-del-proc-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.getAttribute('data-idx'));
+          activeConsultationState.procedures.splice(idx, 1);
+          updateProceduresUI();
+        });
+      });
+    }
+  };
+
+  if (btnAddProc) {
+    btnAddProc.addEventListener('click', (e) => {
+      e.preventDefault();
+      const name = procNameInput ? procNameInput.value.trim() : '';
+      if (!name) {
+        alert("Por favor ingrese el nombre del procedimiento realizado (ej. Curación simple, Paracentesis, etc.).");
+        if (procNameInput) procNameInput.focus();
+        return;
+      }
+      const rawCost = procCostInput ? procCostInput.value : '';
+      const cost = parseFloat(rawCost);
+      if (isNaN(cost) || cost < 0) {
+        alert("Por favor ingrese un costo válido (ej. 75.00, 150.00, o 0 para cortesía).");
+        if (procCostInput) procCostInput.focus();
+        return;
+      }
+      const notes = procNotesInput ? procNotesInput.value.trim() : '';
+
+      activeConsultationState.procedures = activeConsultationState.procedures || [];
+      activeConsultationState.procedures.push({
+        id: 'proc-' + Date.now(),
+        name,
+        cost,
+        notes
+      });
+
+      if (procNameInput) procNameInput.value = '';
+      if (procCostInput) procCostInput.value = '';
+      if (procNotesInput) procNotesInput.value = '';
+
+      updateProceduresUI();
+    });
+  }
+
+  if (feeInput) {
+    feeInput.addEventListener('input', updateProceduresUI);
+  }
+
+  // Inicializar UI de procedimientos
+  updateProceduresUI();
 
   // Manejadores especiales para Ginecología y Obstetricia
   const specialtySelect = document.getElementById('c-specialty');
@@ -1598,6 +1861,12 @@ function renderConsultationForm(patient, doctors) {
         imaging: [...activeConsultationState.imaging]
       },
       acceptedTreatments: [...activeConsultationState.treatments],
+      procedures: (activeConsultationState.procedures || []).map(p => ({
+        id: p.id || ('proc-' + Date.now()),
+        name: p.name,
+        cost: parseFloat(p.cost) || 0,
+        notes: p.notes || ''
+      })),
       fee,
       gyoData: specialty === 'Ginecología y Obstetricia' ? {
         fur: document.getElementById('gyo-fur').value,
@@ -1629,8 +1898,18 @@ function renderConsultationForm(patient, doctors) {
       b.date.substring(0, 10) === todayStr
     );
 
-    const details = [{ description: 'Honorarios de consulta médica', amount: fee }];
+    const details = [{ description: `Honorarios de consulta médica (${specialty})`, amount: fee }];
     let total = fee;
+
+    // Agregar procedimientos realizados en consulta al cobro / factura
+    if (newConsultation.procedures && newConsultation.procedures.length > 0) {
+      newConsultation.procedures.forEach(proc => {
+        const pCost = parseFloat(proc.cost) || 0;
+        const pDesc = `Procedimiento en Consulta: ${proc.name}${proc.notes ? ` (${proc.notes})` : ''}`;
+        details.push({ description: pDesc, amount: pCost });
+        total += pCost;
+      });
+    }
 
     // Agregar laboratorios aceptados al cobro
     if (newConsultation.acceptedStudies && newConsultation.acceptedStudies.labs) {

@@ -2027,7 +2027,17 @@ function showClinicalHistoryModal(patient) {
                     ${c.acceptedTreatments.map(tx => `• ${tx}`).join('<br>')}
                   </p>
                 ` : ''}
-                <p style="margin-top: 4px; color: var(--accent-success); font-weight: 500;">Costo Consulta: Q${feeVal}</p>
+                ${c.procedures && c.procedures.length > 0 ? `
+                  <div style="margin-top: 6px; padding: 6px 10px; background: rgba(0, 242, 254, 0.04); border-left: 3px solid var(--accent-primary); border-radius: 4px;">
+                    <strong style="color: var(--accent-primary);">🩹 Procedimientos Realizados en Consulta:</strong>
+                    <ul style="margin: 4px 0 0 15px; padding: 0;">
+                      ${c.procedures.map(pr => `<li><strong>${pr.name}</strong> ${pr.notes ? `(${pr.notes})` : ''} — <span style="color: var(--accent-success); font-weight: bold;">Q${parseFloat(pr.cost || 0).toFixed(2)}</span></li>`).join('')}
+                    </ul>
+                  </div>
+                ` : ''}
+                <p style="margin-top: 6px; color: var(--accent-success); font-weight: 500;">
+                  Costo Consulta: Q${feeVal} ${c.procedures && c.procedures.length > 0 ? `(+ Procedimientos: Q${c.procedures.reduce((sum, p) => sum + (parseFloat(p.cost) || 0), 0).toFixed(2)})` : ''}
+                </p>
               </div>
             </div>
             `;
