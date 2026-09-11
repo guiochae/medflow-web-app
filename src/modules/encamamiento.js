@@ -348,11 +348,23 @@ function renderActiveTabContent(activeHosp, patient) {
           
           <!-- Card de Órdenes e Indicaciones de Ingreso -->
           <div class="glass-card" style="padding: 1.25rem; border-left: 4px solid var(--accent-secondary);">
-            <h3 style="margin-bottom: 8px; color: var(--accent-secondary); font-family: var(--font-heading); font-size: 1.1rem;">📋 Órdenes Médicas y Dieta al Ingreso</h3>
-            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; color: var(--text-primary);">
+            <h3 style="margin-bottom: 8px; color: var(--accent-secondary); font-family: var(--font-heading); font-size: 1.1rem;">📋 Datos Clínicos y Órdenes de Ingreso</h3>
+            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem; color: var(--text-primary);">
               <div><strong>🥦 Dieta Actual:</strong> <span style="color: var(--accent-primary); font-weight: bold; font-size: 0.9rem;">${activeHosp.dietType || 'No especificada'}</span></div>
-              <div><strong>🩺 Diagnóstico de Ingreso:</strong> <span style="color: var(--text-muted);">${activeHosp.admissionReason}</span></div>
-              <div style="margin-top: 6px; background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); padding: 10px; border-radius: var(--radius-sm);">
+              <div><strong>🩺 Diagnóstico de Ingreso:</strong> <span style="color: var(--text-primary); font-weight: 600;">${activeHosp.admissionReason}</span></div>
+              ${activeHosp.chiefComplaint ? `
+                <div style="background: rgba(255,255,255,0.015); border: 1px solid var(--border-color); padding: 8px 10px; border-radius: var(--radius-sm);">
+                  <strong>📜 Motivo de Consulta e Historia:</strong>
+                  <p style="white-space: pre-wrap; font-size: 0.82rem; margin: 3px 0 0 0; color: var(--text-muted); line-height: 1.35;">${activeHosp.chiefComplaint}</p>
+                </div>
+              ` : ''}
+              ${activeHosp.physicalExam ? `
+                <div style="background: rgba(255,255,255,0.015); border: 1px solid var(--border-color); padding: 8px 10px; border-radius: var(--radius-sm);">
+                  <strong>🩺 Examen Físico al Ingreso:</strong>
+                  <p style="white-space: pre-wrap; font-size: 0.82rem; margin: 3px 0 0 0; color: var(--text-muted); line-height: 1.35;">${activeHosp.physicalExam}</p>
+                </div>
+              ` : ''}
+              <div style="margin-top: 2px; background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); padding: 10px; border-radius: var(--radius-sm);">
                 <strong>📋 Órdenes Iniciales:</strong>
                 <p style="white-space: pre-wrap; font-family: monospace; font-size: 0.82rem; margin: 4px 0 0 0; color: var(--text-muted); line-height: 1.4;">${activeHosp.admissionOrders || 'Ninguna registrada'}</p>
                 ${activeHosp.specialIndications && activeHosp.specialIndications.length > 0 ? `
@@ -830,6 +842,33 @@ function renderActiveTabContent(activeHosp, patient) {
   }
 }
 
+// Obtener o inicializar las 6 habitaciones estándar de encamamiento
+export function getHospitalRooms(state) {
+  const defaultRooms = [
+    { id: 'hab-1', name: 'Habitación 1', price: 0 },
+    { id: 'hab-2', name: 'Habitación 2', price: 0 },
+    { id: 'hab-3', name: 'Habitación 3', price: 0 },
+    { id: 'hab-4', name: 'Habitación 4', price: 0 },
+    { id: 'hab-5', name: 'Habitación 5', price: 0 },
+    { id: 'hab-6', name: 'Habitación 6', price: 0 }
+  ];
+
+  if (!state.roomRates || state.roomRates.length === 0) {
+    state.roomRates = defaultRooms;
+    saveAppState(state);
+    return defaultRooms;
+  }
+
+  // Asegurar que las 6 habitaciones estándar existan en el estado
+  defaultRooms.forEach(dr => {
+    if (!state.roomRates.some(r => r.name && r.name.toLowerCase().trim() === dr.name.toLowerCase().trim())) {
+      state.roomRates.push(dr);
+    }
+  });
+
+  return state.roomRates;
+}
+
 // Renderizar formulario de ingreso hospitalario
 export function renderAdmissionForm(targetPatientId = null, prefilledData = null) {
   const state = getAppState();
@@ -838,7 +877,9 @@ export function renderAdmissionForm(targetPatientId = null, prefilledData = null
 
   dashboardArea.innerHTML = `
     <div class="glass-card" style="padding: 1.5rem; border-top: 3px solid var(--accent-primary);">
-      <h3 style="margin-bottom: 1.25rem; color: var(--accent-primary);">Registrar Ingreso Hospitalario</h3>
+      <h3 style="margin-bottom: 1.25rem; color: var(--accent-primary); display: flex; align-items: center; gap: 8px;">
+        <span>🛌</span> Registrar Ingreso Hospitalario (Encamamiento)
+      </h3>
       <form id="hosp-admission-form" style="display: flex; flex-direction: column; gap: 15px;">
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; flex-wrap: wrap;">
           <div class="form-group">
@@ -862,9 +903,9 @@ export function renderAdmissionForm(targetPatientId = null, prefilledData = null
             </select>
           </div>
           <div class="form-group">
-            <label>Tipo de Habitación</label>
+            <label>Habitación Asignada (6 Disponibles)</label>
             <select id="adm-room" required style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
-              <!-- Se inyectan tarifas -->
+              <!-- Se inyectan las 6 habitaciones con estado de ocupación -->
             </select>
           </div>
           <div class="form-group">
@@ -875,8 +916,8 @@ export function renderAdmissionForm(targetPatientId = null, prefilledData = null
             <label>Teléfono de Familiar Responsable</label>
             <input type="tel" id="adm-fam-phone" required placeholder="Ej. 5555-1234" style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
           </div>
-          <div class="form-group">
-            <label>Tipo de Dieta</label>
+          <div class="form-group" style="grid-column: 1 / -1;">
+            <label>Tipo de Dieta al Ingreso</label>
             <select id="adm-diet-type" required style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
               <option value="Dieta Libre / Normal">Dieta Libre / Normal</option>
               <option value="Dieta Blanda">Dieta Blanda</option>
@@ -891,9 +932,27 @@ export function renderAdmissionForm(targetPatientId = null, prefilledData = null
           </div>
         </div>
 
+        <!-- Sección de Motivo de Consulta e Historia de la Enfermedad Actual -->
         <div class="form-group">
-          <label>Diagnóstico o razón de ingreso</label>
-          <textarea id="adm-reason" required rows="2" placeholder="Detalle los síntomas, examen físico inicial y sospecha de diagnóstico..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical;"></textarea>
+          <label style="color: var(--accent-primary); font-weight: bold;">Motivo de Consulta e Historia de la Enfermedad Actual</label>
+          <textarea id="adm-chief-complaint" required rows="3" placeholder="Describa el motivo de consulta principal, tiempo de evolución, sintomatología y antecedentes relevantes para el ingreso..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical;"></textarea>
+        </div>
+
+        <!-- Diagnóstico Presuntivo de Ingreso -->
+        <div class="form-group">
+          <label style="color: var(--accent-primary); font-weight: bold;">Diagnóstico de Ingreso / Razón de Hospitalización</label>
+          <input type="text" id="adm-reason" required placeholder="Ej. Neumonía adquirida en la comunidad / Colecistitis aguda / Apendicitis en estudio..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+        </div>
+
+        <!-- Sección de Examen Físico al Ingreso -->
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label style="color: var(--accent-secondary); font-weight: bold; margin: 0;">Examen Físico al Ingreso</label>
+            <div style="display: flex; gap: 5px;">
+              <button type="button" class="btn btn-secondary btn-small" id="btn-adm-phys-template" style="padding: 2px 8px; font-size: 0.72rem;">✨ Plantilla Estándar</button>
+            </div>
+          </div>
+          <textarea id="adm-physical-exam" required rows="5" placeholder="Aspecto General: Estado general, nivel de conciencia, orientación...\nCabeza y Cuello: Normocéfalo, pupilas, mucosas, tiroides, adenopatías...\nTórax y Pulmones: Movimientos respiratorios, murmullo vesicular, ruidos agregados...\nCardiovascular: Ruidos cardíacos rítmicos, soplos...\nAbdomen: RHA presentes, blando, depresible, puntos dolorosos, visceromegalias...\nExtremidades: Simetría, tono, pulsos periféricos, edemas...\nNeurológico: Glasgow, funciones superiores, reflejos osteotendinosos..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical; font-size: 0.85rem; line-height: 1.4;"></textarea>
         </div>
 
         <!-- Sección de Órdenes Médicas Segmentadas -->
@@ -1004,15 +1063,29 @@ export function renderAdmissionForm(targetPatientId = null, prefilledData = null
     doctorSelect.innerHTML = doctors.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
   }
 
-  // Poblar tarifas dropdown
+  // Poblar habitaciones dropdown (6 habitaciones disponibles)
   const roomSelect = document.getElementById('adm-room');
-  const rates = state.roomRates || [];
+  const rooms = getHospitalRooms(state);
+  const activeHosps = (state.encamamiento || []).filter(h => h.status === 'Activo');
+  const occupiedRoomNames = activeHosps.map(h => h.roomName);
+
   if (roomSelect) {
-    if (rates.length === 0) {
-      roomSelect.innerHTML = '<option value="default" data-price="0">Cama Hospitalaria General</option>';
-    } else {
-      roomSelect.innerHTML = rates.map(r => `<option value="${r.id}" data-price="0">${r.name}</option>`).join('');
-    }
+    roomSelect.innerHTML = rooms.map(r => {
+      const isOccupied = occupiedRoomNames.includes(r.name);
+      return `<option value="${r.id}" ${isOccupied ? 'disabled style="color:var(--text-muted); font-style:italic;"' : ''}>${r.name} ${isOccupied ? '(Ocupada ❌)' : '(Disponible 🟢)'}</option>`;
+    }).join('');
+  }
+
+  // Bind Plantilla Estándar de Examen Físico
+  const btnPhysTemplate = document.getElementById('btn-adm-phys-template');
+  if (btnPhysTemplate) {
+    btnPhysTemplate.addEventListener('click', () => {
+      const template = `Aspecto General: Paciente consciente, orientado en tiempo, espacio y persona, normolíneo, estado general conservado.\nCabeza y Cuello: Normocéfalo, pupilas isocóricas fotorreactivas, escleras anictéricas, mucosas orales húmedas, cuello simétrico, sin adenopatías ni ingurgitación yugular.\nTórax y Pulmones: Simétrico, adecuada expansibilidad, campos pulmonares bien ventilados con murmullo vesicular presente bilateral, sin estertores ni sibilancias.\nCardiovascular: Ruidos cardíacos rítmicos y sincrónicos con el pulso periférico, sin soplos ni ruidos agregados.\nAbdomen: Blando, depresible, no doloroso a la palpación superficial ni profunda, ruidos hidroaéreos presentes normoactivos, sin visceromegalias ni signos de irritación peritoneal.\nExtremidades: Simétricas, eutróficas, pulsos periféricos distales presentes, llenado capilar < 2 segundos, sin edema ni cianosis.\nNeurológico: Escala de Glasgow 15/15, sin focalización motora ni sensitiva, reflejos osteotendinosos conservados.`;
+      const physInput = document.getElementById('adm-physical-exam');
+      if (physInput) {
+        physInput.value = template;
+      }
+    });
   }
 
   // Pre-rellenar campos si se pasa prefilledData (ej. traslado desde Emergencias)
@@ -1020,8 +1093,18 @@ export function renderAdmissionForm(targetPatientId = null, prefilledData = null
     if (prefilledData.origin && document.getElementById('adm-origin')) {
       document.getElementById('adm-origin').value = prefilledData.origin;
     }
-    if (prefilledData.reason && document.getElementById('adm-reason')) {
-      document.getElementById('adm-reason').value = prefilledData.reason;
+    if (prefilledData.chiefComplaint && document.getElementById('adm-chief-complaint')) {
+      document.getElementById('adm-chief-complaint').value = prefilledData.chiefComplaint;
+    } else if (prefilledData.reason && document.getElementById('adm-chief-complaint')) {
+      document.getElementById('adm-chief-complaint').value = prefilledData.reason;
+    }
+    if (prefilledData.admissionReason && document.getElementById('adm-reason')) {
+      document.getElementById('adm-reason').value = prefilledData.admissionReason;
+    } else if (prefilledData.reason && document.getElementById('adm-reason')) {
+      document.getElementById('adm-reason').value = prefilledData.reason.split('\n')[0];
+    }
+    if (prefilledData.physicalExam && document.getElementById('adm-physical-exam')) {
+      document.getElementById('adm-physical-exam').value = prefilledData.physicalExam;
     }
     if (prefilledData.vitals) {
       const v = prefilledData.vitals;
@@ -1063,7 +1146,9 @@ export function renderAdmissionForm(targetPatientId = null, prefilledData = null
 
     const famName = document.getElementById('adm-fam-name').value;
     const famPhone = document.getElementById('adm-fam-phone').value;
-    const reason = document.getElementById('adm-reason').value;
+    const chiefComplaint = document.getElementById('adm-chief-complaint').value.trim();
+    const reason = document.getElementById('adm-reason').value.trim();
+    const physicalExam = document.getElementById('adm-physical-exam').value.trim();
     const dietType = document.getElementById('adm-diet-type').value.trim();
     
     const infusionsVal = document.getElementById('adm-orders-infusions').value.trim();
@@ -1107,13 +1192,15 @@ export function renderAdmissionForm(targetPatientId = null, prefilledData = null
       patientId: pId,
       patientName: patientObj.name,
       origin: origin,
-      doctorName: docObj.name,
-      doctorId: docObj.id,
+      doctorName: docObj ? docObj.name : 'Médico Tratante',
+      doctorId: docObj ? docObj.id : null,
       roomRateId: roomRateId,
       roomName: roomName,
       responsibleFamilyName: famName,
       responsibleFamilyPhone: famPhone,
+      chiefComplaint: chiefComplaint,
       admissionReason: reason,
+      physicalExam: physicalExam,
       dietType: dietType,
       admissionOrders: admissionOrders,
       specialIndications: specialIndications,
@@ -1134,7 +1221,7 @@ export function renderAdmissionForm(targetPatientId = null, prefilledData = null
     setActivePatientId(pId);
     saveAppState(state);
 
-    alert(`Ingreso hospitalario completado para el paciente ${patientObj.name}`);
+    alert(`Ingreso hospitalario completado para el paciente ${patientObj.name} en ${roomName}`);
     renderEncamamiento(document.getElementById('module-container'));
   });
 }

@@ -67,10 +67,10 @@ export function showAdmissionReportsModal(episodeData, patient, moduleType = 'en
             <div style="flex: 1;">
               <div style="font-weight: bold; color: var(--text-primary); font-size: 0.92rem; display: flex; justify-content: space-between; align-items: center;">
                 <span>1. Información del Paciente (Ingreso)</span>
-                <span style="font-size: 0.7rem; background: rgba(37,99,235,0.15); color: #60a5fa; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Dossier Inicial</span>
+                <span style="font-size: 0.7rem; background: rgba(37,99,235,0.15); color: #60a5fa; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Dossier Completo</span>
               </div>
               <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 3px; line-height: 1.35;">
-                Incluye información general del paciente, signos vitales de ingreso, diagnóstico presuntivo al ingreso y órdenes médicas / indicaciones iniciales.
+                Incluye datos generales, signos vitales de ingreso, motivo de consulta, examen físico al ingreso, diagnóstico presuntivo y órdenes médicas iniciales.
               </div>
             </div>
           </label>
@@ -219,26 +219,26 @@ export function generateAndPrintAdmissionReports(episodeData, patient, selectedR
   // Función interna para renderizar el encabezado institucional oficial
   function renderClinicHeader(docTitle, docCode) {
     const logoHtml = clinic.logoData 
-      ? `<img src="${clinic.logoData}" style="max-height: 65px; max-width: 170px; object-fit: contain;">`
-      : `<img src="${logoUrl}" style="max-height: 65px; max-width: 170px; object-fit: contain;">`;
+      ? `<img src="${clinic.logoData}" style="max-height: 60px; max-width: 160px; object-fit: contain;">`
+      : `<img src="${logoUrl}" style="max-height: 60px; max-width: 160px; object-fit: contain;">`;
 
     return `
-      <div class="clinic-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 15px;">
+      <div class="clinic-header">
         <div style="display: flex; align-items: center; gap: 12px; text-align: left;">
           ${logoHtml}
           <div>
-            <h1 style="margin: 0; font-size: 1.2rem; color: #1e3a8a; font-family: 'Helvetica Neue', Arial, sans-serif; font-weight: 800; text-transform: uppercase;">${clinic.name || 'HOSPITAL PRIVADO MULTIMÉDICA SAYAXCHÉ'}</h1>
-            <div style="font-size: 0.78rem; color: #475569; margin-top: 2px; font-weight: 600;">Atención Médica, Quirúrgica y Hospitalaria 24 Horas</div>
-            <div style="font-size: 0.73rem; color: #64748b; margin-top: 2px;">
+            <h1 style="margin: 0; font-size: 1.15rem; color: #1e3a8a; font-family: 'Helvetica Neue', Arial, sans-serif; font-weight: 800; text-transform: uppercase;">${clinic.name || 'HOSPITAL PRIVADO MULTIMÉDICA SAYAXCHÉ'}</h1>
+            <div style="font-size: 0.76rem; color: #475569; margin-top: 1px; font-weight: 600;">Atención Médica, Quirúrgica y Hospitalaria 24 Horas</div>
+            <div style="font-size: 0.72rem; color: #64748b; margin-top: 1px;">
               📍 ${clinic.address || 'Sayaxché, Petén, Guatemala'} | 📞 PBX: ${clinic.phone || '2200-0000'} | ✉️ ${clinic.email || 'contacto@multimedicasayaxche.com'}
             </div>
           </div>
         </div>
-        <div style="text-align: right; min-width: 210px;">
-          <div style="background: #1e3a8a; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">
+        <div style="text-align: right; min-width: 200px;">
+          <div style="background: #1e3a8a; color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">
             ${docTitle}
           </div>
-          <div style="font-size: 0.72rem; color: #64748b; margin-top: 4px; font-weight: 600;">
+          <div style="font-size: 0.7rem; color: #64748b; margin-top: 3px; font-weight: 600;">
             CÓDIGO: <span style="color: #1e3a8a;">${docCode}</span> | FOLIO: <span style="color: #111;">${episodeData.id}</span>
           </div>
         </div>
@@ -249,20 +249,20 @@ export function generateAndPrintAdmissionReports(episodeData, patient, selectedR
   // Función interna para renderizar el encabezado de información básica del paciente (requerido para reportes 2 y 3)
   function renderBasicPatientBanner(sectionTitle = '') {
     return `
-      <div class="patient-basic-banner" style="background: #f8fafc; border: 1px solid #cbd5e1; border-left: 4px solid #1e3a8a; border-radius: 4px; padding: 10px 14px; margin-bottom: 15px; font-size: 0.84rem;">
-        ${sectionTitle ? `<div style="font-weight: bold; color: #1e3a8a; font-size: 0.88rem; margin-bottom: 6px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 4px; text-transform: uppercase;">${sectionTitle}</div>` : ''}
-        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 6px;">
-          <div><strong>Paciente:</strong> <span style="font-size: 0.92rem; font-weight: 700; color: #0f172a;">${patient.name}</span></div>
+      <div class="patient-basic-banner">
+        ${sectionTitle ? `<div style="font-weight: bold; color: #1e3a8a; font-size: 0.82rem; margin-bottom: 5px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 3px; text-transform: uppercase;">${sectionTitle}</div>` : ''}
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 6px; margin-bottom: 5px;">
+          <div><strong>Paciente:</strong> <span style="font-size: 0.9rem; font-weight: 700; color: #0f172a;">${patient.name}</span></div>
           <div><strong>No. Expediente:</strong> ${patient.id || 'N/A'}</div>
           <div><strong>DPI:</strong> ${patient.dpi || 'N/A'}</div>
           <div><strong>Edad / Sexo:</strong> ${age} años / ${patient.gender || 'N/A'}</div>
         </div>
-        <div style="display: grid; grid-template-columns: 2fr 1.5fr 1.5fr; gap: 8px; border-top: 1px solid #e2e8f0; padding-top: 6px;">
+        <div style="display: grid; grid-template-columns: 2fr 1.5fr 1.5fr; gap: 6px; border-top: 1px solid #e2e8f0; padding-top: 5px;">
           <div><strong>Servicio / Cama:</strong> <span style="color: #1e3a8a; font-weight: 600;">${serviceLabel}</span></div>
           <div><strong>Fecha de Ingreso:</strong> ${admissionDateStr}</div>
           <div><strong>Médico Tratante:</strong> Dr. ${episodeData.doctorName || 'No asignado'}</div>
         </div>
-        <div style="margin-top: 6px; border-top: 1px solid #e2e8f0; padding-top: 6px;">
+        <div style="margin-top: 5px; border-top: 1px solid #e2e8f0; padding-top: 5px;">
           <strong>Diagnóstico al Ingreso:</strong> <span style="color: #334155; font-weight: 500;">${episodeData.admissionReason || 'No especificado'}</span>
         </div>
       </div>
@@ -277,18 +277,20 @@ export function generateAndPrintAdmissionReports(episodeData, patient, selectedR
   if (selectedReports.includes('patient_info')) {
     sectionIndex++;
     const docCode = isHosp ? 'HMM-HOSP-ING-01' : 'HMM-EMERG-ING-01';
-    
+    const chiefComplaintText = episodeData.chiefComplaint || episodeData.admissionDetail || episodeData.admissionReason || 'No especificado';
+    const physicalExamText = episodeData.physicalExam || 'No registrado detalladamente al ingreso.';
+
     htmlSections.push(`
-      <div class="report-section section-patient-info" style="${sectionIndex > 1 ? 'page-break-before: always; margin-top: 25px;' : ''}">
+      <div class="report-section section-patient-info" style="${sectionIndex > 1 ? 'page-break-before: always; margin-top: 20px;' : ''}">
         ${renderClinicHeader('HOJA DE INGRESO Y EXPEDIENTE CLÍNICO', docCode)}
 
         <div class="section-title">I. Datos Generales del Paciente y Admisión</div>
         <table class="data-table">
           <tr>
-            <th style="width: 20%;">Nombre Completo:</th>
-            <td style="width: 40%; font-weight: bold; color: #0f172a;">${patient.name}</td>
-            <th style="width: 20%;">No. Expediente:</th>
-            <td style="width: 20%; font-weight: bold; color: #1e3a8a;">${patient.id}</td>
+            <th style="width: 18%;">Nombre Completo:</th>
+            <td style="width: 42%; font-weight: bold; color: #0f172a;">${patient.name}</td>
+            <th style="width: 18%;">No. Expediente:</th>
+            <td style="width: 22%; font-weight: bold; color: #1e3a8a;">${patient.id}</td>
           </tr>
           <tr>
             <th>DPI / CUI:</th>
@@ -317,7 +319,7 @@ export function generateAndPrintAdmissionReports(episodeData, patient, selectedR
           ${episodeData.triageColor ? `
             <tr>
               <th>Clasificación Triage:</th>
-              <td colspan="3"><span style="font-weight: bold; padding: 2px 8px; border-radius: 3px; background: #e0f2fe; color: #0369a1;">Prioridad: ${episodeData.triageColor}</span></td>
+              <td colspan="3"><span style="font-weight: bold; padding: 1px 6px; border-radius: 3px; background: #e0f2fe; color: #0369a1; font-size: 0.78rem;">Prioridad: ${episodeData.triageColor}</span></td>
             </tr>
           ` : ''}
         </table>
@@ -348,37 +350,50 @@ export function generateAndPrintAdmissionReports(episodeData, patient, selectedR
           </tbody>
         </table>
 
-        <div class="section-title">III. Diagnóstico al Ingreso y Tipo de Dieta</div>
-        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 10px 14px; margin-bottom: 12px; font-size: 0.84rem;">
-          <div><strong>Diagnóstico de Ingreso / Motivo:</strong> <span style="color: #0f172a; font-weight: 600;">${episodeData.admissionReason || 'No especificado'}</span></div>
-          ${episodeData.admissionDetail ? `<div style="margin-top: 5px; color: #475569;"><strong>Detalle Clínico / Antecedentes:</strong> ${episodeData.admissionDetail}</div>` : ''}
-          <div style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed #cbd5e1;">
-            <strong>🥦 Dieta Inicial Prescrita:</strong> <span style="color: #1e3a8a; font-weight: bold;">${episodeData.dietType || 'Dieta Libre / Normal'}</span>
+        <div class="section-title">III. Motivo de Consulta e Historia de la Enfermedad Actual</div>
+        <div class="info-box">
+          <p style="white-space: pre-wrap; margin: 0; color: #1e293b; line-height: 1.4;">${chiefComplaintText}</p>
+        </div>
+
+        <div class="section-title">IV. Diagnóstico al Ingreso y Tipo de Dieta</div>
+        <div class="info-box" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; flex-wrap: wrap;">
+          <div style="flex: 1.5;">
+            <strong>🩺 Diagnóstico Presuntivo / Motivo de Hospitalización:</strong>
+            <div style="color: #0f172a; font-weight: 600; margin-top: 2px;">${episodeData.admissionReason || 'No especificado'}</div>
+          </div>
+          <div style="flex: 1; border-left: 1px dashed #cbd5e1; padding-left: 15px;">
+            <strong>🥦 Dieta Inicial Prescrita:</strong>
+            <div style="color: #1e3a8a; font-weight: bold; margin-top: 2px;">${episodeData.dietType || 'Dieta Libre / Normal'}</div>
           </div>
         </div>
 
-        <div class="section-title">IV. Órdenes Médicas e Indicaciones de Ingreso</div>
-        <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 12px; margin-bottom: 15px; font-size: 0.84rem;">
-          <strong style="color: #1e3a8a;">📋 Plan de Manejo y Órdenes Médicas Iniciales:</strong>
-          <p style="white-space: pre-wrap; font-family: monospace; font-size: 0.83rem; color: #334155; margin: 6px 0 0 0; line-height: 1.45;">${episodeData.admissionOrders || episodeData.initialOrders || 'Sin órdenes iniciales registradas'}</p>
+        <div class="section-title">V. Examen Físico al Ingreso</div>
+        <div class="info-box">
+          <p style="white-space: pre-wrap; margin: 0; color: #334155; line-height: 1.4; font-family: inherit;">${physicalExamText}</p>
+        </div>
+
+        <div class="section-title">VI. Órdenes Médicas e Indicaciones de Ingreso</div>
+        <div class="info-box" style="background: #ffffff;">
+          <strong style="color: #1e3a8a;">📋 Plan de Manejo y Órdenes Iniciales:</strong>
+          <p style="white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; color: #334155; margin: 4px 0 0 0; line-height: 1.35;">${episodeData.admissionOrders || episodeData.initialOrders || 'Sin órdenes iniciales registradas'}</p>
           ${episodeData.specialIndications && episodeData.specialIndications.length > 0 ? `
-            <div style="border-top: 1px dashed #cbd5e1; padding-top: 8px; margin-top: 10px;">
+            <div style="border-top: 1px dashed #cbd5e1; padding-top: 6px; margin-top: 8px;">
               <strong style="color: #1e3a8a;">📢 Indicaciones Especiales:</strong>
-              <ul style="margin: 4px 0 0 0; padding-left: 20px; font-size: 0.82rem; color: #1e3a8a;">
+              <ul style="margin: 3px 0 0 0; padding-left: 18px; font-size: 0.78rem; color: #1e3a8a;">
                 ${episodeData.specialIndications.map(ind => `<li>${ind}</li>`).join('')}
               </ul>
             </div>
           ` : ''}
         </div>
 
-        <div class="signatures-box" style="margin-top: 35px; display: flex; justify-content: space-between; font-size: 0.84rem;">
-          <div style="border-top: 1px solid #111; width: 230px; text-align: center; padding-top: 5px;">
+        <div class="signatures-box">
+          <div style="border-top: 1px solid #111; width: 220px; text-align: center; padding-top: 4px;">
             <strong>Firma y Sello del Médico</strong><br>
-            <span style="font-size: 0.76rem; color: #64748b;">Dr. ${episodeData.doctorName || 'Médico Tratante'}</span>
+            <span style="font-size: 0.74rem; color: #64748b;">Dr. ${episodeData.doctorName || 'Médico Tratante'}</span>
           </div>
-          <div style="border-top: 1px solid #111; width: 230px; text-align: center; padding-top: 5px;">
+          <div style="border-top: 1px solid #111; width: 220px; text-align: center; padding-top: 4px;">
             <strong>Firma Paciente / Familiar</strong><br>
-            <span style="font-size: 0.76rem; color: #64748b;">${episodeData.responsibleFamilyName || patient.name}</span>
+            <span style="font-size: 0.74rem; color: #64748b;">${episodeData.responsibleFamilyName || patient.name}</span>
           </div>
         </div>
       </div>
@@ -393,7 +408,7 @@ export function generateAndPrintAdmissionReports(episodeData, patient, selectedR
     const prescs = episodeData.prescriptions || [];
 
     htmlSections.push(`
-      <div class="report-section section-evolutions" style="${sectionIndex > 1 ? 'page-break-before: always; margin-top: 25px;' : ''}">
+      <div class="report-section section-evolutions" style="${sectionIndex > 1 ? 'page-break-before: always; margin-top: 20px;' : ''}">
         <!-- Encabezado Institucional Requerido -->
         ${renderClinicHeader('CRONOLOGÍA DE NOTAS DE EVOLUCIÓN MÉDICA', docCode)}
 
@@ -403,68 +418,68 @@ export function generateAndPrintAdmissionReports(episodeData, patient, selectedR
         <div class="section-title">Registro Cronológico de Notas de Evolución Médica y Prescripciones</div>
 
         ${evos.length > 0 ? evos.map((e, idx) => `
-          <div class="evo-item-card" style="border: 1px solid #cbd5e1; border-left: 4px solid #1e3a8a; border-radius: 4px; padding: 10px 12px; margin-bottom: 12px; background: #ffffff;">
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 6px;">
+          <div class="evo-item-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 5px;">
               <div>
-                <span style="font-weight: bold; color: #1e3a8a; font-size: 0.88rem;">Evolución #${idx + 1} - 📅 ${new Date(e.date).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' })}</span>
-                <span style="font-size: 0.8rem; color: #475569; margin-left: 10px;">| Médico: <strong>Dr. ${e.doctorName || episodeData.doctorName}</strong></span>
+                <span style="font-weight: bold; color: #1e3a8a; font-size: 0.84rem;">Evolución #${idx + 1} - 📅 ${new Date(e.date).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                <span style="font-size: 0.78rem; color: #475569; margin-left: 8px;">| Médico: <strong>Dr. ${e.doctorName || episodeData.doctorName}</strong></span>
               </div>
               <div>
-                <span style="font-size: 0.75rem; background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-weight: 600;">🥦 Dieta: ${e.diet || episodeData.dietType || 'Libre / Normal'}</span>
+                <span style="font-size: 0.72rem; background: #e0f2fe; color: #0369a1; padding: 1px 6px; border-radius: 3px; font-weight: 600;">🥦 Dieta: ${e.diet || episodeData.dietType || 'Libre / Normal'}</span>
               </div>
             </div>
 
-            <div style="font-size: 0.85rem; color: #1e293b; line-height: 1.45; white-space: pre-wrap; margin-bottom: 6px;">${e.note}</div>
+            <div style="font-size: 0.82rem; color: #1e293b; line-height: 1.4; white-space: pre-wrap; margin-bottom: 5px;">${e.note}</div>
 
             ${(e.medications && e.medications.length > 0) ? `
-              <div style="margin-top: 6px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 4px; font-size: 0.79rem;">
+              <div style="margin-top: 5px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 5px 8px; border-radius: 3px; font-size: 0.76rem;">
                 <strong style="color: #1e3a8a;">💊 Medicamentos Prescritos / Modificados:</strong>
-                <ul style="margin: 3px 0 0 0; padding-left: 18px; color: #334155;">
+                <ul style="margin: 2px 0 0 0; padding-left: 16px; color: #334155;">
                   ${e.medications.map(m => `<li><strong>${m.name}</strong> - Cant/Dosis: ${m.qty || m.cantidad_o_dosis || '1'} ${m.unidad_dispensable || m.unidad_medida_dosis || ''} ${m.instructions ? `(${m.instructions})` : ''}</li>`).join('')}
                 </ul>
               </div>
             ` : ''}
 
             ${(e.laboratoryTests && e.laboratoryTests.length > 0) ? `
-              <div style="margin-top: 5px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 4px; font-size: 0.79rem;">
+              <div style="margin-top: 4px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 4px 8px; border-radius: 3px; font-size: 0.76rem;">
                 <strong style="color: #0d9488;">🔬 Exámenes de Laboratorio Solicitados:</strong>
-                <span style="color: #334155; margin-left: 6px;">${e.laboratoryTests.map(l => l.name).join(', ')}</span>
+                <span style="color: #334155; margin-left: 5px;">${e.laboratoryTests.map(l => l.name).join(', ')}</span>
               </div>
             ` : ''}
 
             ${(e.imagingStudies && e.imagingStudies.length > 0) ? `
-              <div style="margin-top: 5px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 4px; font-size: 0.79rem;">
+              <div style="margin-top: 4px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 4px 8px; border-radius: 3px; font-size: 0.76rem;">
                 <strong style="color: #7c3aed;">🖼️ Estudios de Imagen Solicitados:</strong>
-                <span style="color: #334155; margin-left: 6px;">${e.imagingStudies.map(i => i.name).join(', ')}</span>
+                <span style="color: #334155; margin-left: 5px;">${e.imagingStudies.map(i => i.name).join(', ')}</span>
               </div>
             ` : ''}
           </div>
         `).join('') : `
-          <div style="padding: 15px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 4px; text-align: center; color: #64748b; font-style: italic; font-size: 0.84rem; margin-bottom: 15px;">
+          <div style="padding: 12px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 4px; text-align: center; color: #64748b; font-style: italic; font-size: 0.8rem; margin-bottom: 12px;">
             No se registran notas de evolución médica durante esta estancia.
           </div>
         `}
 
         ${(!isHosp && prescs.length > 0) ? `
-          <div class="section-title" style="margin-top: 20px;">Prescripciones y Órdenes Médicas Adicionales</div>
+          <div class="section-title" style="margin-top: 15px;">Prescripciones y Órdenes Médicas Adicionales</div>
           ${prescs.map((pr, pidx) => `
-            <div style="border: 1px solid #cbd5e1; border-left: 4px solid #f59e0b; border-radius: 4px; padding: 10px 12px; margin-bottom: 10px; background: #ffffff;">
-              <div style="font-weight: bold; font-size: 0.84rem; color: #b45309; margin-bottom: 4px;">
+            <div style="border: 1px solid #cbd5e1; border-left: 4px solid #f59e0b; border-radius: 4px; padding: 8px 10px; margin-bottom: 8px; background: #ffffff;">
+              <div style="font-weight: bold; font-size: 0.8rem; color: #b45309; margin-bottom: 3px;">
                 Prescripción #${pidx + 1} - 📅 ${new Date(pr.date).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' })} | Dr. ${pr.doctorName}
               </div>
-              <p style="margin: 0; white-space: pre-wrap; font-size: 0.82rem; color: #1e293b; line-height: 1.4;">${pr.orders}</p>
+              <p style="margin: 0; white-space: pre-wrap; font-size: 0.78rem; color: #1e293b; line-height: 1.35;">${pr.orders}</p>
             </div>
           `).join('')}
         ` : ''}
 
-        <div class="signatures-box" style="margin-top: 35px; display: flex; justify-content: space-between; font-size: 0.84rem;">
-          <div style="border-top: 1px solid #111; width: 230px; text-align: center; padding-top: 5px;">
+        <div class="signatures-box">
+          <div style="border-top: 1px solid #111; width: 220px; text-align: center; padding-top: 4px;">
             <strong>Firma y Sello del Médico Tratante</strong><br>
-            <span style="font-size: 0.76rem; color: #64748b;">Dr. ${episodeData.doctorName || 'Médico de Turno'}</span>
+            <span style="font-size: 0.74rem; color: #64748b;">Dr. ${episodeData.doctorName || 'Médico de Turno'}</span>
           </div>
-          <div style="border-top: 1px solid #111; width: 230px; text-align: center; padding-top: 5px;">
+          <div style="border-top: 1px solid #111; width: 220px; text-align: center; padding-top: 4px;">
             <strong>Jefatura de Servicio Médico</strong><br>
-            <span style="font-size: 0.76rem; color: #64748b;">Hospital Privado Multimédica Sayaxché</span>
+            <span style="font-size: 0.74rem; color: #64748b;">Hospital Privado Multimédica Sayaxché</span>
           </div>
         </div>
       </div>
@@ -479,7 +494,7 @@ export function generateAndPrintAdmissionReports(episodeData, patient, selectedR
     const vitalsHistory = episodeData.vitalsHistory || [];
 
     htmlSections.push(`
-      <div class="report-section section-nursing" style="${sectionIndex > 1 ? 'page-break-before: always; margin-top: 25px;' : ''}">
+      <div class="report-section section-nursing" style="${sectionIndex > 1 ? 'page-break-before: always; margin-top: 20px;' : ''}">
         <!-- Encabezado Institucional Requerido -->
         ${renderClinicHeader('CRONOLOGÍA DE NOTAS DE ENFERMERÍA Y CUIDADOS', docCode)}
 
@@ -489,37 +504,37 @@ export function generateAndPrintAdmissionReports(episodeData, patient, selectedR
         <div class="section-title">Registro Cronológico de Notas de Enfermería y Cuidados Administrados</div>
 
         ${notes.length > 0 ? notes.map((n, idx) => `
-          <div class="nurse-item-card" style="border: 1px solid #cbd5e1; border-left: 4px solid #10b981; border-radius: 4px; padding: 10px 12px; margin-bottom: 12px; background: #ffffff;">
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 6px;">
+          <div class="nurse-item-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 5px;">
               <div>
-                <span style="font-weight: bold; color: #047857; font-size: 0.88rem;">Nota #${idx + 1} - 📅 ${new Date(n.date).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' })}</span>
-                <span style="font-size: 0.8rem; color: #475569; margin-left: 10px;">| Personal: <strong>Enf. ${n.nurseName || 'Turno'}</strong></span>
+                <span style="font-weight: bold; color: #047857; font-size: 0.84rem;">Nota #${idx + 1} - 📅 ${new Date(n.date).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                <span style="font-size: 0.78rem; color: #475569; margin-left: 8px;">| Personal: <strong>Enf. ${n.nurseName || 'Turno'}</strong></span>
               </div>
             </div>
 
-            <div style="font-size: 0.85rem; color: #1e293b; line-height: 1.45; white-space: pre-wrap; margin-bottom: 6px;">${n.note}</div>
+            <div style="font-size: 0.82rem; color: #1e293b; line-height: 1.4; white-space: pre-wrap; margin-bottom: 5px;">${n.note}</div>
 
             ${(n.administeredCare && n.administeredCare.length > 0) ? `
-              <div style="margin-top: 5px; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 5px 8px; border-radius: 4px; font-size: 0.79rem; color: #065f46;">
+              <div style="margin-top: 4px; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 4px 6px; border-radius: 3px; font-size: 0.76rem; color: #065f46;">
                 <strong>🩺 Cuidados Clínicos Administrados:</strong> ${n.administeredCare.join(', ')}
               </div>
             ` : ''}
 
             ${(n.supplies && n.supplies.length > 0) ? `
-              <div style="margin-top: 5px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 5px 8px; border-radius: 4px; font-size: 0.79rem; color: #334155;">
+              <div style="margin-top: 4px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 4px 6px; border-radius: 3px; font-size: 0.76rem; color: #334155;">
                 <strong>🩹 Insumos y Material Quirúrgico Aplicado:</strong> ${n.supplies.map(s => `${s.name} (x${s.qty})`).join(', ')}
               </div>
             ` : ''}
           </div>
         `).join('') : `
-          <div style="padding: 15px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 4px; text-align: center; color: #64748b; font-style: italic; font-size: 0.84rem; margin-bottom: 15px;">
+          <div style="padding: 12px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 4px; text-align: center; color: #64748b; font-style: italic; font-size: 0.8rem; margin-bottom: 12px;">
             No se registran notas de enfermería durante esta estancia.
           </div>
         `}
 
         ${vitalsHistory.length > 0 ? `
-          <div class="section-title" style="margin-top: 20px;">Monitoreo de Signos Vitales por Personal de Enfermería</div>
-          <table class="data-table vitals-table" style="font-size: 0.8rem;">
+          <div class="section-title" style="margin-top: 15px;">Monitoreo de Signos Vitales por Personal de Enfermería</div>
+          <table class="data-table vitals-table" style="font-size: 0.76rem;">
             <thead>
               <tr>
                 <th>Fecha / Hora</th>
@@ -549,14 +564,14 @@ export function generateAndPrintAdmissionReports(episodeData, patient, selectedR
           </table>
         ` : ''}
 
-        <div class="signatures-box" style="margin-top: 35px; display: flex; justify-content: space-between; font-size: 0.84rem;">
-          <div style="border-top: 1px solid #111; width: 230px; text-align: center; padding-top: 5px;">
+        <div class="signatures-box">
+          <div style="border-top: 1px solid #111; width: 220px; text-align: center; padding-top: 4px;">
             <strong>Firma de Enfermera(o)</strong><br>
-            <span style="font-size: 0.76rem; color: #64748b;">Personal Responsable de Turno</span>
+            <span style="font-size: 0.74rem; color: #64748b;">Personal Responsable de Turno</span>
           </div>
-          <div style="border-top: 1px solid #111; width: 230px; text-align: center; padding-top: 5px;">
+          <div style="border-top: 1px solid #111; width: 220px; text-align: center; padding-top: 4px;">
             <strong>Supervisión de Enfermería</strong><br>
-            <span style="font-size: 0.76rem; color: #64748b;">Hospital Privado Multimédica Sayaxché</span>
+            <span style="font-size: 0.74rem; color: #64748b;">Hospital Privado Multimédica Sayaxché</span>
           </div>
         </div>
       </div>
@@ -577,37 +592,62 @@ export function generateAndPrintAdmissionReports(episodeData, patient, selectedR
         <meta charset="UTF-8">
         <title>Reportes de Ingreso - ${patient.name}</title>
         <style>
-          * { box-sizing: border-box; }
+          @page {
+            size: letter portrait;
+            margin: 10mm 12mm 10mm 12mm;
+          }
+          * {
+            box-sizing: border-box;
+          }
           body {
-            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
             color: #1e293b;
-            line-height: 1.45;
-            padding: 24px;
-            margin: 0;
+            line-height: 1.35;
+            padding: 15px;
+            margin: 0 auto;
+            max-width: 820px;
             background: #ffffff;
-            font-size: 13px;
+            font-size: 11.5px;
+          }
+          .clinic-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #1e3a8a;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
+          }
+          .patient-basic-banner {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-left: 4px solid #1e3a8a;
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin-bottom: 12px;
+            font-size: 0.8rem;
           }
           .section-title {
             color: #1e3a8a;
             border-bottom: 1.5px solid #cbd5e1;
-            font-size: 0.95rem;
+            font-size: 0.86rem;
             font-weight: 700;
-            margin-top: 18px;
-            margin-bottom: 10px;
-            padding-bottom: 4px;
+            margin-top: 12px;
+            margin-bottom: 6px;
+            padding-bottom: 2px;
             text-transform: uppercase;
             letter-spacing: 0.3px;
           }
           table.data-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 0.83rem;
-            margin-bottom: 12px;
+            font-size: 0.8rem;
+            margin-bottom: 10px;
           }
           table.data-table th, table.data-table td {
             border: 1px solid #cbd5e1;
-            padding: 6px 8px;
+            padding: 4px 6px;
             text-align: left;
+            vertical-align: middle;
           }
           table.data-table th {
             background-color: #f1f5f9;
@@ -616,13 +656,45 @@ export function generateAndPrintAdmissionReports(episodeData, patient, selectedR
           }
           table.vitals-table th {
             text-align: center;
+            font-size: 0.76rem;
           }
           table.vitals-table td {
             text-align: center;
+            font-size: 0.78rem;
+          }
+          .info-box {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            padding: 8px 10px;
+            margin-bottom: 10px;
+            font-size: 0.8rem;
+          }
+          .evo-item-card {
+            border: 1px solid #cbd5e1;
+            border-left: 4px solid #1e3a8a;
+            border-radius: 4px;
+            padding: 8px 10px;
+            margin-bottom: 10px;
+            background: #ffffff;
+          }
+          .nurse-item-card {
+            border: 1px solid #cbd5e1;
+            border-left: 4px solid #10b981;
+            border-radius: 4px;
+            padding: 8px 10px;
+            margin-bottom: 10px;
+            background: #ffffff;
+          }
+          .signatures-box {
+            margin-top: 25px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
           }
           .no-print {
-            margin-bottom: 20px;
-            padding: 12px 18px;
+            margin-bottom: 18px;
+            padding: 10px 15px;
             background: #f1f5f9;
             border: 1px solid #cbd5e1;
             border-radius: 6px;
@@ -631,41 +703,49 @@ export function generateAndPrintAdmissionReports(episodeData, patient, selectedR
             align-items: center;
           }
           .btn-print {
-            padding: 8px 18px;
+            padding: 7px 16px;
             background: #1e3a8a;
             color: #ffffff;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
           }
           .btn-close {
-            padding: 8px 16px;
+            padding: 7px 14px;
             background: #ffffff;
             color: #334155;
             border: 1px solid #cbd5e1;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 0.85rem;
+            font-size: 0.82rem;
           }
           @media print {
             .no-print { display: none !important; }
-            body { padding: 0 !important; }
+            body {
+              padding: 0 !important;
+              margin: 0 !important;
+              max-width: 100% !important;
+              font-size: 11px !important;
+            }
+            .page-break { page-break-before: always !important; }
             .report-section { page-break-inside: auto; }
-            .signatures-box { page-break-inside: avoid; }
-            .evo-item-card, .nurse-item-card { page-break-inside: avoid; }
+            .signatures-box { page-break-inside: avoid !important; }
+            .evo-item-card, .nurse-item-card, .info-box, table.data-table, .patient-basic-banner {
+              page-break-inside: avoid !important;
+            }
           }
         </style>
       </head>
       <body>
         <div class="no-print">
           <div>
-            <strong style="color: #1e3a8a; font-size: 1rem;">Expediente de Ingreso Hospitalario</strong>
-            <span style="color: #64748b; font-size: 0.85rem; margin-left: 10px;">Paciente: ${patient.name}</span>
+            <strong style="color: #1e3a8a; font-size: 0.95rem;">Expediente de Ingreso Hospitalario</strong>
+            <span style="color: #64748b; font-size: 0.82rem; margin-left: 10px;">Paciente: ${patient.name}</span>
           </div>
           <div>
-            <button class="btn-print" onclick="window.print();">🖨️ Imprimir Reportes</button>
+            <button class="btn-print" onclick="window.print();">🖨️ Imprimir / Guardar PDF</button>
             <button class="btn-close" onclick="window.close();" style="margin-left: 8px;">Cerrar</button>
           </div>
         </div>

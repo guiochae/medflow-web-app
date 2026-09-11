@@ -2158,7 +2158,9 @@ function renderDischargeForm(activeEmerg, patient) {
 
       const prefilledData = {
         origin: 'Emergencia',
-        reason: `Traslado desde Emergencia (${activeEmerg.bedName}). Motivo de ingreso: ${activeEmerg.admissionReason}.\nNotas clínicas: ${activeEmerg.admissionDetail}\nEpicrisis del traslado: ${epicrisisVal}`,
+        chiefComplaint: `Traslado desde Emergencia (${activeEmerg.bedName}). Motivo de urgencias: ${activeEmerg.admissionReason}.\nNotas clínicas: ${activeEmerg.admissionDetail || ''}\nEpicrisis de traslado: ${epicrisisVal}`,
+        admissionReason: activeEmerg.admissionReason,
+        physicalExam: activeEmerg.admissionDetail || 'Examen físico evaluado en área de urgencias y estabilizado.',
         vitals: activeEmerg.initialVitals,
         medsOrders: prefilledMedsOrders,
         consumedMedicines: [] // Los medicamentos se cobran en el cierre de Emergencias, Encamamiento inicia fresco.
