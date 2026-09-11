@@ -1,5 +1,5 @@
-// src/modules/encamamiento.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
+import { showAdmissionReportsModal, generateAndPrintAdmissionReports } from './admissionReports.js';
 
 function enrichMedication(m) {
   if (!m) return null;
@@ -298,7 +298,7 @@ function renderHospitalizationDashboard() {
           </div>
         </div>
         <div style="display: flex; gap: 8px;">
-          <button class="btn btn-secondary btn-small" id="btn-print-hosp-file">🖨️ Impresión</button>
+          <button class="btn btn-secondary btn-small" id="btn-print-hosp-file" style="display: flex; align-items: center; gap: 6px;">🖨️ Reportes de Ingreso</button>
           <button class="btn btn-danger btn-small" id="btn-trigger-discharge" style="background: var(--accent-danger); border: none;">🏥 Alta Médica</button>
         </div>
       </div>
@@ -317,7 +317,7 @@ function renderHospitalizationDashboard() {
   `;
 
   // Bind Header actions
-  document.getElementById('btn-print-hosp-file').addEventListener('click', () => printHospitalizationRecord(activeHosp, patient));
+  document.getElementById('btn-print-hosp-file').addEventListener('click', () => showAdmissionReportsModal(activeHosp, patient, 'encamamiento'));
   document.getElementById('btn-trigger-discharge').addEventListener('click', () => renderDischargeForm(activeHosp, patient));
 
   // Bind Tabs Navigation
@@ -1811,202 +1811,10 @@ function getRoomRatePrice(rateId, state) {
 }
 
 // 10. Función para impresión de la Hoja de Hospitalización (Expediente Clínico de Encamamiento)
-function printHospitalizationRecord(hosp, patient) {
-  const state = getAppState();
-  const clinicInfo = state.clinicInfo || { name: 'LUGAMED 2.0', phone: '2200-0000', address: 'Guatemala' };
-  const dob = new Date(patient.birthdate);
-  const age = Math.abs(new Date(Date.now() - dob.getTime()).getUTCFullYear() - 1970);
-  const daysIn = Math.max(1, Math.ceil((Date.now() - new Date(hosp.admissionDate).getTime()) / (1000 * 60 * 60 * 24)));
-
-  const printWindow = window.open('', '_blank');
-  printWindow.document.write(`
-    <html>
-      <head>
-        <title>Expediente de Hospitalización - ${patient.name}</title>
-        <style>
-          body {
-            font-family: 'Helvetica Neue', Arial, sans-serif;
-            color: #333;
-            line-height: 1.5;
-            padding: 20px;
-          }
-          .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid #1e3a8a;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-          }
-          .header h1 {
-            color: #1e3a8a;
-            margin: 0;
-            font-size: 1.8rem;
-          }
-          .grid-info {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-            background: #f3f4f6;
-            padding: 15px;
-            border-radius: 6px;
-            font-size: 0.9rem;
-            margin-bottom: 20px;
-          }
-          .grid-info div {
-            margin-bottom: 5px;
-          }
-          .section-title {
-            color: #1e3a8a;
-            border-bottom: 1px solid #ddd;
-            font-size: 1.1rem;
-            font-weight: bold;
-            margin-top: 25px;
-            margin-bottom: 10px;
-            padding-bottom: 5px;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.85rem;
-            margin-bottom: 15px;
-          }
-          table th, table td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-          }
-          table th {
-            background-color: #f9fafb;
-          }
-          .evo-item, .nurse-item {
-            border-left: 3px solid #1e3a8a;
-            padding-left: 10px;
-            margin-bottom: 15px;
-            font-size: 0.88rem;
-          }
-          .nurse-item {
-            border-left-color: #10b981;
-          }
-          .evo-date, .nurse-date {
-            font-weight: bold;
-            color: #1e3a8a;
-            font-size: 0.8rem;
-          }
-          .nurse-date {
-            color: #10b981;
-          }
-          @media print {
-            .no-print { display: none; }
-            body { padding: 0; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="no-print" style="margin-bottom: 20px;">
-          <button onclick="window.print();" style="padding: 10px 20px; background: #1e3a8a; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">🖨️ Imprimir Expediente</button>
-          <button onclick="window.close();" style="padding: 10px 20px; background: #f3f4f6; color: #333; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; margin-left: 10px;">Cerrar</button>
-        </div>
-
-        <div class="header">
-          <div>
-            <h1>${clinicInfo.name}</h1>
-            <span style="font-size: 0.8rem; color: #666;">Dirección: ${clinicInfo.address} | Tel: ${clinicInfo.phone}</span>
-          </div>
-          <div style="text-align: right;">
-            <h2>EXPEDIENTE DE ENCAMAMIENTO</h2>
-            <strong>No. ID:</strong> ${hosp.id}
-          </div>
-        </div>
-
-        <div class="grid-info">
-          <div><strong>Paciente:</strong> ${patient.name}</div>
-          <div><strong>DPI:</strong> ${patient.dpi || 'N/A'}</div>
-          <div><strong>Edad:</strong> ${age} años</div>
-          <div><strong>Género:</strong> ${patient.gender}</div>
-          <div><strong>Habitación / Cama:</strong> ${hosp.roomName || 'General'}</div>
-          <div><strong>Días de Estancia:</strong> ${daysIn} día(s)</div>
-          <div><strong>Médico Tratante:</strong> ${hosp.doctorName}</div>
-          <div><strong>Familiar Responsable:</strong> ${hosp.responsibleFamilyName} (${hosp.responsibleFamilyPhone})</div>
-          <div style="grid-column: 1/-1;"><strong>Diagnóstico de Ingreso:</strong> ${hosp.admissionReason}</div>
-          <div style="grid-column: 1/-1;"><strong>Tipo de Dieta al Ingreso / Actual:</strong> <span style="font-weight: bold; color: #1e3a8a;">${hosp.dietType || 'No especificada'}</span></div>
-          <div style="grid-column: 1/-1; background: #f9fafb; border: 1px solid #e5e7eb; padding: 10px; border-radius: 4px; margin-top: 5px;">
-            <strong>📋 Órdenes Médicas al Ingreso:</strong>
-            <p style="white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; margin: 4px 0 0 0; color: #4b5563; line-height: 1.4;">${hosp.admissionOrders || 'Ninguna registrada'}</p>
-            ${hosp.specialIndications && hosp.specialIndications.length > 0 ? `
-              <div style="border-top: 1px dashed #e5e7eb; padding-top: 8px; margin-top: 8px;">
-                <strong>📢 Indicaciones Especiales:</strong>
-                <ul style="margin: 4px 0 0 0; padding-left: 18px; font-size: 0.8rem; color: #1e3a8a; list-style-type: disc;">
-                  ${hosp.specialIndications.map(ind => `<li>${ind}</li>`).join('')}
-                </ul>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-
-        <div class="section-title">Signos Vitales al Ingreso</div>
-        <table>
-          <thead>
-            <tr>
-              <th>Temperatura</th>
-              <th>Presión Arterial</th>
-              <th>Frecuencia Cardíaca</th>
-              <th>Frecuencia Respiratoria</th>
-              <th>Saturación O2</th>
-              <th>Glucosa</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>${hosp.initialVitals.temp}°C</td>
-              <td>${hosp.initialVitals.bp_systolic || '-'}/${hosp.initialVitals.bp_diastolic || '-'} mmHg</td>
-              <td>${hosp.initialVitals.heart_rate || '-'} LPM</td>
-              <td>${hosp.initialVitals.resp_rate || '-'} RPM</td>
-              <td>${hosp.initialVitals.oxygen || '-'}%</td>
-              <td>${hosp.initialVitals.glucose || '-'} mg/dL</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div class="section-title">Cronología de Evoluciones Médicas</div>
-        ${(hosp.evolutions || []).length === 0 ? '<p>No se registran notas de evolución.</p>' : hosp.evolutions.map(e => `
-          <div class="evo-item">
-            <div class="evo-date">📅 ${new Date(e.date).toLocaleString('es-GT')} | Dr. ${e.doctorName}</div>
-            <p style="margin: 4px 0;">${e.note}</p>
-            ${e.medications && e.medications.length > 0 ? `
-              <div style="font-size: 0.78rem; color:#666;">
-                <strong>Receta asociada:</strong> ${e.medications.map(m => `${m.name} (${m.qty})`).join(', ')}
-              </div>
-            ` : ''}
-            ${e.laboratoryTests && e.laboratoryTests.length > 0 ? `
-              <div style="font-size: 0.78rem; color:#666;">
-                <strong>Laboratorio asociado:</strong> ${e.laboratoryTests.map(l => l.name).join(', ')}
-              </div>
-            ` : ''}
-          </div>
-        `).join('')}
-
-        <div class="section-title">Cronología de Notas de Enfermería</div>
-        ${(hosp.nursingNotes || []).length === 0 ? '<p>No se registran notas de enfermería.</p>' : hosp.nursingNotes.map(n => `
-          <div class="nurse-item">
-            <div class="nurse-date">📅 ${new Date(n.date).toLocaleString('es-GT')} | Personal: ${n.nurseName}</div>
-            <p style="margin: 4px 0;">${n.note}</p>
-          </div>
-        `).join('')}
-
-        <div style="margin-top: 40px; display: flex; justify-content: space-between; font-size: 0.85rem;">
-          <div style="border-top: 1px solid #000; width: 220px; text-align: center; padding-top: 5px; margin-top: 20px;">
-            Firma del Médico Tratante
-          </div>
-          <div style="border-top: 1px solid #000; width: 220px; text-align: center; padding-top: 5px; margin-top: 20px;">
-            Firma Supervisor Enfermería
-          </div>
-        </div>
-      </body>
-    </html>
-  `);
-  printWindow.document.close();
+export function printHospitalizationRecord(hosp, patient) {
+  showAdmissionReportsModal(hosp, patient, 'encamamiento');
 }
+
 
 function hideChecklistDefaultElements(modal) {
   if (!modal) return;

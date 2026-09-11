@@ -1,6 +1,7 @@
 // src/modules/emergencias.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId, router } from '../main.js';
 import { renderAdmissionForm } from './encamamiento.js';
+import { showAdmissionReportsModal, generateAndPrintAdmissionReports } from './admissionReports.js';
 import logoUrl from '../assets/logo.jpg';
 
 function enrichMedication(m) {
@@ -331,6 +332,11 @@ function renderEmergDashboard() {
                         <span>Estado: <strong style="color: ${ep.status === 'Transferido' ? '#eab308' : 'var(--accent-success)'}">${ep.status}</strong></span>
                       </div>
                     </div>
+                    <div>
+                      <button type="button" class="btn btn-secondary btn-small btn-print-episode-reports" data-emerg-id="${ep.id}" style="padding: 4px 10px; font-size: 0.78rem; font-weight: bold; display: flex; align-items: center; gap: 6px;">
+                        <span>🖨️</span> Reportes de Ingreso
+                      </button>
+                    </div>
                   </div>
 
                   <!-- Diagnóstico y Notas Clínicas Iniciales -->
@@ -436,6 +442,14 @@ function renderEmergDashboard() {
         });
       });
 
+      dashboardArea.querySelectorAll('.btn-print-episode-reports').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const epId = btn.getAttribute('data-emerg-id');
+          const ep = (state.emergencias || []).find(e => e.id === epId);
+          if (ep) showAdmissionReportsModal(ep, patient, 'emergencias');
+        });
+      });
+
       document.getElementById('btn-start-emerg-direct').addEventListener('click', () => {
         renderEmergAdmissionForm(patient.id);
       });
@@ -489,7 +503,10 @@ function renderEmergDashboard() {
             <span><strong>Costo Estancia:</strong> Q${parseFloat(activeEmerg.stayCost || 0).toFixed(2)}</span>
           </div>
         </div>
-        <button class="btn btn-danger btn-small" id="btn-trigger-discharge" style="background: var(--accent-danger); border: none;">🏥 Cierre / Alta / Traslado</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-secondary btn-small" id="btn-print-emerg-reports" style="display: flex; align-items: center; gap: 6px;">🖨️ Reportes de Ingreso</button>
+          <button class="btn btn-danger btn-small" id="btn-trigger-discharge" style="background: var(--accent-danger); border: none;">🏥 Cierre / Alta / Traslado</button>
+        </div>
       </div>
     </div>
 
@@ -514,7 +531,11 @@ function renderEmergDashboard() {
     });
   });
 
-  // Bind Discharge Button
+  // Bind Header Buttons
+  document.getElementById('btn-print-emerg-reports').addEventListener('click', () => {
+    showAdmissionReportsModal(activeEmerg, patient, 'emergencias');
+  });
+
   document.getElementById('btn-trigger-discharge').addEventListener('click', () => {
     renderDischargeForm(activeEmerg, patient);
   });
