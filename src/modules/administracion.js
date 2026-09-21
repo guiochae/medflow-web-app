@@ -1,4 +1,4 @@
-import { getAppState, saveAppState } from '../main.js';
+import { getAppState, saveAppState, backfillEmployeeCodes } from '../main.js';
 import { simulateOnPurchaseCreated, simulateOnPayrollGenerated } from '../utils/cloud_functions.js';
 import { notifyEmployeeWelcome } from '../utils/whatsapp.js';
 import { renderRrhhAsistencia } from './attendanceManager.js';
@@ -1334,6 +1334,9 @@ function renderRrhhTab(container, state) {
   state.administracion_asistencias = state.administracion_asistencias || [];
   state.administracion_asistencias_audit = state.administracion_asistencias_audit || [];
 
+  // Asegurar que todos los colaboradores existentes tengan asignado su código correlativo
+  backfillEmployeeCodes(state);
+
   container.innerHTML = `
     <!-- Sub-Pestañas de RRHH -->
     <div style="display: flex; gap: 10px; margin-bottom: 1.25rem; font-size: 0.85rem; overflow-x: auto; padding-bottom: 4px;">
@@ -1368,6 +1371,9 @@ function renderRrhhTab(container, state) {
 
 // Empleados y Recomendador de Contrataciones
 function renderRrhhEmpleados(container, state) {
+  // Asegurar que todos los colaboradores tengan su código correlativo asignado
+  backfillEmployeeCodes(state);
+
   // Calcular balance actual en Caja y Bancos para alimentar el algoritmo recomendador
   const cashBalance = calculateAccountBalance(state, 'Caja y Bancos');
   
@@ -1475,11 +1481,14 @@ function renderRrhhEmpleados(container, state) {
 
       <!-- Listado de Colaboradores Registrados -->
       <div class="glass-card" style="padding: 1.25rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 8px;">
           <h3 style="font-size: 1rem; color: var(--accent-primary); margin: 0; font-family: var(--font-heading);">Colaboradores Activos</h3>
-          <span style="font-size: 0.75rem; background: rgba(0,242,254,0.1); color: var(--accent-primary); padding: 2px 8px; border-radius: 10px; font-weight: bold;">
-            ${(state.administracion_employees || []).length} Registrados
-          </span>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <button class="btn btn-secondary btn-small" id="btn-sync-all-codes" style="font-size: 0.72rem; padding: 3px 8px; color: var(--accent-primary);" title="Sincronizar y auto-asignar códigos correlativos a todo el personal">🔄 Sincronizar Códigos</button>
+            <span style="font-size: 0.75rem; background: rgba(0,242,254,0.1); color: var(--accent-primary); padding: 2px 8px; border-radius: 10px; font-weight: bold;">
+              ${(state.administracion_employees || []).length} Registrados
+            </span>
+          </div>
         </div>
         
         <div style="max-height: 480px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
@@ -1637,6 +1646,18 @@ function renderRrhhEmpleados(container, state) {
   if (btnCancel) {
     btnCancel.addEventListener('click', () => {
       editingEmployeeId = null;
+      renderRrhhEmpleados(container, state);
+    });
+  }
+
+  const btnSyncCodes = document.getElementById('btn-sync-all-codes');
+  if (btnSyncCodes) {
+    btnSyncCodes.addEventListener('click', async () => {
+      btnSyncCodes.disabled = true;
+      btnSyncCodes.textContent = '⏳ Sincronizando...';
+      const modified = backfillEmployeeCodes(state);
+      await saveAppState(state);
+      alert(`✅ Códigos de empleado sincronizados y actualizados correctamente (${(state.administracion_employees || []).length} colaboradores con código asignado en la base de datos).`);
       renderRrhhEmpleados(container, state);
     });
   }

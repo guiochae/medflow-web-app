@@ -163,6 +163,10 @@ export function getAppState() {
         firestoreState.currentUser = JSON.parse(loggedUser);
       }
     }
+
+    // Asegurar que todo el personal en memoria tenga siempre código asignado
+    backfillEmployeeCodes(firestoreState);
+
     return firestoreState;
   }
 
@@ -265,10 +269,9 @@ export async function saveAppState(state) {
   saveStateToLocalCache();
 
   try {
-    // Si lastSyncedState no se ha inicializado, usar el estado actual como punto de partida
-    // para evitar escribir documentos no modificados y proteger la cuota de escritura
+    // Si lastSyncedState no se ha inicializado, usar objeto vacío para registrar todos los cambios iniciales
     if (!lastSyncedState) {
-      lastSyncedState = JSON.parse(JSON.stringify(state));
+      lastSyncedState = {};
     }
 
     const batch = writeBatch(db);
@@ -1198,6 +1201,7 @@ document.addEventListener('DOMContentLoaded', () => {
     lastSyncedState = JSON.parse(JSON.stringify(initialState));
     // Suscribir render a cambios en tiempo real
     subscribeToStateUpdates((updatedState) => {
+      backfillEmployeeCodes(updatedState);
       const loggedUser = sessionStorage.getItem('medflow_logged_user');
       let isValidSession = false;
       if (loggedUser) {
@@ -1282,43 +1286,118 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 export function backfillEmployeeCodes(state) {
-  if (!state || !state.administracion_employees || !Array.isArray(state.administracion_employees)) return false;
+  if (!state) return false;
+  state.administracion_employees = state.administracion_employees || [];
+  if (!Array.isArray(state.administracion_employees)) {
+    state.administracion_employees = [];
+  }
   let modified = false;
 
+  // 1. Sincronizar usuarios asistenciales/personal de la clínica que no existan en administracion_employees
+  if (state.users && Array.isArray(state.users)) {
+    state.users.forEach(u => {
+      if (!u || !u.name) return;
+      const uNameLower = u.name.toLowerCase();
+      if (uNameLower.includes('antigravity') || u.id === 'Admin') return;
+
+      const exists = state.administracion_employees.some(e => 
+        (e.id && e.id === u.id) || 
+        (e.name && e.name.trim().toLowerCase() === u.name.trim().toLowerCase())
+      );
+
+      if (!exists) {
+        let dept = 'Hospitalización';
+        const role = String(u.role || '').toLowerCase();
+        if (role.includes('medic') || role.includes('médic')) dept = 'Consulta Externa';
+        else if (role.includes('lab')) dept = 'Laboratorio';
+        else if (role.includes('recep') || role.includes('caja')) dept = 'Administración';
+        else if (role.includes('farm')) dept = 'Farmacia';
+        else if (role.includes('quir')) dept = 'Quirófano';
+
+        state.administracion_employees.push({
+          id: u.id || ('emp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6)),
+          name: u.name,
+          position: u.role || 'Colaborador',
+          department: dept,
+          specialty: dept,
+          shift: 'Matutino',
+          whatsapp_number: u.phone || '+502 5555-0000',
+          phone: u.phone || '+502 5555-0000',
+          salary: 4500,
+          hireDate: new Date().toISOString().substring(0, 10),
+          absences: 0,
+          warnings: 0,
+          status: 'Activo'
+        });
+        modified = true;
+      }
+    });
+  }
+
+  // 2. Encontrar el correlativo más alto existente (EMP-001, EMP-002, ...)
   let maxSeq = 0;
+  const assignedCodes = new Set();
+  
   state.administracion_employees.forEach(emp => {
-    if (emp && emp.employee_code && /^EMP-\d+$/i.test(emp.employee_code)) {
-      const num = parseInt(emp.employee_code.replace(/^EMP-/i, ''), 10);
-      if (!isNaN(num) && num > maxSeq) {
-        maxSeq = num;
+    if (emp && emp.employee_code && /^EMP-\d+$/i.test(String(emp.employee_code).trim())) {
+      const num = parseInt(String(emp.employee_code).trim().replace(/^EMP-/i, ''), 10);
+      if (!isNaN(num)) {
+        if (num > maxSeq) maxSeq = num;
+        assignedCodes.add(String(emp.employee_code).trim().toUpperCase());
       }
     }
   });
 
+  // 3. Asignar código a todo empleado que no lo tenga, que esté vacío, sea 'EMP-S/C' o duplicado
+  const seenCodes = new Set();
   state.administracion_employees.forEach(emp => {
     if (!emp) return;
-    if (!emp.employee_code || emp.employee_code.trim() === '') {
+
+    const currentCode = emp.employee_code ? String(emp.employee_code).trim().toUpperCase() : '';
+    const isValidCode = currentCode !== '' && currentCode !== 'EMP-S/C' && /^EMP-\d+$/i.test(currentCode) && !seenCodes.has(currentCode);
+
+    if (!isValidCode) {
       maxSeq++;
-      emp.employee_code = `EMP-${String(maxSeq).padStart(3, '0')}`;
+      const newCode = `EMP-${String(maxSeq).padStart(3, '0')}`;
+      emp.employee_code = newCode;
+      seenCodes.add(newCode);
       modified = true;
+    } else {
+      seenCodes.add(currentCode);
     }
-    if (!emp.whatsapp_number) {
+
+    if (!emp.whatsapp_number || emp.whatsapp_number.trim() === '') {
       emp.whatsapp_number = emp.phone || '+502 5555-0000';
       modified = true;
     }
-    if (!emp.department) {
-      emp.department = emp.specialty || 'General / Asistencial';
+    if (!emp.department || emp.department.trim() === '') {
+      emp.department = emp.specialty || 'Hospitalización';
       modified = true;
     }
-    if (!emp.shift) {
+    if (!emp.shift || emp.shift.trim() === '') {
       emp.shift = 'Matutino';
       modified = true;
     }
-    if (!emp.status) {
+    if (!emp.status || emp.status.trim() === '') {
       emp.status = 'Activo';
       modified = true;
     }
+    if (!emp.position || emp.position.trim() === '') {
+      emp.position = 'Colaborador';
+      modified = true;
+    }
   });
+
+  // 4. Si hubo modificaciones, sincronizar Firestore de forma directa e inmediata
+  if (modified) {
+    if (firestoreState) {
+      firestoreState.administracion_employees = state.administracion_employees;
+    }
+    saveStateToLocalCache();
+    saveDocumentsBatch('administracion_employees', state.administracion_employees).catch(err => {
+      console.warn("Error guardando backfill en Firestore:", err);
+    });
+  }
 
   return modified;
 }

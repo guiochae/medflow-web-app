@@ -487,6 +487,27 @@ export function initRealtimeFirestore(onFirstLoad) {
       firestoreState.administracion_compras = compras;
       firestoreState.administracion_contabilidad = contabilidad;
       firestoreState.administracion_caja = caja;
+      // Auto-asignación de seguridad para garantizar códigos EMP-xxx inmediatos
+      let maxEmpSeq = 0;
+      employees.forEach(emp => {
+        if (emp && emp.employee_code && /^EMP-\d+$/i.test(String(emp.employee_code).trim())) {
+          const n = parseInt(String(emp.employee_code).trim().replace(/^EMP-/i, ''), 10);
+          if (!isNaN(n) && n > maxEmpSeq) maxEmpSeq = n;
+        }
+      });
+      employees.forEach(emp => {
+        if (emp) {
+          if (!emp.employee_code || String(emp.employee_code).trim() === '' || String(emp.employee_code).trim() === 'EMP-S/C') {
+            maxEmpSeq++;
+            emp.employee_code = `EMP-${String(maxEmpSeq).padStart(3, '0')}`;
+          }
+          if (!emp.whatsapp_number) emp.whatsapp_number = emp.phone || '+502 5555-0000';
+          if (!emp.department) emp.department = emp.specialty || 'Hospitalización';
+          if (!emp.shift) emp.shift = 'Matutino';
+          if (!emp.status) emp.status = 'Activo';
+        }
+      });
+
       firestoreState.administracion_employees = employees;
       firestoreState.administracion_nominas = nominas;
       firestoreState.administracion_bancos = bancos;
@@ -671,6 +692,27 @@ export function initRealtimeFirestore(onFirstLoad) {
           firestoreState.administracion_compras = compras;
           firestoreState.administracion_contabilidad = contabilidad;
           firestoreState.administracion_caja = caja;
+          // Auto-asignación de seguridad en caché nativo
+          let maxEmpSeqFallback = 0;
+          employees.forEach(emp => {
+            if (emp && emp.employee_code && /^EMP-\d+$/i.test(String(emp.employee_code).trim())) {
+              const n = parseInt(String(emp.employee_code).trim().replace(/^EMP-/i, ''), 10);
+              if (!isNaN(n) && n > maxEmpSeqFallback) maxEmpSeqFallback = n;
+            }
+          });
+          employees.forEach(emp => {
+            if (emp) {
+              if (!emp.employee_code || String(emp.employee_code).trim() === '' || String(emp.employee_code).trim() === 'EMP-S/C') {
+                maxEmpSeqFallback++;
+                emp.employee_code = `EMP-${String(maxEmpSeqFallback).padStart(3, '0')}`;
+              }
+              if (!emp.whatsapp_number) emp.whatsapp_number = emp.phone || '+502 5555-0000';
+              if (!emp.department) emp.department = emp.specialty || 'Hospitalización';
+              if (!emp.shift) emp.shift = 'Matutino';
+              if (!emp.status) emp.status = 'Activo';
+            }
+          });
+
           firestoreState.administracion_employees = employees;
           firestoreState.administracion_nominas = nominas;
           firestoreState.administracion_bancos = bancos;
@@ -727,8 +769,11 @@ export async function saveDocumentsBatch(collectionName, items) {
       return true; // No-op: handled atomically in saveAppState
     }
 
+    if (!Array.isArray(items) || items.length === 0) return true;
+
     const batch = writeBatch(db);
     items.forEach(item => {
+      if (!item || !item.id) return;
       let targetCollection = 'multimedica';
       let docData = { ...item };
 

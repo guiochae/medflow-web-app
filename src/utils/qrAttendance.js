@@ -147,25 +147,47 @@ export async function recordAttendance({ employeeCode, type, ipAddress, userAgen
     return { success: false, error: 'Por favor ingrese su Código de Empleado.' };
   }
 
-  const cleanCode = employeeCode.trim().toUpperCase();
+  let cleanCode = employeeCode.trim().toUpperCase();
+  // Normalizar códigos numéricos simples (ej: "1" o "001" -> "EMP-001")
+  if (/^\d+$/.test(cleanCode)) {
+    cleanCode = `EMP-${cleanCode.padStart(3, '0')}`;
+  } else if (/^EMP\d+$/i.test(cleanCode)) {
+    const numPart = cleanCode.replace(/^EMP/i, '');
+    cleanCode = `EMP-${numPart.padStart(3, '0')}`;
+  } else if (/^EMP-\d+$/i.test(cleanCode)) {
+    const numPart = cleanCode.replace(/^EMP-/i, '');
+    cleanCode = `EMP-${numPart.padStart(3, '0')}`;
+  }
+
   state.administracion_employees = state.administracion_employees || [];
   state.administracion_asistencias = state.administracion_asistencias || [];
 
-  const employee = state.administracion_employees.find(e => 
-    e.employee_code && e.employee_code.trim().toUpperCase() === cleanCode
+  // Buscar por código normalizado, código original, o ID de colaborador
+  let employee = state.administracion_employees.find(e => 
+    (e.employee_code && e.employee_code.trim().toUpperCase() === cleanCode) ||
+    (e.employee_code && e.employee_code.trim().toUpperCase() === employeeCode.trim().toUpperCase()) ||
+    (e.id && String(e.id).trim().toUpperCase() === employeeCode.trim().toUpperCase())
   );
+
+  // Búsqueda alternativa por nombre exacto si el código no coincide
+  if (!employee) {
+    const rawInputLower = employeeCode.trim().toLowerCase();
+    employee = state.administracion_employees.find(e => 
+      e.name && e.name.trim().toLowerCase() === rawInputLower
+    );
+  }
 
   if (!employee) {
     return { 
       success: false, 
-      error: `El código "${cleanCode}" no corresponde a ningún colaborador registrado en LUGAMED.` 
+      error: `El código "${cleanCode}" no corresponde a ningún colaborador registrado en LUGAMED. Verifica tu código en Recursos Humanos.` 
     };
   }
 
   if (employee.status && employee.status !== 'Activo') {
     return { 
       success: false, 
-      error: `El colaborador ${employee.name} (${cleanCode}) se encuentra en estado "${employee.status}". No puede marcar asistencia.` 
+      error: `El colaborador ${employee.name} (${employee.employee_code || cleanCode}) se encuentra en estado "${employee.status}". No puede marcar asistencia.` 
     };
   }
 
