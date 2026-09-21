@@ -10,6 +10,8 @@ import { renderEncamamiento } from './modules/encamamiento.js';
 import { renderEmergencias } from './modules/emergencias.js';
 import { renderQuirofano } from './modules/quirofano.js';
 import { renderAdministracion } from './modules/administracion.js';
+import { initQrWidget, removeQrWidget } from './modules/qrWidget.js';
+import { renderAttendanceMobileView } from './modules/attendanceMobileView.js';
 import logoUrl from './assets/logo.jpg';
 import {
   db,
@@ -194,6 +196,8 @@ export function getAppState() {
     administracion_nominas: [],
     administracion_bancos: [],
     administracion_activos_fijos: [],
+    administracion_asistencias: [],
+    administracion_asistencias_audit: [],
     external_doctors: [],
     accounts_payable: [],
     clinicInfo: {
@@ -219,6 +223,7 @@ export function resetToOfficialDatabase() {
 // Guardar cambios directamente en Firestore y sincronizar estado
 export async function saveAppState(state) {
   migrateLaboratoryTestsCategories(state);
+  backfillEmployeeCodes(state);
   updateSidebarInfo(state);
 
   // Sincronizar de inmediato el estado en memoria para reactividad local offline
@@ -250,6 +255,8 @@ export async function saveAppState(state) {
   if (state.administracion_nominas) firestoreState.administracion_nominas = state.administracion_nominas;
   if (state.administracion_bancos) firestoreState.administracion_bancos = state.administracion_bancos;
   if (state.administracion_activos_fijos) firestoreState.administracion_activos_fijos = state.administracion_activos_fijos;
+  if (state.administracion_asistencias) firestoreState.administracion_asistencias = state.administracion_asistencias;
+  if (state.administracion_asistencias_audit) firestoreState.administracion_asistencias_audit = state.administracion_asistencias_audit;
   if (state.external_doctors) firestoreState.external_doctors = state.external_doctors;
   if (state.accounts_payable) firestoreState.accounts_payable = state.accounts_payable;
   if (state.clinicInfo) firestoreState.clinicInfo = state.clinicInfo;
@@ -574,6 +581,26 @@ export async function saveAppState(state) {
       if (!prevAF || JSON.stringify(prevAF) !== JSON.stringify(state.administracion_activos_fijos)) {
         const docRef = doc(db, 'multimedica', 'catalog_administracion_activos_fijos');
         batch.set(docRef, { _collectionType: 'catalog_administracion_activos_fijos', items: state.administracion_activos_fijos });
+        hasWrites = true;
+      }
+    }
+
+    // Sincronizar Asistencias y Marcajes de Personal
+    if (state.administracion_asistencias && Array.isArray(state.administracion_asistencias)) {
+      const prevAsis = lastSyncedState && lastSyncedState.administracion_asistencias;
+      if (!prevAsis || JSON.stringify(prevAsis) !== JSON.stringify(state.administracion_asistencias)) {
+        const docRef = doc(db, 'multimedica', 'catalog_administracion_asistencias');
+        batch.set(docRef, { _collectionType: 'catalog_administracion_asistencias', items: state.administracion_asistencias });
+        hasWrites = true;
+      }
+    }
+
+    // Sincronizar Auditoría de Asistencias
+    if (state.administracion_asistencias_audit && Array.isArray(state.administracion_asistencias_audit)) {
+      const prevAudit = lastSyncedState && lastSyncedState.administracion_asistencias_audit;
+      if (!prevAudit || JSON.stringify(prevAudit) !== JSON.stringify(state.administracion_asistencias_audit)) {
+        const docRef = doc(db, 'multimedica', 'catalog_administracion_asistencias_audit');
+        batch.set(docRef, { _collectionType: 'catalog_administracion_asistencias_audit', items: state.administracion_asistencias_audit });
         hasWrites = true;
       }
     }
@@ -1024,6 +1051,7 @@ function initializeSidebar(loggedUser) {
     `;
 
     document.getElementById('btn-logout').addEventListener('click', () => {
+      removeQrWidget();
       sessionStorage.removeItem('medflow_logged_user');
       window.location.reload();
     });
@@ -1110,6 +1138,22 @@ function initializeSidebar(loggedUser) {
 
 // Configurar los listeners y el estado al cargar la app
 document.addEventListener('DOMContentLoaded', () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const isAttendanceView = urlParams.get('view') === 'asistencia' || window.location.pathname.includes('/asistencia/marcar');
+
+  if (isAttendanceView) {
+    const appContainer = document.getElementById('app');
+    const loginContainer = document.getElementById('login-container');
+    if (appContainer) appContainer.style.display = 'none';
+    if (loginContainer) loginContainer.style.display = 'none';
+
+    initRealtimeFirestore((initialState) => {
+      backfillEmployeeCodes(initialState);
+      renderAttendanceMobileView(document.body);
+    });
+    return;
+  }
+
   initThemeToggle();
   initMobileDrawer();
 
@@ -1147,7 +1191,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // 1. Iniciar Escuchadores en Tiempo Real de Firebase Firestore
   initRealtimeFirestore((initialState) => {
     const wasModified = migrateLaboratoryTestsCategories(initialState);
-    if (wasModified) {
+    const wasBackfilled = backfillEmployeeCodes(initialState);
+    if (wasModified || wasBackfilled) {
       saveAppState(initialState);
     }
     lastSyncedState = JSON.parse(JSON.stringify(initialState));
@@ -1168,6 +1213,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (isValidSession) {
         updateSidebarInfo(updatedState);
+        initQrWidget();
         
         // Evitar re-renderizar la vista si el usuario está interactuando o escribiendo en un formulario
         const activeEl = document.activeElement;
@@ -1192,6 +1238,7 @@ document.addEventListener('DOMContentLoaded', () => {
           router(currentRoute);
         }
       } else {
+        removeQrWidget();
         if (appContainer) appContainer.style.display = 'none';
         if (loginContainer) {
           loginContainer.style.display = 'flex';
@@ -1216,6 +1263,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (!isValidSession) {
+      removeQrWidget();
       if (appContainer) appContainer.style.display = 'none';
       if (loginContainer) {
         loginContainer.style.display = 'flex';
@@ -1228,9 +1276,52 @@ document.addEventListener('DOMContentLoaded', () => {
       const state = getAppState();
       updateSidebarInfo(state);
       initializeSidebar(loggedUser);
+      initQrWidget();
     }
   });
 });
+
+export function backfillEmployeeCodes(state) {
+  if (!state || !state.administracion_employees || !Array.isArray(state.administracion_employees)) return false;
+  let modified = false;
+
+  let maxSeq = 0;
+  state.administracion_employees.forEach(emp => {
+    if (emp && emp.employee_code && /^EMP-\d+$/i.test(emp.employee_code)) {
+      const num = parseInt(emp.employee_code.replace(/^EMP-/i, ''), 10);
+      if (!isNaN(num) && num > maxSeq) {
+        maxSeq = num;
+      }
+    }
+  });
+
+  state.administracion_employees.forEach(emp => {
+    if (!emp) return;
+    if (!emp.employee_code || emp.employee_code.trim() === '') {
+      maxSeq++;
+      emp.employee_code = `EMP-${String(maxSeq).padStart(3, '0')}`;
+      modified = true;
+    }
+    if (!emp.whatsapp_number) {
+      emp.whatsapp_number = emp.phone || '+502 5555-0000';
+      modified = true;
+    }
+    if (!emp.department) {
+      emp.department = emp.specialty || 'General / Asistencial';
+      modified = true;
+    }
+    if (!emp.shift) {
+      emp.shift = 'Matutino';
+      modified = true;
+    }
+    if (!emp.status) {
+      emp.status = 'Activo';
+      modified = true;
+    }
+  });
+
+  return modified;
+}
 
 export function migrateLaboratoryTestsCategories(state) {
   if (!state || !state.laboratoryTests || !Array.isArray(state.laboratoryTests)) return;

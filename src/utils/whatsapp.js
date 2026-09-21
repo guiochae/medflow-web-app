@@ -143,3 +143,48 @@ function showBridgeNotificationWarning(payload, errorDetails) {
     }
   }, 10000);
 }
+
+/**
+ * Envía la notificación formal de bienvenida y código oficial de asistencia al empleado vía WhatsApp Bridge.
+ * @param {object} employee - Datos del empleado { name, whatsapp_number, employee_code }
+ * @returns {Promise<boolean>} Retorna true siempre de forma asíncrona/no bloqueante
+ */
+export async function notifyEmployeeWelcome(employee) {
+  if (!employee || !employee.whatsapp_number || !employee.employee_code) {
+    console.warn('⚠️ No se puede enviar WhatsApp: faltan datos del empleado.');
+    return false;
+  }
+
+  const payload = {
+    employeeName: employee.name,
+    phoneNumber: employee.whatsapp_number,
+    employeeCode: employee.employee_code
+  };
+
+  const state = getAppState();
+  const bridgeUrl = (state.clinicInfo && state.clinicInfo.whatsappBridgeUrl) || 'http://localhost:3001';
+
+  fetch(`${bridgeUrl}/api/notify-employee`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  })
+  .then(async (response) => {
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `Error HTTP ${response.status}`);
+    }
+    return response.json();
+  })
+  .then((data) => {
+    console.log(`✅ Código ${employee.employee_code} enviado a ${employee.name} vía WhatsApp Bridge:`, data);
+  })
+  .catch((error) => {
+    console.warn('ℹ️ WhatsApp Bridge offline o no respondió para empleado:', error.message);
+  });
+
+  return true;
+}
+

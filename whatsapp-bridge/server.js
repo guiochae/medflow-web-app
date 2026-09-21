@@ -127,6 +127,50 @@ app.post('/api/notify-doctor', async (req, res) => {
   }
 });
 
+// Endpoint POST /api/notify-employee
+app.post('/api/notify-employee', async (req, res) => {
+  const { employeeName, phoneNumber, employeeCode } = req.body;
+
+  if (!employeeName || !phoneNumber || !employeeCode) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Faltan parámetros requeridos (employeeName, phoneNumber, employeeCode).' 
+    });
+  }
+
+  if (!isReady) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'El bot de WhatsApp aún no está listo. Por favor escanea el código QR en la terminal.' 
+    });
+  }
+
+  try {
+    let cleanPhone = String(phoneNumber).replace(/[^0-9]/g, '');
+    if (cleanPhone.length === 8) {
+      cleanPhone = '502' + cleanPhone;
+    }
+
+    const chatId = `${cleanPhone}@c.us`;
+    const message = `🏥 *Hospital Privado Multimédica Sayaxché*\n\nEstimado(a) *${employeeName}*,\nBienvenido a LUGAMED. Tu código único de colaborador asignado para el control de asistencia es:\n\n🔑 *${employeeCode}*\n\nPor favor, ingresa este código cada vez que escanees el código QR dinámico de la clínica al iniciar o finalizar tu jornada.`;
+
+    await client.sendMessage(chatId, message);
+    console.log(`✉️ Código de asistencia enviado a: ${employeeName} (${cleanPhone}) | Código: ${employeeCode}`);
+
+    return res.status(200).json({ 
+      success: true, 
+      message: 'Código de colaborador enviado exitosamente.' 
+    });
+  } catch (error) {
+    console.error('❌ Error al enviar código a través del bot:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Error interno al enviar mensaje de empleado.',
+      details: error.message 
+    });
+  }
+});
+
 // Endpoint GET /api/status
 app.get('/api/status', (req, res) => {
   return res.status(200).json({

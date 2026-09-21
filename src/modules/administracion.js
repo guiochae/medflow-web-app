@@ -1,12 +1,18 @@
 import { getAppState, saveAppState } from '../main.js';
 import { simulateOnPurchaseCreated, simulateOnPayrollGenerated } from '../utils/cloud_functions.js';
+import { notifyEmployeeWelcome } from '../utils/whatsapp.js';
+import { renderRrhhAsistencia } from './attendanceManager.js';
+import { renderRrhhReportes } from './attendanceReports.js';
+import * as XLSX from 'xlsx';
 import logoUrl from '../assets/logo.jpg';
 
 let activeAdminTab = 'caja'; // 'caja', 'contabilidad', 'compras', 'rrhh'
 let activeCajaSubTab = 'cobros'; // 'cobros', 'cxp', 'nominas'
 let activeContabilidadSubTab = 'diario'; // 'diario', 'impuestos'
-let activeRrhhSubTab = 'empleados'; // 'empleados', 'nomina'
+let activeRrhhSubTab = 'empleados'; // 'empleados', 'asistencia', 'reportes', 'nomina'
+let activeRrhhReportSubTab = 'diario'; // 'diario', 'mensual', 'anual', 'empleado'
 let editingEmployeeId = null;
+let editingAttendanceId = null;
 let selectedPayrollMonth = 'Agosto 2026';
 
 // Variables temporales para el creador de compras
@@ -1324,25 +1330,37 @@ function renderComprasTab(container, state) {
 // 👥 SUBMÓDULO: RECURSOS HUMANOS (RRHH)
 // ==========================================
 function renderRrhhTab(container, state) {
+  state.administracion_employees = state.administracion_employees || [];
+  state.administracion_asistencias = state.administracion_asistencias || [];
+  state.administracion_asistencias_audit = state.administracion_asistencias_audit || [];
+
   container.innerHTML = `
     <!-- Sub-Pestañas de RRHH -->
-    <div style="display: flex; gap: 10px; margin-bottom: 1.25rem; font-size: 0.85rem;">
-      <button class="btn ${activeRrhhSubTab === 'empleados' ? 'btn-primary' : 'btn-secondary'}" id="rrhh-subtab-empleados" style="padding: 6px 12px;">👔 Gestión de Empleados</button>
-      <button class="btn ${activeRrhhSubTab === 'nomina' ? 'btn-primary' : 'btn-secondary'}" id="rrhh-subtab-nomina" style="padding: 6px 12px;">🏦 Nómina Mensual</button>
+    <div style="display: flex; gap: 10px; margin-bottom: 1.25rem; font-size: 0.85rem; overflow-x: auto; padding-bottom: 4px;">
+      <button class="btn ${activeRrhhSubTab === 'empleados' ? 'btn-primary' : 'btn-secondary'}" id="rrhh-subtab-empleados" style="padding: 6px 14px;">👔 Gestión de Empleados</button>
+      <button class="btn ${activeRrhhSubTab === 'asistencia' ? 'btn-primary' : 'btn-secondary'}" id="rrhh-subtab-asistencia" style="padding: 6px 14px;">🕒 Control de Asistencia</button>
+      <button class="btn ${activeRrhhSubTab === 'reportes' ? 'btn-primary' : 'btn-secondary'}" id="rrhh-subtab-reportes" style="padding: 6px 14px;">📊 Reportes de Asistencia</button>
+      <button class="btn ${activeRrhhSubTab === 'nomina' ? 'btn-primary' : 'btn-secondary'}" id="rrhh-subtab-nomina" style="padding: 6px 14px;">🏦 Nómina Mensual</button>
     </div>
 
     <div id="rrhh-subtab-content">
-      <!-- Se inyecta -->
+      <!-- Se inyecta según sub-pestaña activa -->
     </div>
   `;
 
   document.getElementById('rrhh-subtab-empleados').addEventListener('click', () => { activeRrhhSubTab = 'empleados'; renderRrhhTab(container, state); });
+  document.getElementById('rrhh-subtab-asistencia').addEventListener('click', () => { activeRrhhSubTab = 'asistencia'; renderRrhhTab(container, state); });
+  document.getElementById('rrhh-subtab-reportes').addEventListener('click', () => { activeRrhhSubTab = 'reportes'; renderRrhhTab(container, state); });
   document.getElementById('rrhh-subtab-nomina').addEventListener('click', () => { activeRrhhSubTab = 'nomina'; renderRrhhTab(container, state); });
 
   const subArea = document.getElementById('rrhh-subtab-content');
 
   if (activeRrhhSubTab === 'empleados') {
     renderRrhhEmpleados(subArea, state);
+  } else if (activeRrhhSubTab === 'asistencia') {
+    renderRrhhAsistencia(subArea, state);
+  } else if (activeRrhhSubTab === 'reportes') {
+    renderRrhhReportes(subArea, state);
   } else if (activeRrhhSubTab === 'nomina') {
     renderRrhhNomina(subArea, state);
   }
@@ -1364,39 +1382,68 @@ function renderRrhhEmpleados(container, state) {
   container.innerHTML = `
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;">
       
-      <!-- Registrar Empleado -->
+      <!-- Registrar / Modificar Empleado -->
       <div class="glass-card" style="padding: 1.25rem;">
-        <h3 style="font-size: 1rem; color: var(--accent-primary); margin-bottom: 1rem;">${isEditing ? 'Modificar Empleado' : 'Registrar Nuevo Empleado'}</h3>
+        <h3 style="font-size: 1rem; color: var(--accent-primary); margin-bottom: 1rem; font-family: var(--font-heading);">
+          ${isEditing ? '✏️ Modificar Colaborador' : '📝 Registrar Nuevo Colaborador'}
+        </h3>
         
         <form id="admin-employee-form" style="display: flex; flex-direction: column; gap: 12px;">
           <div class="form-group">
-            <label>Nombre Completo</label>
-            <input type="text" id="e-name" required placeholder="Nombre del empleado" value="${editingEmp ? editingEmp.name : ''}">
+            <label>Nombre Completo *</label>
+            <input type="text" id="e-name" required placeholder="Nombre y Apellidos del empleado" value="${editingEmp ? editingEmp.name : ''}">
           </div>
 
           <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group">
-              <label>Puesto</label>
-              <input type="text" id="e-position" required placeholder="Enfermero, Analista, Recepcionista" value="${editingEmp ? editingEmp.position : ''}">
+              <label>Puesto / Cargo *</label>
+              <input type="text" id="e-position" required placeholder="Médico, Enfermero, Recepcionista..." value="${editingEmp ? editingEmp.position : ''}">
             </div>
             <div class="form-group">
-              <label>Especialidad</label>
-              <input type="text" id="e-specialty" placeholder="Pediatría, General, Contabilidad" value="${editingEmp ? editingEmp.specialty || '' : ''}">
+              <label>Departamento / Servicio *</label>
+              <select id="e-department" required style="width: 100%; padding: 8px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+                <option value="Hospitalización" ${editingEmp && editingEmp.department === 'Hospitalización' ? 'selected' : ''}>Hospitalización / Encamamiento</option>
+                <option value="Emergencias" ${editingEmp && editingEmp.department === 'Emergencias' ? 'selected' : ''}>Emergencias y Observación</option>
+                <option value="Farmacia" ${editingEmp && editingEmp.department === 'Farmacia' ? 'selected' : ''}>Farmacia e Inventarios</option>
+                <option value="Quirófano" ${editingEmp && editingEmp.department === 'Quirófano' ? 'selected' : ''}>Quirófano y Cirugía</option>
+                <option value="Laboratorio" ${editingEmp && editingEmp.department === 'Laboratorio' ? 'selected' : ''}>Laboratorio Clínico</option>
+                <option value="Imagenología" ${editingEmp && editingEmp.department === 'Imagenología' ? 'selected' : ''}>Imagenología y Rayos X</option>
+                <option value="Consulta Externa" ${editingEmp && editingEmp.department === 'Consulta Externa' ? 'selected' : ''}>Consulta Externa</option>
+                <option value="Administración" ${editingEmp && editingEmp.department === 'Administración' ? 'selected' : ''}>Administración y Caja</option>
+                <option value="Mantenimiento" ${editingEmp && editingEmp.department === 'Mantenimiento' ? 'selected' : ''}>Mantenimiento y Servicios</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="form-group">
+              <label>Turno / Horario *</label>
+              <select id="e-shift" required style="width: 100%; padding: 8px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+                <option value="Matutino" ${editingEmp && editingEmp.shift === 'Matutino' ? 'selected' : ''}>Matutino (07:00 - 15:00)</option>
+                <option value="Vespertino" ${editingEmp && editingEmp.shift === 'Vespertino' ? 'selected' : ''}>Vespertino (13:00 - 21:00)</option>
+                <option value="Nocturno" ${editingEmp && editingEmp.shift === 'Nocturno' ? 'selected' : ''}>Nocturno (19:00 - 07:00)</option>
+                <option value="Mixto" ${editingEmp && editingEmp.shift === 'Mixto' ? 'selected' : ''}>Mixto (08:00 - 17:00)</option>
+                <option value="Jornada 24h" ${editingEmp && editingEmp.shift === 'Jornada 24h' ? 'selected' : ''}>Jornada 24 Horas</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Número de WhatsApp (E.164) *</label>
+              <input type="text" id="e-whatsapp" required placeholder="+502 5555-1234 o 50255551234" value="${editingEmp ? (editingEmp.whatsapp_number || editingEmp.phone || '') : '+502 '}">
             </div>
           </div>
 
           <div class="form-row" style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 10px;">
             <div class="form-group">
-              <label>Salario Propuesto Mensual</label>
+              <label>Salario Propuesto Mensual (Q) *</label>
               <input type="number" id="e-salary" required min="0.01" step="any" value="${editingEmp ? editingEmp.salary : '4500.00'}">
             </div>
             <div class="form-group">
-              <label>Fecha de Contratación</label>
+              <label>Fecha de Contratación *</label>
               <input type="date" id="e-date" required value="${editingEmp && editingEmp.hireDate ? editingEmp.hireDate.substring(0, 10) : new Date().toISOString().substring(0, 10)}">
             </div>
           </div>
 
-          <!-- Widget Algoritmo Recomendador de Contratación -->
+          <!-- Widget Algoritmo Recomendador -->
           <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px;">
             <h4 style="margin: 0 0 8px 0; font-size: 0.82rem; color: var(--text-muted);">Recomendador Financiero de Viabilidad</h4>
             
@@ -1426,27 +1473,43 @@ function renderRrhhEmpleados(container, state) {
         </form>
       </div>
 
-      <!-- Listado de Empleados con Incidencias -->
+      <!-- Listado de Colaboradores Registrados -->
       <div class="glass-card" style="padding: 1.25rem;">
-        <h3 style="font-size: 1rem; color: var(--accent-primary); margin-bottom: 1rem;">Colaboradores y Gestión de Incidencias</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h3 style="font-size: 1rem; color: var(--accent-primary); margin: 0; font-family: var(--font-heading);">Colaboradores Activos</h3>
+          <span style="font-size: 0.75rem; background: rgba(0,242,254,0.1); color: var(--accent-primary); padding: 2px 8px; border-radius: 10px; font-weight: bold;">
+            ${(state.administracion_employees || []).length} Registrados
+          </span>
+        </div>
         
-        <div style="max-height: 460px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+        <div style="max-height: 480px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
           ${(state.administracion_employees || []).length === 0 
             ? `<div style="text-align: center; color: var(--text-muted); font-style: italic; padding: 20px 0; font-size: 0.85rem;">No se registran colaboradores activos.</div>`
             : state.administracion_employees.map(e => `
-                <div style="border: 1px solid var(--border-color); border-radius: 6px; background: rgba(255,255,255,0.01); padding: 10px; font-size: 0.82rem; display: flex; justify-content: space-between; align-items: flex-start;">
-                  <div>
-                    <strong style="font-size: 0.88rem; color: var(--text-primary);">${e.name}</strong><br>
-                    <span style="font-size: 0.75rem; color: var(--text-muted);">${e.position} | Sueldo: Q${parseFloat(e.salary).toFixed(2)}</span>
-                    <div style="display: flex; gap: 6px; margin-top: 6px; font-size: 0.72rem;">
+                <div style="border: 1px solid var(--border-color); border-radius: 6px; background: rgba(255,255,255,0.01); padding: 10px; font-size: 0.82rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
+                  <div style="flex: 1;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <span style="background: rgba(0, 242, 254, 0.15); color: var(--accent-primary); padding: 1px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; font-size: 0.75rem;">
+                        ${e.employee_code || 'EMP-S/C'}
+                      </span>
+                      <strong style="font-size: 0.88rem; color: var(--text-primary);">${e.name}</strong>
+                    </div>
+                    <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 3px;">
+                      ${e.position} &bull; <strong style="color: #cbd5e1;">${e.department || 'General'}</strong> &bull; Turno: ${e.shift || 'Matutino'}
+                    </span>
+                    <span style="font-size: 0.73rem; color: var(--accent-secondary); display: block; margin-top: 2px;">
+                      📱 WhatsApp: ${e.whatsapp_number || e.phone || 'No asignado'} &bull; Sueldo: Q${parseFloat(e.salary).toFixed(2)}
+                    </span>
+                    <div style="display: flex; gap: 6px; margin-top: 5px; font-size: 0.7rem;">
                       <span style="background: rgba(239,68,68,0.1); color: #ef4444; padding: 1px 6px; border-radius: 4px;">Faltas: ${e.absences || 0}</span>
-                      <span style="background: rgba(245,158,11,0.1); color: #f59e0b; padding: 1px 6px; border-radius: 4px;">Llamadas de atención: ${e.warnings || 0}</span>
+                      <span style="background: rgba(245,158,11,0.1); color: #f59e0b; padding: 1px 6px; border-radius: 4px;">Amonestaciones: ${e.warnings || 0}</span>
                     </div>
                   </div>
 
-                  <div style="display: flex; flex-direction: column; gap: 4px; width: 100px;">
+                  <div style="display: flex; flex-direction: column; gap: 4px; min-width: 110px;">
                     <button class="btn btn-secondary btn-small btn-edit-emp" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px;">✏️ Editar</button>
-                    <button class="btn btn-secondary btn-small btn-add-absence" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px;">➕ Registrar Falta</button>
+                    <button class="btn btn-secondary btn-small btn-resend-whatsapp" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px; color: #22c55e;">📲 Enviar Código</button>
+                    <button class="btn btn-secondary btn-small btn-add-absence" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px;">➕ Falta</button>
                     <button class="btn btn-secondary btn-small btn-add-warning" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px;">⚠️ Amonestar</button>
                     <button class="btn btn-small btn-fire-emp" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px; background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);">Dar de Baja</button>
                   </div>
@@ -1459,10 +1522,7 @@ function renderRrhhEmpleados(container, state) {
     </div>
   `;
 
-  // Inicializar listado si es nulo
-  state.administracion_employees = state.administracion_employees || [];
-
-  // Implementación del Algoritmo Recomendador Dinámico (SAT / IGSS)
+  // Algoritmo recomendador
   const salaryInput = document.getElementById('e-salary');
   const baseSalaryText = document.getElementById('rec-base-salary');
   const totalCostText = document.getElementById('rec-total-cost');
@@ -1475,52 +1535,85 @@ function renderRrhhEmpleados(container, state) {
     baseSalaryText.textContent = `Q${salary.toFixed(2)}`;
     totalCostText.textContent = `Q${totalCost.toFixed(2)}`;
 
-    // Ponderación: 60% Caja (saldo actual) y 40% Utilidad neta
     const availableFunds = (cashBalance * 0.6) + (utilityBalance * 0.4);
 
     if (availableFunds > (totalCost * 3.5)) {
       badge.textContent = 'VIABLE';
-      badge.style.background = '#22c55e'; // Green
+      badge.style.background = '#22c55e';
     } else if (availableFunds >= (totalCost * 1.5)) {
       badge.textContent = 'AJUSTADO';
-      badge.style.background = '#f59e0b'; // Orange
+      badge.style.background = '#f59e0b';
     } else {
       badge.textContent = 'RIESGO DE SOBREGUIRO';
-      badge.style.background = '#ef4444'; // Red
+      badge.style.background = '#ef4444';
     }
   };
 
   salaryInput.addEventListener('input', executeRecommendationAlgorithm);
-  executeRecommendationAlgorithm(); // Calcular al iniciar
+  executeRecommendationAlgorithm();
 
-  // Bind Submit Employee (New or Edit)
-  document.getElementById('admin-employee-form').addEventListener('submit', (e) => {
+  // Submit Empleado Form
+  document.getElementById('admin-employee-form').addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    const name = document.getElementById('e-name').value;
-    const pos = document.getElementById('e-position').value;
-    const specialty = document.getElementById('e-specialty').value || 'General';
+    const name = document.getElementById('e-name').value.trim();
+    const pos = document.getElementById('e-position').value.trim();
+    const dept = document.getElementById('e-department').value;
+    const shift = document.getElementById('e-shift').value;
+    let whatsapp = document.getElementById('e-whatsapp').value.trim();
     const salary = parseFloat(salaryInput.value) || 0;
     const hireDate = document.getElementById('e-date').value;
+
+    // Formatear WhatsApp a formato limpio E.164
+    let cleanPhone = whatsapp.replace(/[^0-9+]/g, '');
+    if (!cleanPhone.startsWith('+')) {
+      if (cleanPhone.length === 8) {
+        cleanPhone = '+502' + cleanPhone;
+      } else if (!cleanPhone.startsWith('502')) {
+        cleanPhone = '+502' + cleanPhone;
+      } else {
+        cleanPhone = '+' + cleanPhone;
+      }
+    }
 
     if (isEditing) {
       const emp = state.administracion_employees.find(x => x.id === editingEmployeeId);
       if (emp) {
         emp.name = name;
         emp.position = pos;
-        emp.specialty = specialty;
+        emp.department = dept;
+        emp.specialty = dept;
+        emp.shift = shift;
+        emp.whatsapp_number = cleanPhone;
+        emp.phone = cleanPhone;
         emp.salary = salary;
         emp.hireDate = hireDate;
-        saveAppState(state);
-        alert(`✅ Empleado ${name} actualizado exitosamente.`);
+        await saveAppState(state);
+        alert(`✅ Colaborador ${name} actualizado exitosamente.`);
       }
       editingEmployeeId = null;
     } else {
+      // Calcular siguiente código correlativo EMP-001, EMP-002, ...
+      let maxSeq = 0;
+      (state.administracion_employees || []).forEach(emp => {
+        if (emp.employee_code && /^EMP-\d+$/i.test(emp.employee_code)) {
+          const num = parseInt(emp.employee_code.replace(/^EMP-/i, ''), 10);
+          if (!isNaN(num) && num > maxSeq) maxSeq = num;
+        }
+      });
+      maxSeq++;
+      const employeeCode = `EMP-${String(maxSeq).padStart(3, '0')}`;
+
       const newEmp = {
         id: 'emp-' + Date.now(),
+        employee_code: employeeCode,
         name: name,
         position: pos,
-        specialty: specialty,
+        department: dept,
+        specialty: dept,
+        shift: shift,
+        whatsapp_number: cleanPhone,
+        phone: cleanPhone,
         salary: salary,
         hireDate: hireDate,
         absences: 0,
@@ -1529,14 +1622,17 @@ function renderRrhhEmpleados(container, state) {
       };
 
       state.administracion_employees.push(newEmp);
-      saveAppState(state);
-      alert(`✅ Empleado ${name} registrado y contratado exitosamente.`);
+      await saveAppState(state);
+
+      // Disparar notificación vía WhatsApp Bridge de forma asíncrona
+      notifyEmployeeWelcome(newEmp);
+
+      alert(`✅ Colaborador ${name} contratado exitosamente.\n\n📌 Código Asignado: ${employeeCode}\n📲 Notificación formal enviada a: ${cleanPhone}`);
     }
 
     renderRrhhEmpleados(container, state);
   });
 
-  // Bind Cancel Edit Button
   const btnCancel = document.getElementById('btn-cancel-employee-edit');
   if (btnCancel) {
     btnCancel.addEventListener('click', () => {
@@ -1545,7 +1641,6 @@ function renderRrhhEmpleados(container, state) {
     });
   }
 
-  // Bind Edit Employee Button
   container.querySelectorAll('.btn-edit-emp').forEach(btn => {
     btn.addEventListener('click', () => {
       editingEmployeeId = btn.getAttribute('data-id');
@@ -1553,7 +1648,18 @@ function renderRrhhEmpleados(container, state) {
     });
   });
 
-  // Bind Incidencias (Faltas, Amonestaciones y Despido)
+  // Reenviar Código por WhatsApp
+  container.querySelectorAll('.btn-resend-whatsapp').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const emp = state.administracion_employees.find(e => e.id === id);
+      if (emp) {
+        notifyEmployeeWelcome(emp);
+        alert(`📲 Se disparó el reenvío del código ${emp.employee_code} a ${emp.name} (${emp.whatsapp_number || emp.phone}).`);
+      }
+    });
+  });
+
   container.querySelectorAll('.btn-add-absence').forEach(btn => {
     btn.addEventListener('click', () => {
       const id = btn.getAttribute('data-id');
