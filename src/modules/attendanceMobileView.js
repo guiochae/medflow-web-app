@@ -251,6 +251,15 @@ export function renderAttendanceMobileView(rootContainer) {
     });
   }
 
+  // Interceptar submit del formulario para evitar recargas accidentales al presionar Enter en móvil
+  const formEl = document.getElementById('mob-attendance-form');
+  if (formEl) {
+    formEl.addEventListener('submit', (e) => {
+      e.preventDefault();
+      handleMarkAction('ENTRADA');
+    });
+  }
+
   // Handler de marcaje (Entrada o Salida)
   const handleMarkAction = async (type) => {
     const code = inputCode ? inputCode.value.trim().toUpperCase() : '';
@@ -265,8 +274,43 @@ export function renderAttendanceMobileView(rootContainer) {
 
     const btnIn = document.getElementById('btn-mob-mark-in');
     const btnOut = document.getElementById('btn-mob-mark-out');
-    if (btnIn) btnIn.disabled = true;
-    if (btnOut) btnOut.disabled = true;
+    
+    // Guardar contenido original de botones
+    const origInHtml = btnIn ? btnIn.innerHTML : '<span style="font-size: 1.5rem;">🟢</span><span>MARCAR ENTRADA</span>';
+    const origOutHtml = btnOut ? btnOut.innerHTML : '<span style="font-size: 1.5rem;">🔴</span><span>MARCAR SALIDA</span>';
+
+    if (btnIn) {
+      btnIn.disabled = true;
+      btnIn.style.opacity = '0.65';
+      if (type === 'ENTRADA') {
+        btnIn.innerHTML = '<span style="font-size: 1.3rem;">⏳</span><span>REGISTRANDO...</span>';
+      }
+    }
+    if (btnOut) {
+      btnOut.disabled = true;
+      btnOut.style.opacity = '0.65';
+      if (type === 'SALIDA') {
+        btnOut.innerHTML = '<span style="font-size: 1.3rem;">⏳</span><span>REGISTRANDO...</span>';
+      }
+    }
+
+    const restoreButtons = () => {
+      if (btnIn) {
+        btnIn.disabled = false;
+        btnIn.style.opacity = '1';
+        btnIn.innerHTML = origInHtml;
+      }
+      if (btnOut) {
+        btnOut.disabled = false;
+        btnOut.style.opacity = '1';
+        btnOut.innerHTML = origOutHtml;
+      }
+    };
+
+    // Timeout de seguridad de 6 segundos para evitar bloqueo perpetuo
+    const safetyTimeout = setTimeout(() => {
+      restoreButtons();
+    }, 6000);
 
     // Detectar IP aproximada o navegador
     const userAgent = navigator.userAgent;
@@ -281,25 +325,27 @@ export function renderAttendanceMobileView(rootContainer) {
         state: currentState
       });
 
+      clearTimeout(safetyTimeout);
+
       if (!result.success) {
         if (errorBanner) {
           errorBanner.textContent = result.error || 'Error al procesar el marcaje.';
           errorBanner.style.display = 'block';
         }
-        if (btnIn) btnIn.disabled = false;
-        if (btnOut) btnOut.disabled = false;
+        restoreButtons();
         return;
       }
 
       // Renderizar comprobante exitoso de asistencia
       renderSuccessReceipt(result.record, result.employee);
     } catch (err) {
+      clearTimeout(safetyTimeout);
+      console.error("Error en marcaje de asistencia:", err);
       if (errorBanner) {
-        errorBanner.textContent = 'Error inesperado: ' + err.message;
+        errorBanner.textContent = 'Error inesperado: ' + (err.message || err);
         errorBanner.style.display = 'block';
       }
-      if (btnIn) btnIn.disabled = false;
-      if (btnOut) btnOut.disabled = false;
+      restoreButtons();
     }
   };
 
@@ -316,14 +362,17 @@ function renderSuccessReceipt(record, employee) {
   const container = document.getElementById('mob-attendance-flow-container');
   if (!container) return;
 
-  const isEntry = record.type === 'ENTRADA';
-  const isLate = record.status === 'LATE';
+  const emp = employee || { name: 'Colaborador LUGAMED', employee_code: 'EMP-S/C', position: 'Personal' };
+  const rec = record || { type: 'ENTRADA', status: 'ON_TIME', time_str: new Date().toLocaleTimeString('es-GT') };
+
+  const isEntry = rec.type === 'ENTRADA';
+  const isLate = rec.status === 'LATE';
 
   const statusBadge = isEntry
     ? (isLate 
-        ? `<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 0.78rem;">⚠️ RETARDO (+${record.lateMinutes} min)</span>`
+        ? `<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 0.78rem;">⚠️ RETARDO (+${rec.lateMinutes || 0} min)</span>`
         : `<span style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 0.78rem;">✅ A TIEMPO</span>`)
-    : `<span style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 0.78rem;">🏁 JORNADA FINALIZADA ${record.hoursWorked ? `(${record.hoursWorked} hrs)` : ''}</span>`;
+    : `<span style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 0.78rem;">🏁 JORNADA FINALIZADA ${rec.hoursWorked ? `(${rec.hoursWorked} hrs)` : ''}</span>`;
 
   container.innerHTML = `
     <div style="
@@ -365,23 +414,23 @@ function renderSuccessReceipt(record, employee) {
       ">
         <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px;">
           <span style="color: #94a3b8;">Colaborador:</span>
-          <strong style="color: #ffffff; text-align: right;">${employee.name}</strong>
+          <strong style="color: #ffffff; text-align: right;">${emp.name}</strong>
         </div>
         <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px;">
           <span style="color: #94a3b8;">Código:</span>
-          <strong style="color: #00f2fe; font-family: monospace;">${employee.employee_code}</strong>
+          <strong style="color: #00f2fe; font-family: monospace;">${emp.employee_code || 'EMP-001'}</strong>
         </div>
         <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px;">
           <span style="color: #94a3b8;">Departamento / Puesto:</span>
-          <span style="color: #ffffff;">${employee.position}</span>
+          <span style="color: #ffffff;">${emp.position || 'Colaborador'}</span>
         </div>
         <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px;">
           <span style="color: #94a3b8;">Tipo de Marcaje:</span>
-          <strong style="color: ${isEntry ? '#22c55e' : '#ef4444'};">${record.type}</strong>
+          <strong style="color: ${isEntry ? '#22c55e' : '#ef4444'};">${rec.type}</strong>
         </div>
         <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px;">
           <span style="color: #94a3b8;">Hora Registrada:</span>
-          <strong style="color: #ffffff; font-family: monospace;">${record.time_str || new Date().toLocaleTimeString('es-GT')}</strong>
+          <strong style="color: #ffffff; font-family: monospace;">${rec.time_str || new Date().toLocaleTimeString('es-GT')}</strong>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 4px;">
           <span style="color: #94a3b8;">Estado de Puntualidad:</span>

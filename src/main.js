@@ -269,9 +269,9 @@ export async function saveAppState(state) {
   saveStateToLocalCache();
 
   try {
-    // Si lastSyncedState no se ha inicializado, usar objeto vacío para registrar todos los cambios iniciales
+    // Si lastSyncedState no se ha inicializado, usar copia del estado actual para solo sincronizar cambios reales
     if (!lastSyncedState) {
-      lastSyncedState = {};
+      lastSyncedState = JSON.parse(JSON.stringify(state));
     }
 
     const batch = writeBatch(db);
@@ -1150,7 +1150,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (appContainer) appContainer.style.display = 'none';
     if (loginContainer) loginContainer.style.display = 'none';
 
+    document.body.innerHTML = `
+      <div style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #0b1120; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif;">
+        <div class="spinner" style="width: 45px; height: 45px; border: 4px solid rgba(0, 242, 254, 0.15); border-top: 4px solid #00f2fe; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1.25rem;"></div>
+        <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+        <div style="font-size: 1.05rem; font-weight: 700; color: #00f2fe;">Cargando Terminal de Asistencia...</div>
+        <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 4px;">Hospital Privado Multimédica Sayaxché</div>
+      </div>
+    `;
+
     initRealtimeFirestore((initialState) => {
+      lastSyncedState = JSON.parse(JSON.stringify(initialState));
       backfillEmployeeCodes(initialState);
       renderAttendanceMobileView(document.body);
     });

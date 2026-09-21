@@ -1,6 +1,8 @@
 // src/utils/qrAttendance.js
 import QRCode from 'qrcode';
 import { saveAppState } from '../main.js';
+import { db, firestoreState, saveStateToLocalCache } from '../firebase.js';
+import { doc, setDoc } from 'firebase/firestore';
 
 const QR_SECRET = 'LUGAMED_ATTENDANCE_SECRET_2026_TOTP';
 const TOKEN_WINDOW_SECONDS = 30; // Rotación cada 30 segundos
@@ -278,7 +280,28 @@ export async function recordAttendance({ employeeCode, type, ipAddress, userAgen
   };
 
   state.administracion_asistencias.unshift(newAttendance);
-  await saveAppState(state);
+
+  // Sincronizar en memoria global y caché local inmediatamente
+  if (firestoreState) {
+    firestoreState.administracion_asistencias = state.administracion_asistencias;
+  }
+  saveStateToLocalCache();
+
+  // Guardar de forma directa y atómica en Firestore
+  try {
+    const docRef = doc(db, 'multimedica', 'catalog_administracion_asistencias');
+    await setDoc(docRef, { _collectionType: 'catalog_administracion_asistencias', items: state.administracion_asistencias }, { merge: true });
+
+    const indRef = doc(db, 'multimedica', newAttendance.id);
+    await setDoc(indRef, { ...newAttendance, _collectionType: 'administracion_asistencias' }, { merge: true });
+  } catch (err) {
+    console.warn("Aviso guardando marcaje en Firestore:", err);
+  }
+
+  // Notificar sincronización general en segundo plano
+  try {
+    saveAppState(state).catch(e => console.warn("Sync diferido de estado:", e));
+  } catch (e) {}
 
   return {
     success: true,
