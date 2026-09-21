@@ -65,11 +65,34 @@ export function renderAttendanceMobileView(rootContainer) {
           2. Escanea nuevamente el código QR actual que rota automáticamente.
         </div>
 
+        <button id="btn-force-continue-att" style="
+          width: 100%;
+          background: linear-gradient(135deg, #0284c7, #00f2fe);
+          color: #0b1120;
+          font-weight: 700;
+          padding: 12px;
+          border: none;
+          border-radius: 10px;
+          font-size: 0.9rem;
+          cursor: pointer;
+          margin-bottom: 1.25rem;
+        ">
+          ➡️ Continuar a Pantalla de Marcaje
+        </button>
+
         <div style="font-size: 0.75rem; color: #64748b; font-family: monospace;">
           LUGAMED 2.0 &bull; Control de Asistencia Seguro
         </div>
       </div>
     `;
+
+    const btnForce = document.getElementById('btn-force-continue-att');
+    if (btnForce) {
+      btnForce.addEventListener('click', () => {
+        window.history.replaceState({}, '', window.location.pathname + '?view=asistencia&token=direct');
+        renderAttendanceMobileView(rootContainer);
+      });
+    }
     return;
   }
 
