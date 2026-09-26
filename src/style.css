@@ -1180,6 +1180,9 @@ tbody tr:hover {
     padding: 0 !important;
     background: white !important;
   }
+  .no-print {
+    display: none !important;
+  }
   #prescription-print-modal .modal-header,
   #prescription-print-modal .modal-footer,
   #clinical-history-modal .modal-header,
@@ -1229,10 +1232,74 @@ tbody tr:hover {
     margin-top: 6px !important;
   }
 
-  .prescription-page-counter-print::after {
-    counter-increment: page;
-    content: "Hoja " counter(page);
+  /* Payroll Payslips Grid - Exact 6 vouchers per Letter sheet (2 cols x 3 rows) */
+  .payroll-payslips-page {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    grid-template-rows: repeat(3, 1fr) !important;
+    gap: 4mm !important;
+    height: 248mm !important;
+    max-height: 248mm !important;
+    box-sizing: border-box !important;
+    padding: 2mm 0 !important;
+    margin: 0 !important;
+    page-break-before: always !important;
+    break-before: page !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
+
+  .payroll-voucher-card {
+    border: 1.2px dashed #334155 !important;
+    border-radius: 4px !important;
+    padding: 6px 8px !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    font-size: 0.65rem !important;
+    line-height: 1.2 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    overflow: hidden !important;
+  }
+
+  /* Modos de filtro de impresión */
+  .print-only-vouchers .payroll-master-sheet {
+    display: none !important;
+  }
+  .print-only-master .payroll-payslips-page {
+    display: none !important;
+  }
+}
+
+/* Estilos en pantalla para vouchers de nómina (6 por página) */
+.payroll-payslips-page {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: repeat(3, 1fr);
+  gap: 12px;
+  min-height: 680px;
+  margin-top: 2rem;
+  border-top: 2px dashed #cbd5e1;
+  padding-top: 1.5rem;
+}
+
+.payroll-voucher-card {
+  border: 1.5px dashed #64748b;
+  border-radius: 6px;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  background: #ffffff;
+  color: #0f172a;
 }
 
 /* Ocultar correlativo en pantalla */

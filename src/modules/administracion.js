@@ -1730,11 +1730,12 @@ function showPayrollPrintPreview(payroll, state) {
   if (!modal || !previewContainer || !printActionBtn) return;
 
   if (modalTitle) {
-    modalTitle.textContent = "Vista Preliminar de Impresión: Nómina de Empleados";
+    modalTitle.textContent = "Vista Preliminar de Impresión: Nómina y Vouchers de Pago";
   }
-  printActionBtn.innerHTML = '<span>🖨️</span> Imprimir Nómina';
+  printActionBtn.innerHTML = '<span>🖨️</span> Imprimir Documento';
 
   const clinic = state.clinicInfo || {};
+  const logoUrl = 'assets/logo-Db6-vjaU.jpg';
   const dateFormatted = new Date(payroll.date).toLocaleDateString('es-GT', {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
   });
@@ -1755,71 +1756,109 @@ function showPayrollPrintPreview(payroll, state) {
     </tr>
   `).join('');
 
-  // Agrupar empleados de 4 en 4 para los recibos individuales
+  // Agrupar empleados de 6 en 6 exactamente para los vouchers individuales (2 columnas x 3 filas por página)
   const payslipsHtmlChunks = [];
-  const chunkSize = 4;
+  const chunkSize = 6;
   for (let i = 0; i < (payroll.employees || []).length; i += chunkSize) {
     const chunk = payroll.employees.slice(i, i + chunkSize);
-    const chunkHtml = chunk.map(emp => `
-      <div style="width: 49%; height: 120mm; border: 1px dashed #000; padding: 15px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; font-size: 0.75rem; background: #fff; page-break-inside: avoid; margin-bottom: 8mm; border-radius: 4px; color: #000;">
-        <div>
-          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 10px;">
-            <span style="font-weight: bold; font-size: 0.8rem; text-transform: uppercase;">${clinic.name}</span>
-            <span style="font-size: 0.7rem; font-weight: bold; color: #333; letter-spacing: 0.5px;">RECIBO DE PAGO</span>
+    const chunkHtml = chunk.map(emp => {
+      const empCode = emp.employee_code || (state.administracion_employees && state.administracion_employees.find(x => x.id === emp.id)?.employee_code) || 'EMP-S/C';
+      return `
+        <div class="payroll-voucher-card">
+          <div>
+            <!-- Encabezado del Voucher -->
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid #0f172a; padding-bottom: 3px; margin-bottom: 4px;">
+              <div style="display: flex; align-items: center; gap: 4px;">
+                <strong style="font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.3px; color: #0f172a;">${clinic.name || 'LUGAMED'}</strong>
+              </div>
+              <span style="font-size: 0.6rem; font-weight: bold; background: #f1f5f9; border: 1px solid #cbd5e1; color: #0f172a; padding: 1px 5px; border-radius: 3px; letter-spacing: 0.3px;">COMPROBANTE DE PAGO</span>
+            </div>
+
+            <!-- Datos del Colaborador y Período -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 4px; line-height: 1.25; margin-bottom: 4px; font-size: 0.65rem;">
+              <div>
+                <div><strong>Colaborador:</strong> <span style="font-weight: 700; color: #000;">${emp.name}</span></div>
+                <div style="color: #334155;"><strong>Cargo:</strong> ${emp.position} &bull; <strong>Cód:</strong> <span style="font-family: monospace; font-weight: bold;">${empCode}</span></div>
+              </div>
+              <div style="text-align: right; font-size: 0.62rem; color: #475569; white-space: nowrap;">
+                <div><strong>Período:</strong> ${payroll.month}</div>
+                <div><strong>Fecha:</strong> ${dateFormatted.split(',')[0]}</div>
+                <div style="font-family: monospace;">REC-${payroll.id.substring(8, 14)}-${emp.id.substring(4, 8)}</div>
+              </div>
+            </div>
+
+            <!-- Tabla de Montos de Liquidación -->
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.65rem; margin-bottom: 3px; color: #000;">
+              <thead>
+                <tr style="border-top: 1px solid #e2e8f0; border-bottom: 1px solid #0f172a; font-size: 0.58rem; text-transform: uppercase; background: #f8fafc;">
+                  <th style="padding: 2px 4px; text-align: left;">Concepto</th>
+                  <th style="padding: 2px 4px; text-align: right;">Monto (Q)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="padding: 2px 4px; border-bottom: 1px dashed #e2e8f0;">Sueldo Base / Devengado</td>
+                  <td style="padding: 2px 4px; text-align: right; font-family: monospace; border-bottom: 1px dashed #e2e8f0;">Q${parseFloat(emp.salary).toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 2px 4px; border-bottom: 1px dashed #e2e8f0; color: #b91c1c;">(-) Descuentos / Deducciones</td>
+                  <td style="padding: 2px 4px; text-align: right; font-family: monospace; border-bottom: 1px dashed #e2e8f0; color: #b91c1c;">Q${parseFloat(emp.discount || 0).toFixed(2)}</td>
+                </tr>
+                <tr style="background: #f0fdf4; font-weight: bold; border-top: 1.5px solid #0f172a; border-bottom: 1px solid #0f172a;">
+                  <td style="padding: 2px 4px; text-transform: uppercase; color: #15803d;">LÍQUIDO A RECIBIR (CHEQUE)</td>
+                  <td style="padding: 2px 4px; text-align: right; font-family: monospace; font-size: 0.74rem; color: #15803d;">Q${parseFloat(emp.netSalary).toFixed(2)}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <div style="line-height: 1.4; margin-bottom: 10px;">
-            <strong>Colaborador:</strong> ${emp.name}<br>
-            <strong>Puesto:</strong> ${emp.position}<br>
-            <strong>Período:</strong> ${payroll.month}<br>
-            <strong>Fecha Emisión:</strong> ${dateFormatted.split(',')[0]}<br>
-            <strong>ID Recibo:</strong> REC-${payroll.id.substring(8, 14)}-${emp.id.substring(4, 8)}
+
+          <!-- Declaración de Recibo de Cheque y Firmas -->
+          <div style="margin-top: 2px;">
+            <div style="font-size: 0.55rem; color: #475569; text-align: justify; line-height: 1.1; margin-bottom: 4px;">
+              Recibí a mi entera conformidad cheque/pago por la cantidad líquida descrita en concepto de sueldo correspondiente al período indicado.
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 8px; align-items: flex-end; margin-top: 8px;">
+              <div style="text-align: center;">
+                <div style="border-top: 1px solid #0f172a; width: 92%; margin: 0 auto 2px auto;"></div>
+                <span style="font-size: 0.56rem; font-weight: bold; color: #0f172a; text-transform: uppercase; display: block;">Firma de Conforme (Empleado)</span>
+              </div>
+              <div style="text-align: center;">
+                <div style="border-top: 1px solid #0f172a; width: 92%; margin: 0 auto 2px auto;"></div>
+                <span style="font-size: 0.56rem; font-weight: bold; color: #0f172a; text-transform: uppercase; display: block;">DPI / No. Cheque</span>
+              </div>
+            </div>
           </div>
-          <table style="width: 100%; border-collapse: collapse; font-size: 0.72rem; margin-top: 10px; color: #000;">
-            <thead>
-              <tr style="border-bottom: 1px solid #000; font-weight: bold;">
-                <td style="padding: 3px 0;">Concepto</td>
-                <td style="text-align: right; padding: 3px 0;">Monto</td>
-              </tr>
-            </thead>
-            <tbody>
-              <tr style="border-bottom: 1px dashed #eee;">
-                <td style="padding: 4px 0;">Sueldo Devengado</td>
-                <td style="text-align: right; font-family: monospace; padding: 4px 0;">Q${parseFloat(emp.salary).toFixed(2)}</td>
-              </tr>
-              <tr style="border-bottom: 1px dashed #eee; color: #a00;">
-                <td style="padding: 4px 0;">Deducciones / Descuentos</td>
-                <td style="text-align: right; font-family: monospace; padding: 4px 0;">Q${parseFloat(emp.discount || 0).toFixed(2)}</td>
-              </tr>
-              <tr style="font-weight: bold; border-top: 1.5px solid #000;">
-                <td style="padding: 6px 0;">Neto Liquidado</td>
-                <td style="text-align: right; font-family: monospace; padding: 6px 0; color: #000;">Q${parseFloat(emp.netSalary).toFixed(2)}</td>
-              </tr>
-            </tbody>
-          </table>
         </div>
-        <div style="text-align: center; margin-top: 25px; margin-bottom: 5px;">
-          <div style="border-top: 1px solid #000; width: 80%; margin: 0 auto 4px auto;"></div>
-          <span style="font-size: 0.65rem; color: #333; text-transform: uppercase;">Firma de Conforme (Empleado)</span>
-        </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
 
     payslipsHtmlChunks.push(`
-      <div class="payroll-payslips-page" style="page-break-before: always; display: flex; flex-wrap: wrap; justify-content: space-between; align-content: flex-start; height: 260mm; box-sizing: border-box; padding: 10px 0;">
+      <div class="payroll-payslips-page">
         ${chunkHtml}
       </div>
     `);
   }
 
   previewContainer.innerHTML = `
-    <div class="prescription-preview-box">
-      
-      <!-- Tabla principal de impresión y pantalla -->
+    <!-- Barra de Selección de Impresión -->
+    <div class="no-print" style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 14px; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 10px;">
+      <div style="font-size: 0.85rem; font-weight: 600; color: #1e293b; display: flex; align-items: center; gap: 6px;">
+        <span>🖨️</span> <span>Modo de Impresión / PDF:</span>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button type="button" class="btn btn-small btn-mode-toggle" id="btn-print-mode-all" style="font-size: 0.75rem; padding: 4px 10px; background: #0284c7; color: white; font-weight: 600;">📑 Todo (Planilla + Vouchers)</button>
+        <button type="button" class="btn btn-small btn-mode-toggle" id="btn-print-mode-vouchers" style="font-size: 0.75rem; padding: 4px 10px; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;">🎟️ Solo Vouchers (6 por hoja)</button>
+        <button type="button" class="btn btn-small btn-mode-toggle" id="btn-print-mode-master" style="font-size: 0.75rem; padding: 4px 10px; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;">📊 Solo Planilla Resumen</button>
+      </div>
+    </div>
+
+    <!-- Hoja de Nómina General de Resumen -->
+    <div class="payroll-master-sheet prescription-preview-box">
       <table style="width: 100%; border-collapse: collapse; background: transparent;">
         <thead>
           <tr>
             <td style="border: none; padding: 0 0 15px 0;">
-              <!-- Encabezado de la clínica (se repite automáticamente al inicio de cada página física) -->
               <div class="prescription-preview-header" style="display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 1rem; margin-bottom: 1rem;">
                 <div style="display: flex; align-items: center; gap: 12px; text-align: left;">
                   ${clinic.logoData 
@@ -1906,12 +1945,58 @@ function showPayrollPrintPreview(payroll, state) {
           </tr>
         </tfoot>
       </table>
-
     </div>
 
-    <!-- Hojas de Recibos Individuales de Pago (4 por página física) -->
+    <!-- Hojas de Vouchers de Cheques (6 por página física) -->
     ${payslipsHtmlChunks.join('')}
   `;
+
+  // Controladores de modo de impresión
+  const btnModeAll = document.getElementById('btn-print-mode-all');
+  const btnModeVouchers = document.getElementById('btn-print-mode-vouchers');
+  const btnModeMaster = document.getElementById('btn-print-mode-master');
+
+  const updatePrintMode = (mode) => {
+    previewContainer.classList.remove('print-only-vouchers', 'print-only-master');
+    const masterElem = previewContainer.querySelector('.payroll-master-sheet');
+    const vouchersElems = previewContainer.querySelectorAll('.payroll-payslips-page');
+
+    [btnModeAll, btnModeVouchers, btnModeMaster].forEach(b => {
+      if (b) {
+        b.style.background = '#f1f5f9';
+        b.style.color = '#334155';
+      }
+    });
+
+    if (mode === 'vouchers') {
+      previewContainer.classList.add('print-only-vouchers');
+      if (masterElem) masterElem.style.display = 'none';
+      vouchersElems.forEach(v => v.style.display = 'grid');
+      if (btnModeVouchers) {
+        btnModeVouchers.style.background = '#0284c7';
+        btnModeVouchers.style.color = '#ffffff';
+      }
+    } else if (mode === 'master') {
+      previewContainer.classList.add('print-only-master');
+      if (masterElem) masterElem.style.display = 'block';
+      vouchersElems.forEach(v => v.style.display = 'none');
+      if (btnModeMaster) {
+        btnModeMaster.style.background = '#0284c7';
+        btnModeMaster.style.color = '#ffffff';
+      }
+    } else {
+      if (masterElem) masterElem.style.display = 'block';
+      vouchersElems.forEach(v => v.style.display = 'grid');
+      if (btnModeAll) {
+        btnModeAll.style.background = '#0284c7';
+        btnModeAll.style.color = '#ffffff';
+      }
+    }
+  };
+
+  if (btnModeAll) btnModeAll.onclick = () => updatePrintMode('all');
+  if (btnModeVouchers) btnModeVouchers.onclick = () => updatePrintMode('vouchers');
+  if (btnModeMaster) btnModeMaster.onclick = () => updatePrintMode('master');
 
   printActionBtn.onclick = () => {
     window.print();
@@ -2210,6 +2295,7 @@ function renderRrhhNomina(container, state) {
 
         return {
           id: emp.id,
+          employee_code: emp.employee_code || 'EMP-S/C',
           name: emp.name,
           position: emp.position,
           salary: proratedSalary,
