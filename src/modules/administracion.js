@@ -1,4 +1,4 @@
-import { getAppState, saveAppState, backfillEmployeeCodes, removeFromFirestore } from '../main.js';
+import { getAppState, saveAppState, backfillEmployeeCodes, removeFromFirestore, purgeAndSanitizePayrolls } from '../main.js';
 import { simulateOnPurchaseCreated, simulateOnPayrollGenerated } from '../utils/cloud_functions.js';
 import { notifyEmployeeWelcome } from '../utils/whatsapp.js';
 import { renderRrhhAsistencia } from './attendanceManager.js';
@@ -2052,6 +2052,9 @@ export function isDoctorOrPhysician(emp) {
 
 // Planilla / Nómina Mensual
 function renderRrhhNomina(container, state) {
+  // Asegurar depuración automática de nóminas archivadas existentes (ej. Septiembre)
+  purgeAndSanitizePayrolls(state);
+
   // En la nómina únicamente figuran los colaboradores registrados y activos del submódulo de Gestión de Empleados
   // Se excluyen directivos de sistema y todos los médicos/especialistas (ya que liquidan por honorarios/consultas)
   const employees = (state.administracion_employees || []).filter(e => {
@@ -2166,7 +2169,10 @@ function renderRrhhNomina(container, state) {
 
       <!-- Historial de Planillas Generadas -->
       <div class="glass-card" style="padding: 1.25rem;">
-        <h3 style="font-size: 1rem; color: var(--accent-primary); margin-bottom: 1rem;">Nóminas Cerradas y Emitidas</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 8px;">
+          <h3 style="font-size: 1rem; color: var(--accent-primary); margin: 0;">Nóminas Cerradas y Emitidas</h3>
+          <button class="btn btn-secondary btn-small" id="btn-purge-nominas" style="font-size: 0.72rem; padding: 3px 8px; color: #38bdf8; border-color: rgba(56,189,248,0.3);" title="Depurar médicos y cuentas de nóminas archivadas">🧹 Depurar Nóminas de Septiembre</button>
+        </div>
         
         <div style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
           ${state.administracion_nominas.length === 0 
@@ -2202,6 +2208,21 @@ function renderRrhhNomina(container, state) {
   if (monthSelect) {
     monthSelect.addEventListener('change', () => {
       selectedPayrollMonth = monthSelect.value;
+      renderRrhhNomina(container, state);
+    });
+  }
+
+  // Bind Purge / Sanitize Nóminas Click
+  const btnPurge = document.getElementById('btn-purge-nominas');
+  if (btnPurge) {
+    btnPurge.addEventListener('click', async () => {
+      const result = purgeAndSanitizePayrolls(state);
+      await saveAppState(state);
+      if (result.purgedCount > 0) {
+        alert(`✅ Depuración completada con éxito.\n\nSe eliminaron ${result.purgedCount} registros de personal médico / no aplicables de las nóminas archivadas (incluyendo el mes de Septiembre), y se recalcularon los totales y partidas contables.`);
+      } else {
+        alert("ℹ️ Las nóminas archivadas (incluyendo Septiembre) ya se encuentran 100% depuradas y al día (no contienen médicos ni cuentas no autorizadas).");
+      }
       renderRrhhNomina(container, state);
     });
   }

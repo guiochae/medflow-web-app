@@ -164,8 +164,9 @@ export function getAppState() {
       }
     }
 
-    // Asegurar que todo el personal en memoria tenga siempre código asignado
+    // Asegurar que todo el personal en memoria tenga siempre código asignado y nóminas depuradas
     backfillEmployeeCodes(firestoreState);
+    purgeAndSanitizePayrolls(firestoreState);
 
     return firestoreState;
   }
@@ -228,6 +229,7 @@ export function resetToOfficialDatabase() {
 export async function saveAppState(state) {
   migrateLaboratoryTestsCategories(state);
   backfillEmployeeCodes(state);
+  purgeAndSanitizePayrolls(state);
   updateSidebarInfo(state);
 
   // Sincronizar de inmediato el estado en memoria para reactividad local offline
@@ -1395,6 +1397,142 @@ export function backfillEmployeeCodes(state) {
   }
 
   return modified;
+}
+
+export function isDoctorOrPhysician(emp) {
+  if (!emp) return false;
+  if (emp.isDoctor === true || emp.role === 'doctor' || emp.role === 'medico') return true;
+
+  const normalize = (str) => String(str || '')
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+
+  const name = normalize(emp.name);
+  const pos = normalize(emp.position);
+
+  // Check name prefix/content for medical titles
+  if (
+    /^dr\b|^dra\b|^dr\.|^dra\./i.test(name) ||
+    name.includes('dr.') || name.includes('dra.') ||
+    name.includes('doctor ') || name.includes('doctora ') ||
+    name.includes('medico ') || name.includes('medica ')
+  ) {
+    return true;
+  }
+
+  // Non-medical support staff whitelist override if specifically tagged
+  const isSupportStaff = /^(enfermer|auxiliar|tecnic|recepcion|secretari|limpieza|mantenimiento|cajer|contador|asistente|conserje|guardia|chofer|bodeguer|farmaceutic)/i.test(pos);
+  if (isSupportStaff) {
+    return false;
+  }
+
+  // Check positions for doctor / medical specialties
+  const doctorKeywords = [
+    'medic', 'doct', 'cirujan', 'especialista', 'pediatr', 'ginecolog', 'obstetr',
+    'anestesi', 'traumatolog', 'cardiolog', 'dermatolog', 'oftalmolog',
+    'urolog', 'neurolog', 'radiolog', 'residente', 'interconsultor', 'oncolog',
+    'nefrolog', 'psiquiatr', 'gastroenterolog', 'neumolog', 'endocrinolog',
+    'patolog', 'otorrino', 'fisiatra', 'reumatolog', 'intensivista'
+  ];
+
+  if (doctorKeywords.some(kw => pos.includes(kw))) {
+    return true;
+  }
+
+  return false;
+}
+
+export function purgeAndSanitizePayrolls(state) {
+  if (!state || !state.administracion_nominas || !Array.isArray(state.administracion_nominas)) {
+    return { modified: false, purgedCount: 0 };
+  }
+
+  let modified = false;
+  let totalPurgedEmployees = 0;
+
+  state.administracion_nominas.forEach(payroll => {
+    if (!payroll || !Array.isArray(payroll.employees)) return;
+
+    const originalCount = payroll.employees.length;
+    
+    // Filtrar colaboradores: eliminar médicos, administradores y cuentas directivas
+    payroll.employees = payroll.employees.filter(emp => {
+      if (!emp) return false;
+      const nameLower = String(emp.name || '').toLowerCase();
+      const idLower = String(emp.id || '').toLowerCase();
+      if (nameLower.includes('antigravity') || nameLower === 'administrador maestro' || idLower === 'admin' || idLower === 'u-admin') {
+        return false;
+      }
+      if (isDoctorOrPhysician(emp)) {
+        return false;
+      }
+      return true;
+    });
+
+    if (payroll.employees.length !== originalCount) {
+      modified = true;
+      totalPurgedEmployees += (originalCount - payroll.employees.length);
+
+      // Recalcular montos consolidados de la nómina
+      let totalGross = 0;
+      let totalDiscounts = 0;
+      let totalNet = 0;
+      payroll.employees.forEach(emp => {
+        totalGross += (parseFloat(emp.salary) || 0);
+        totalDiscounts += (parseFloat(emp.discount) || 0);
+        totalNet += (parseFloat(emp.netSalary) || 0);
+      });
+
+      payroll.totalGross = totalGross;
+      payroll.totalDiscounts = totalDiscounts;
+      payroll.totalNet = totalNet;
+
+      // Depurar registros de cheque en Caja asociados a colaboradores excluidos
+      const validEmpIds = new Set(payroll.employees.map(e => e.id));
+      if (state.administracion_caja && Array.isArray(state.administracion_caja)) {
+        state.administracion_caja = state.administracion_caja.filter(c => {
+          if (c.refId === payroll.id && c.type === 'nomina') {
+            return validEmpIds.has(c.employeeId);
+          }
+          return true;
+        });
+      }
+
+      // Actualizar partida contable asociada en el Libro Diario
+      if (state.administracion_contabilidad && Array.isArray(state.administracion_contabilidad)) {
+        const entry = state.administracion_contabilidad.find(entry => 
+          entry.concept && entry.concept.includes(`Periodo: ${payroll.month}`)
+        );
+        if (entry) {
+          entry.totalDebits = totalGross;
+          entry.totalCredits = totalGross;
+          entry.details = [
+            { account: 'Gastos de Administración (Sueldos)', type: 'Debe', amount: totalGross }
+          ];
+          if (totalDiscounts > 0) {
+            entry.details.push({ account: 'Otros Ingresos (Descuentos a Empleados)', type: 'Haber', amount: totalDiscounts });
+          }
+          entry.details.push({ account: 'Cuentas por Pagar (Nómina Neta)', type: 'Haber', amount: totalNet });
+        }
+      }
+    }
+  });
+
+  if (modified) {
+    if (firestoreState) {
+      firestoreState.administracion_nominas = state.administracion_nominas;
+      firestoreState.administracion_caja = state.administracion_caja;
+      firestoreState.administracion_contabilidad = state.administracion_contabilidad;
+    }
+    saveStateToLocalCache();
+    saveDocumentsBatch('administracion_nominas', state.administracion_nominas).catch(err => {
+      console.warn("Error guardando depuración de nóminas en Firestore:", err);
+    });
+  }
+
+  return { modified, purgedCount: totalPurgedEmployees };
 }
 
 export function migrateLaboratoryTestsCategories(state) {
