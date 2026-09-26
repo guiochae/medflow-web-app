@@ -1,4 +1,4 @@
-import { getAppState, saveAppState, backfillEmployeeCodes } from '../main.js';
+import { getAppState, saveAppState, backfillEmployeeCodes, removeFromFirestore } from '../main.js';
 import { simulateOnPurchaseCreated, simulateOnPayrollGenerated } from '../utils/cloud_functions.js';
 import { notifyEmployeeWelcome } from '../utils/whatsapp.js';
 import { renderRrhhAsistencia } from './attendanceManager.js';
@@ -1704,12 +1704,14 @@ function renderRrhhEmpleados(container, state) {
   });
 
   container.querySelectorAll('.btn-fire-emp').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const id = btn.getAttribute('data-id');
       const emp = state.administracion_employees.find(e => e.id === id);
-      if (confirm(`¿Confirma dar de baja al empleado ${emp.name}?`)) {
+      if (!emp) return;
+      if (confirm(`¿Confirma dar de baja al empleado ${emp.name}? Esta acción lo retirará de la Gestión de Empleados y de la Nómina.`)) {
         state.administracion_employees = state.administracion_employees.filter(e => e.id !== id);
-        saveAppState(state);
+        await removeFromFirestore('administracion_employees', id);
+        await saveAppState(state);
         alert(`Empleado ${emp.name} ha sido dado de baja.`);
         renderRrhhEmpleados(container, state);
       }
@@ -1919,7 +1921,16 @@ function showPayrollPrintPreview(payroll, state) {
 
 // Planilla / Nómina Mensual
 function renderRrhhNomina(container, state) {
-  const employees = (state.administracion_employees || []).filter(e => e.status === 'Activo' && e.name !== "Empleado de Prueba Antigravity" && !e.name.toLowerCase().includes("antigravity"));
+  // En la nómina únicamente figuran los colaboradores registrados y activos del submódulo de Gestión de Empleados
+  const employees = (state.administracion_employees || []).filter(e => {
+    if (!e || e.status !== 'Activo') return false;
+    const nameLower = String(e.name || '').toLowerCase();
+    const idLower = String(e.id || '').toLowerCase();
+    if (nameLower.includes('antigravity') || nameLower === 'administrador maestro' || idLower === 'admin' || idLower === 'u-admin') {
+      return false;
+    }
+    return true;
+  });
   
   state.administracion_nominas = state.administracion_nominas || [];
 

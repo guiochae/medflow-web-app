@@ -542,7 +542,7 @@ export async function saveAppState(state) {
       });
     }
 
-    // Sincronizar Empleados/Colaboradores (solo modificados)
+    // Sincronizar Empleados/Colaboradores (modificados y eliminados)
     if (state.administracion_employees && Array.isArray(state.administracion_employees)) {
       state.administracion_employees.forEach(emp => {
         if (emp && emp.id) {
@@ -552,6 +552,17 @@ export async function saveAppState(state) {
           }
         }
       });
+
+      // Detectar y eliminar colaboradores retirados o dados de baja de Firestore
+      if (lastSyncedState && lastSyncedState.administracion_employees && Array.isArray(lastSyncedState.administracion_employees)) {
+        lastSyncedState.administracion_employees.forEach(prevEmp => {
+          if (prevEmp && prevEmp.id && !state.administracion_employees.some(x => x.id === prevEmp.id)) {
+            const docRef = doc(db, 'multimedica', prevEmp.id);
+            batch.delete(docRef);
+            hasWrites = true;
+          }
+        });
+      }
     }
 
     // Sincronizar Nóminas (solo modificados)
@@ -1303,45 +1314,19 @@ export function backfillEmployeeCodes(state) {
   }
   let modified = false;
 
-  // 1. Sincronizar usuarios asistenciales/personal de la clínica que no existan en administracion_employees
-  if (state.users && Array.isArray(state.users)) {
-    state.users.forEach(u => {
-      if (!u || !u.name) return;
-      const uNameLower = u.name.toLowerCase();
-      if (uNameLower.includes('antigravity') || u.id === 'Admin') return;
-
-      const exists = state.administracion_employees.some(e => 
-        (e.id && e.id === u.id) || 
-        (e.name && e.name.trim().toLowerCase() === u.name.trim().toLowerCase())
-      );
-
-      if (!exists) {
-        let dept = 'Hospitalización';
-        const role = String(u.role || '').toLowerCase();
-        if (role.includes('medic') || role.includes('médic')) dept = 'Consulta Externa';
-        else if (role.includes('lab')) dept = 'Laboratorio';
-        else if (role.includes('recep') || role.includes('caja')) dept = 'Administración';
-        else if (role.includes('farm')) dept = 'Farmacia';
-        else if (role.includes('quir')) dept = 'Quirófano';
-
-        state.administracion_employees.push({
-          id: u.id || ('emp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6)),
-          name: u.name,
-          position: u.role || 'Colaborador',
-          department: dept,
-          specialty: dept,
-          shift: 'Matutino',
-          whatsapp_number: u.phone || '+502 5555-0000',
-          phone: u.phone || '+502 5555-0000',
-          salary: 4500,
-          hireDate: new Date().toISOString().substring(0, 10),
-          absences: 0,
-          warnings: 0,
-          status: 'Activo'
-        });
-        modified = true;
-      }
-    });
+  // 1. Limpiar cualquier registro que sea de prueba o usuario administrador de sistema en la tabla de empleados
+  const prevCount = state.administracion_employees.length;
+  state.administracion_employees = state.administracion_employees.filter(emp => {
+    if (!emp) return false;
+    const nameLower = String(emp.name || '').toLowerCase();
+    const idLower = String(emp.id || '').toLowerCase();
+    if (nameLower.includes('antigravity') || nameLower === 'administrador maestro' || idLower === 'admin' || idLower === 'u-admin') {
+      return false;
+    }
+    return true;
+  });
+  if (state.administracion_employees.length !== prevCount) {
+    modified = true;
   }
 
   // 2. Encontrar el correlativo más alto existente (EMP-001, EMP-002, ...)
