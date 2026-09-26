@@ -1505,6 +1505,7 @@ function renderRrhhEmpleados(container, state) {
                     </div>
                     <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 3px;">
                       ${e.position} &bull; <strong style="color: #cbd5e1;">${e.department || 'General'}</strong> &bull; Turno: ${e.shift || 'Matutino'}
+                      ${isDoctorOrPhysician(e) ? `<span style="margin-left: 6px; background: rgba(59,130,246,0.15); color: #60a5fa; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">🩺 Honorarios Médicos (Exento de Nómina)</span>` : `<span style="margin-left: 6px; background: rgba(34,197,94,0.15); color: #4ade80; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">💼 En Planilla Mensual</span>`}
                     </span>
                     <span style="font-size: 0.73rem; color: var(--accent-secondary); display: block; margin-top: 2px;">
                       📱 WhatsApp: ${e.whatsapp_number || e.phone || 'No asignado'} &bull; Sueldo: Q${parseFloat(e.salary).toFixed(2)}
@@ -1919,14 +1920,63 @@ function showPayrollPrintPreview(payroll, state) {
   modal.style.display = "flex";
 }
 
+export function isDoctorOrPhysician(emp) {
+  if (!emp) return false;
+  if (emp.isDoctor === true || emp.role === 'doctor' || emp.role === 'medico') return true;
+
+  const normalize = (str) => String(str || '')
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+
+  const name = normalize(emp.name);
+  const pos = normalize(emp.position);
+
+  // Check name prefix/content for medical titles
+  if (
+    /^dr\b|^dra\b|^dr\.|^dra\./i.test(name) ||
+    name.includes('dr.') || name.includes('dra.') ||
+    name.includes('doctor ') || name.includes('doctora ') ||
+    name.includes('medico ') || name.includes('medica ')
+  ) {
+    return true;
+  }
+
+  // Non-medical support staff whitelist override if specifically tagged
+  const isSupportStaff = /^(enfermer|auxiliar|tecnic|recepcion|secretari|limpieza|mantenimiento|cajer|contador|asistente|conserje|guardia|chofer|bodeguer|farmaceutic)/i.test(pos);
+  if (isSupportStaff) {
+    return false;
+  }
+
+  // Check positions for doctor / medical specialties
+  const doctorKeywords = [
+    'medic', 'doct', 'cirujan', 'especialista', 'pediatr', 'ginecolog', 'obstetr',
+    'anestesi', 'traumatolog', 'cardiolog', 'dermatolog', 'oftalmolog',
+    'urolog', 'neurolog', 'radiolog', 'residente', 'interconsultor', 'oncolog',
+    'nefrolog', 'psiquiatr', 'gastroenterolog', 'neumolog', 'endocrinolog',
+    'patolog', 'otorrino', 'fisiatra', 'reumatolog', 'intensivista'
+  ];
+
+  if (doctorKeywords.some(kw => pos.includes(kw))) {
+    return true;
+  }
+
+  return false;
+}
+
 // Planilla / Nómina Mensual
 function renderRrhhNomina(container, state) {
   // En la nómina únicamente figuran los colaboradores registrados y activos del submódulo de Gestión de Empleados
+  // Se excluyen directivos de sistema y todos los médicos/especialistas (ya que liquidan por honorarios/consultas)
   const employees = (state.administracion_employees || []).filter(e => {
     if (!e || e.status !== 'Activo') return false;
     const nameLower = String(e.name || '').toLowerCase();
     const idLower = String(e.id || '').toLowerCase();
     if (nameLower.includes('antigravity') || nameLower === 'administrador maestro' || idLower === 'admin' || idLower === 'u-admin') {
+      return false;
+    }
+    if (isDoctorOrPhysician(e)) {
       return false;
     }
     return true;
@@ -1967,7 +2017,7 @@ function renderRrhhNomina(container, state) {
       
       <!-- Creador de Nómina -->
       <div class="glass-card" style="padding: 1.25rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
           <h3 style="font-size: 1rem; color: var(--accent-primary); margin: 0;">Planilla de Sueldos Mensual</h3>
           <div style="display: flex; gap: 8px;">
             <select id="payroll-month" class="form-control" style="padding: 4px 8px; font-size: 0.85rem;">
@@ -1986,6 +2036,11 @@ function renderRrhhNomina(container, state) {
             </select>
             <button class="btn btn-primary btn-small" id="btn-generate-payroll"><span>⚙️</span> Procesar Planilla</button>
           </div>
+        </div>
+
+        <div style="background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 6px; padding: 8px 12px; margin-bottom: 1rem; font-size: 0.78rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1rem;">🩺</span>
+          <span><strong>Filtro de Nómina:</strong> Los médicos y especialistas están excluidos de esta planilla de sueldos fijos (se liquidan mediante honorarios profesionales por consulta/procedimiento).</span>
         </div>
 
         <div style="overflow-x: auto;">
