@@ -1183,6 +1183,33 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         renderAttendanceKioskView(document.body);
       }
+
+      // Sincronizar en tiempo real cualquier colaborador o rostro enrolado en otra estación
+      subscribeToStateUpdates((updatedState) => {
+        backfillEmployeeCodes(updatedState);
+        lastSyncedState = JSON.parse(JSON.stringify(updatedState));
+        const badge = document.getElementById('face-engine-badge');
+        if (badge) {
+          const emps = updatedState.administracion_employees || [];
+          const count = emps.filter(e => {
+            if (!e.face_descriptor) return false;
+            if (Array.isArray(e.face_descriptor) && e.face_descriptor.length === 128) return true;
+            if (typeof e.face_descriptor === 'object' && Object.keys(e.face_descriptor).length === 128) return true;
+            return false;
+          }).length;
+          if (count > 0) {
+            badge.textContent = `⚡ IA Activa (${count} rostros)`;
+            badge.style.color = '#22c55e';
+            badge.style.borderColor = 'rgba(34,197,94,0.3)';
+            badge.style.background = 'rgba(34,197,94,0.1)';
+          } else {
+            badge.textContent = `⚠️ 0 Rostros Enrolados`;
+            badge.style.color = '#f59e0b';
+            badge.style.borderColor = 'rgba(245,158,11,0.3)';
+            badge.style.background = 'rgba(245,158,11,0.1)';
+          }
+        }
+      });
     });
     return;
   }

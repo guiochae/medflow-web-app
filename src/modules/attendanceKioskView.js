@@ -18,7 +18,8 @@ import { db, saveStateToLocalCache } from '../firebase.js';
 import { doc, setDoc } from 'firebase/firestore';
 
 let videoStream = null;
-let detectionIntervalId = null;
+let isLoopRunning = false;
+let isFrameInProgress = false;
 let qrRotationIntervalId = null;
 let isProcessingFace = false;
 let lastMatchedEmployeeId = null;
@@ -521,13 +522,11 @@ export function renderAttendanceKioskView(rootContainer) {
  * Detiene todos los flujos de cámara y temporizadores
  */
 function stopCameraAndLoops() {
+  isLoopRunning = false;
+  isFrameInProgress = false;
   if (videoStream) {
     videoStream.getTracks().forEach(track => track.stop());
     videoStream = null;
-  }
-  if (detectionIntervalId) {
-    clearInterval(detectionIntervalId);
-    detectionIntervalId = null;
   }
   if (qrRotationIntervalId) {
     clearInterval(qrRotationIntervalId);
@@ -769,12 +768,31 @@ async function initFaceRecognitionCamera() {
     // 1. Cargar Modelos de IA
     if (loadingText) loadingText.textContent = 'Cargando Redes Neuronales de Rostros...';
     await loadFaceModels();
-    if (engineBadge) {
-      engineBadge.textContent = '⚡ IA Activa (TinyFace+RecNet)';
-      engineBadge.style.color = '#22c55e';
-      engineBadge.style.borderColor = 'rgba(34,197,94,0.3)';
-      engineBadge.style.background = 'rgba(34,197,94,0.1)';
-    }
+
+    const updateBadgeCount = () => {
+      if (!engineBadge) return;
+      const state = getAppState();
+      const employees = state.administracion_employees || [];
+      const enrolledCount = employees.filter(e => {
+        if (!e.face_descriptor) return false;
+        if (Array.isArray(e.face_descriptor) && e.face_descriptor.length === 128) return true;
+        if (typeof e.face_descriptor === 'object' && Object.keys(e.face_descriptor).length === 128) return true;
+        return false;
+      }).length;
+
+      if (enrolledCount > 0) {
+        engineBadge.textContent = `⚡ IA Activa (${enrolledCount} rostros)`;
+        engineBadge.style.color = '#22c55e';
+        engineBadge.style.borderColor = 'rgba(34,197,94,0.3)';
+        engineBadge.style.background = 'rgba(34,197,94,0.1)';
+      } else {
+        engineBadge.textContent = `⚠️ 0 Rostros Enrolados`;
+        engineBadge.style.color = '#f59e0b';
+        engineBadge.style.borderColor = 'rgba(245,158,11,0.3)';
+        engineBadge.style.background = 'rgba(245,158,11,0.1)';
+      }
+    };
+    updateBadgeCount();
 
     // 2. Iniciar Cámara Web Frontal
     if (loadingText) loadingText.textContent = 'Conectando con cámara frontal...';
@@ -789,11 +807,14 @@ async function initFaceRecognitionCamera() {
 
     videoStream = stream;
     video.srcObject = stream;
+    video.setAttribute('autoplay', '');
+    video.setAttribute('playsinline', '');
+    video.setAttribute('muted', '');
     await video.play();
 
     if (loadingOverlay) loadingOverlay.style.display = 'none';
 
-    // 3. Bucle Continuo de Detección Facial (cada 200ms con inferencia ultra-ligera)
+    // 3. Bucle Continuo de Detección Facial Reactivo
     startFaceDetectionLoop(video, overlayCanvas, statusText, guide);
 
   } catch (err) {
@@ -815,7 +836,7 @@ async function initFaceRecognitionCamera() {
     btnForce.addEventListener('click', async () => {
       if (isProcessingFace) return;
       if (statusText) statusText.textContent = 'Analizando rostro en pantalla...';
-      await processFaceRecognitionFrame(video, statusText, guide, true);
+      await processFaceRecognitionFrame(video, overlayCanvas, statusText, guide, true);
     });
   }
 
@@ -843,25 +864,52 @@ async function initFaceRecognitionCamera() {
 }
 
 /**
- * Bucle asíncrono para detección facial en tiempo real
+ * Bucle asíncrono no-bloqueante para detección facial continua en tiempo real (75ms)
  */
 function startFaceDetectionLoop(video, overlayCanvas, statusText, guide) {
-  if (detectionIntervalId) clearInterval(detectionIntervalId);
+  isLoopRunning = true;
 
-  detectionIntervalId = setInterval(async () => {
-    if (isProcessingFace || !video || video.paused || video.ended) return;
-    await processFaceRecognitionFrame(video, statusText, guide, false);
-  }, 200);
+  const tick = async () => {
+    if (!isLoopRunning) return;
+
+    if (!isProcessingFace && !isFrameInProgress && video && !video.paused && !video.ended && video.readyState >= 2) {
+      isFrameInProgress = true;
+      try {
+        await processFaceRecognitionFrame(video, overlayCanvas, statusText, guide, false);
+      } catch (err) {
+        console.warn('Error en cuadro de reconocimiento:', err);
+      } finally {
+        isFrameInProgress = false;
+      }
+    }
+
+    if (isLoopRunning) {
+      setTimeout(tick, isProcessingFace ? 350 : 75);
+    }
+  };
+
+  tick();
 }
 
 /**
- * Procesa un cuadro de video para detección y reconocimiento
+ * Procesa un cuadro de video para detección y reconocimiento inmediato
  */
-async function processFaceRecognitionFrame(video, statusText, guide, isManualTrigger = false) {
+async function processFaceRecognitionFrame(video, overlayCanvas, statusText, guide, isManualTrigger = false) {
+  const ctx = overlayCanvas ? overlayCanvas.getContext('2d') : null;
+  if (overlayCanvas && video.videoWidth > 0 && video.videoHeight > 0) {
+    if (overlayCanvas.width !== video.videoWidth || overlayCanvas.height !== video.videoHeight) {
+      overlayCanvas.width = video.videoWidth;
+      overlayCanvas.height = video.videoHeight;
+    }
+  }
+
   try {
-    const detection = await detectSingleFaceAndDescriptor(video, { inputSize: 224, scoreThreshold: 0.42 });
+    const detection = await detectSingleFaceAndDescriptor(video, { inputSize: 320, scoreThreshold: 0.25 });
 
     if (!detection) {
+      if (ctx && overlayCanvas) {
+        ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+      }
       if (guide) {
         guide.style.borderColor = '#00f2fe';
         guide.style.boxShadow = '0 0 20px rgba(0, 242, 254, 0.2)';
@@ -872,24 +920,62 @@ async function processFaceRecognitionFrame(video, statusText, guide, isManualTri
       return;
     }
 
-    // Rostro detectado: cambiar guía visual a verde brillante
-    if (guide) {
-      guide.style.borderColor = '#22c55e';
-      guide.style.boxShadow = '0 0 35px rgba(34, 197, 94, 0.6)';
-    }
-
+    const box = detection.detection.box;
     const state = getAppState();
     const employees = state.administracion_employees || [];
 
-    // Buscar coincidencia biométrica con umbral óptimo (0.56 para tolerancia fiable con lentes/gorras)
-    const match = matchFaceAgainstEmployees(detection.descriptor, employees, 0.56);
+    // Buscar coincidencia biométrica
+    const match = matchFaceAgainstEmployees(detection.descriptor, employees, 0.58);
+
+    // Dibujar en canvas overlay
+    if (ctx && overlayCanvas) {
+      ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+      const isMatched = match.matched && match.employee;
+      const strokeColor = isMatched ? '#22c55e' : '#f59e0b';
+
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 3;
+      ctx.shadowColor = strokeColor;
+      ctx.shadowBlur = 12;
+
+      // Dibujar esquinas del recuadro
+      const x = box.x;
+      const y = box.y;
+      const w = box.width;
+      const h = box.height;
+      const cornerLen = Math.min(24, w * 0.25);
+
+      ctx.beginPath();
+      // Esquina Sup Izq
+      ctx.moveTo(x, y + cornerLen); ctx.lineTo(x, y); ctx.lineTo(x + cornerLen, y);
+      // Esquina Sup Der
+      ctx.moveTo(x + w - cornerLen, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + cornerLen);
+      // Esquina Inf Der
+      ctx.moveTo(x + w, y + h - cornerLen); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w - cornerLen, y + h);
+      // Esquina Inf Izq
+      ctx.moveTo(x + cornerLen, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + h - cornerLen);
+      ctx.stroke();
+
+      // Etiqueta flotante
+      const labelText = isMatched ? `${match.employee.name} (${match.confidence}%)` : 'Rostro Detectado';
+      ctx.font = 'bold 14px system-ui, sans-serif';
+      ctx.fillStyle = strokeColor;
+      ctx.shadowBlur = 0;
+      ctx.fillText(labelText, x, Math.max(18, y - 8));
+    }
 
     if (match.matched && match.employee) {
       const emp = match.employee;
       const now = Date.now();
 
-      // Evitar dobles marcajes seguidos del mismo colaborador en los últimos 10 segundos
-      if (lastMatchedEmployeeId === emp.id && (now - lastMatchedTimestamp) < 10000) {
+      // Guía visual verde
+      if (guide) {
+        guide.style.borderColor = '#22c55e';
+        guide.style.boxShadow = '0 0 35px rgba(34, 197, 94, 0.6)';
+      }
+
+      // Evitar dobles marcajes seguidos del mismo colaborador en los últimos 8 segundos
+      if (lastMatchedEmployeeId === emp.id && (now - lastMatchedTimestamp) < 8000) {
         if (statusText) {
           statusText.innerHTML = `⏳ Hola <strong style="color: #00f2fe;">${emp.name}</strong>, tu marcaje ya fue registrado. Espera un momento.`;
         }
@@ -922,16 +1008,17 @@ async function processFaceRecognitionFrame(video, statusText, guide, isManualTri
         if (statusText) {
           statusText.innerHTML = `<span style="color: #f59e0b;">⚠️ ${punchResult.error}</span>`;
         }
-        setTimeout(() => { isProcessingFace = false; }, 3500);
+        setTimeout(() => { isProcessingFace = false; }, 2500);
       }
 
     } else {
       // Rostro detectado pero no coincide con ningún colaborador
-      if (statusText) {
-        statusText.innerHTML = `⚠️ Rostro detectado pero <strong style="color: #f87171;">no registrado</strong>. Contacta a RRHH para enrolarte.`;
-      }
       if (guide) {
         guide.style.borderColor = '#f59e0b';
+        guide.style.boxShadow = '0 0 25px rgba(245, 158, 11, 0.5)';
+      }
+      if (statusText) {
+        statusText.innerHTML = `⚠️ Rostro detectado pero <strong style="color: #f87171;">no registrado</strong>. Contacta a RRHH para enrolarte.`;
       }
     }
 
@@ -941,7 +1028,7 @@ async function processFaceRecognitionFrame(video, statusText, guide, isManualTri
 }
 
 /**
- * Muestra la ficha de confirmación exitosa sobre el visor de cámara con cuenta regresiva
+ * Muestra la ficha de confirmación exitosa sobre el visor de cámara con cuenta regresiva y botón de avance rápido
  */
 function showReceiptCard(record, employee) {
   const overlay = document.getElementById('kiosk-receipt-overlay');
@@ -991,24 +1078,48 @@ function showReceiptCard(record, employee) {
       </div>
     </div>
 
-    <div style="font-size: 0.78rem; color: #64748b; margin-top: 2px;">
-      Listo para el siguiente colaborador en <span id="receipt-countdown-seconds" style="color: #00f2fe; font-weight: 700;">3</span>s...
-    </div>
+    <button id="btn-close-receipt-instant" style="
+      background: linear-gradient(135deg, #15803d, #22c55e);
+      color: #ffffff;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(34,197,94,0.4);
+    ">
+      ✅ Siguiente Colaborador (<span id="receipt-countdown-seconds">3</span>s)
+    </button>
   `;
 
   overlay.style.display = 'flex';
 
   let countdown = 3;
-  const countTimer = setInterval(() => {
+  let timerId = null;
+
+  const closeReceipt = () => {
+    if (timerId) {
+      clearInterval(timerId);
+      timerId = null;
+    }
+    overlay.style.display = 'none';
+    isProcessingFace = false;
+    const statusText = document.getElementById('kiosk-face-status-text');
+    if (statusText) statusText.textContent = 'Centra tu rostro en el óvalo para registrar asistencia';
+  };
+
+  const btnCloseInstant = document.getElementById('btn-close-receipt-instant');
+  if (btnCloseInstant) {
+    btnCloseInstant.addEventListener('click', closeReceipt);
+  }
+
+  timerId = setInterval(() => {
     countdown--;
     const countEl = document.getElementById('receipt-countdown-seconds');
     if (countEl) countEl.textContent = countdown;
     if (countdown <= 0) {
-      clearInterval(countTimer);
-      overlay.style.display = 'none';
-      isProcessingFace = false;
-      const statusText = document.getElementById('kiosk-face-status-text');
-      if (statusText) statusText.textContent = 'Centra tu rostro en el óvalo para registrar asistencia';
+      closeReceipt();
     }
   }, 1000);
 }
