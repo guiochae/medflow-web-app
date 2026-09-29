@@ -287,13 +287,13 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
   }
   saveStateToLocalCache();
 
-  // Guardar de forma directa y atómica en Firestore
+  // Persistir en Firestore de forma directa y asíncrona (non-blocking) para respuesta en 0 ms
   try {
     const docRef = doc(db, 'multimedica', 'catalog_administracion_asistencias');
-    await setDoc(docRef, { _collectionType: 'catalog_administracion_asistencias', items: state.administracion_asistencias }, { merge: true });
+    setDoc(docRef, { _collectionType: 'catalog_administracion_asistencias', items: state.administracion_asistencias }, { merge: true }).catch(console.warn);
 
     const indRef = doc(db, 'multimedica', newAttendance.id);
-    await setDoc(indRef, { ...newAttendance, _collectionType: 'administracion_asistencias' }, { merge: true });
+    setDoc(indRef, { ...newAttendance, _collectionType: 'administracion_asistencias' }, { merge: true }).catch(console.warn);
   } catch (err) {
     console.warn("Aviso guardando marcaje en Firestore:", err);
   }

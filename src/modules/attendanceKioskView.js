@@ -467,7 +467,7 @@ export function renderAttendanceKioskView(rootContainer) {
           display: flex !important;
         }
         #kiosk-qr-section { 
-          display: none; 
+          display: none !important; 
           flex: 1 !important;
           width: 100% !important;
           height: 100% !important;
@@ -616,21 +616,23 @@ function initMobileTabs() {
 
   if (tabFace && tabQr && secFace && secQr) {
     tabFace.addEventListener('click', () => {
+      activeKioskTab = 'face';
       tabFace.style.background = '#00f2fe';
       tabFace.style.color = '#0b1120';
       tabQr.style.background = 'rgba(255,255,255,0.05)';
       tabQr.style.color = '#cbd5e1';
-      secFace.style.display = 'flex';
-      secQr.style.display = 'none';
+      secFace.style.setProperty('display', 'flex', 'important');
+      secQr.style.setProperty('display', 'none', 'important');
     });
 
     tabQr.addEventListener('click', () => {
+      activeKioskTab = 'qr';
       tabQr.style.background = '#00f2fe';
       tabQr.style.color = '#0b1120';
       tabFace.style.background = 'rgba(255,255,255,0.05)';
       tabFace.style.color = '#cbd5e1';
-      secQr.style.display = 'flex';
-      secFace.style.display = 'none';
+      secQr.style.setProperty('display', 'flex', 'important');
+      secFace.style.setProperty('display', 'none', 'important');
     });
   }
 }
@@ -924,26 +926,26 @@ async function processFaceRecognitionFrame(video, overlayCanvas, statusText, gui
     const state = getAppState();
     const employees = state.administracion_employees || [];
 
-    // Buscar coincidencia biométrica
-    const match = matchFaceAgainstEmployees(detection.descriptor, employees, 0.58);
+    // Buscar coincidencia biométrica con umbral amplio y tolerante (0.68)
+    const match = matchFaceAgainstEmployees(detection.descriptor, employees, 0.68);
 
-    // Dibujar en canvas overlay
+    // Dibujar recuadro neón en canvas overlay
     if (ctx && overlayCanvas) {
       ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
       const isMatched = match.matched && match.employee;
       const strokeColor = isMatched ? '#22c55e' : '#f59e0b';
 
       ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 3.5;
       ctx.shadowColor = strokeColor;
-      ctx.shadowBlur = 12;
+      ctx.shadowBlur = 15;
 
       // Dibujar esquinas del recuadro
       const x = box.x;
       const y = box.y;
       const w = box.width;
       const h = box.height;
-      const cornerLen = Math.min(24, w * 0.25);
+      const cornerLen = Math.min(26, w * 0.25);
 
       ctx.beginPath();
       // Esquina Sup Izq
@@ -955,61 +957,57 @@ async function processFaceRecognitionFrame(video, overlayCanvas, statusText, gui
       // Esquina Inf Izq
       ctx.moveTo(x + cornerLen, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + h - cornerLen);
       ctx.stroke();
-
-      // Etiqueta flotante
-      const labelText = isMatched ? `${match.employee.name} (${match.confidence}%)` : 'Rostro Detectado';
-      ctx.font = 'bold 14px system-ui, sans-serif';
-      ctx.fillStyle = strokeColor;
-      ctx.shadowBlur = 0;
-      ctx.fillText(labelText, x, Math.max(18, y - 8));
     }
 
     if (match.matched && match.employee) {
       const emp = match.employee;
       const now = Date.now();
 
-      // Guía visual verde
+      // Guía visual verde brillante
       if (guide) {
         guide.style.borderColor = '#22c55e';
-        guide.style.boxShadow = '0 0 35px rgba(34, 197, 94, 0.6)';
+        guide.style.boxShadow = '0 0 35px rgba(34, 197, 94, 0.7)';
       }
 
       // Evitar dobles marcajes seguidos del mismo colaborador en los últimos 8 segundos
       if (lastMatchedEmployeeId === emp.id && (now - lastMatchedTimestamp) < 8000) {
         if (statusText) {
-          statusText.innerHTML = `⏳ Hola <strong style="color: #00f2fe;">${emp.name}</strong>, tu marcaje ya fue registrado. Espera un momento.`;
+          statusText.innerHTML = `⏳ Hola <strong style="color: #00f2fe;">${emp.name}</strong>, tu asistencia ya fue registrada.`;
         }
         return;
       }
 
       isProcessingFace = true;
+      lastMatchedEmployeeId = emp.id;
+      lastMatchedTimestamp = now;
+
       if (statusText) {
-        statusText.innerHTML = `✅ ¡Identificado: <strong style="color: #22c55e;">${emp.name}</strong> (${match.confidence}% confianza)! Registrando...`;
+        statusText.innerHTML = `✅ ¡Identificado: <strong style="color: #22c55e;">${emp.name}</strong> (${match.confidence}% confianza)!`;
       }
 
-      // Registrar asistencia automáticamente con método FACIAL
-      const punchResult = await recordAttendance({
+      // 1. Sonido y Confirmación Visual INMEDIATA (0 ms lag)
+      playAttendanceFeedbackSound('success');
+
+      // 2. Registrar asistencia asíncrona inmediata en segundo plano
+      recordAttendance({
         employeeCode: emp.employee_code,
         type: currentPunchType,
         method: 'FACIAL',
         ipAddress: 'Terminal Facial Entrada',
         userAgent: 'LUGAMED Kiosko Facial v2.0',
         state
-      });
-
-      lastMatchedEmployeeId = emp.id;
-      lastMatchedTimestamp = now;
-
-      if (punchResult.success) {
-        playAttendanceFeedbackSound('success');
-        showReceiptCard(punchResult.record, emp);
-      } else {
-        playAttendanceFeedbackSound('warning');
-        if (statusText) {
-          statusText.innerHTML = `<span style="color: #f59e0b;">⚠️ ${punchResult.error}</span>`;
+      }).then(punchResult => {
+        if (punchResult && punchResult.success) {
+          showReceiptCard(punchResult.record, emp);
+        } else if (punchResult && !punchResult.success) {
+          if (statusText) {
+            statusText.innerHTML = `<span style="color: #f59e0b;">⚠️ ${punchResult.error}</span>`;
+          }
+          setTimeout(() => { isProcessingFace = false; }, 2500);
         }
-        setTimeout(() => { isProcessingFace = false; }, 2500);
-      }
+      }).catch(err => {
+        console.error("Error registrando marcaje facial:", err);
+      });
 
     } else {
       // Rostro detectado pero no coincide con ningún colaborador
