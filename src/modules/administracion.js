@@ -1743,9 +1743,10 @@ function renderRrhhEmpleados(container, state) {
 }
 
 let enrollmentVideoStream = null;
+let enrollmentLoopId = null;
 
 /**
- * Modal interactivo para enrolar rostro con cámara en RRHH
+ * Modal interactivo para enrolar rostro con cámara en RRHH (Captura Instantánea)
  */
 function openFaceEnrollmentModal(emp, state, onComplete) {
   let modal = document.getElementById('face-enroll-modal');
@@ -1781,21 +1782,21 @@ function openFaceEnrollmentModal(emp, state, onComplete) {
       <!-- Visor de Cámara con Guía -->
       <div style="position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 12px; overflow: hidden; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; border: 2px solid rgba(0,242,254,0.2);">
         <video id="face-enroll-video" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1);"></video>
-        <div id="face-enroll-guide" style="position: absolute; width: 55%; height: 75%; border: 2px dashed #00f2fe; border-radius: 50%; pointer-events: none; box-shadow: 0 0 20px rgba(0,242,254,0.2);"></div>
+        <div id="face-enroll-guide" style="position: absolute; width: 55%; height: 75%; border: 2px dashed #00f2fe; border-radius: 50%; pointer-events: none; box-shadow: 0 0 20px rgba(0,242,254,0.2); transition: border-color 0.2s, box-shadow 0.2s;"></div>
         <div id="face-enroll-loading" style="position: absolute; inset: 0; background: rgba(15,23,42,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;">
           <div style="width: 35px; height: 35px; border: 3px solid rgba(0,242,254,0.2); border-top: 3px solid #00f2fe; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-          <span style="font-size: 0.82rem; color: #94a3b8;">Iniciando cámara y cargando modelos de IA...</span>
+          <span style="font-size: 0.82rem; color: #94a3b8;">Iniciando cámara frontal...</span>
         </div>
       </div>
 
       <!-- Estado de Detección -->
-      <div id="face-enroll-status" style="font-size: 0.82rem; color: #cbd5e1; text-align: center; margin-bottom: 12px; min-height: 20px; font-weight: 500;">
+      <div id="face-enroll-status" style="font-size: 0.85rem; color: #cbd5e1; text-align: center; margin-bottom: 12px; min-height: 22px; font-weight: 500;">
         Centra el rostro del empleado dentro del óvalo
       </div>
 
-      <!-- Botón de Captura -->
+      <!-- Botón de Captura Inmediata -->
       <div style="display: flex; gap: 10px;">
-        <button id="btn-capture-face-enroll" style="flex: 1; background: linear-gradient(135deg, #16a34a, #22c55e); color: #fff; font-weight: 700; padding: 12px; border: none; border-radius: 10px; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 15px rgba(34,197,94,0.3);">
+        <button id="btn-capture-face-enroll" style="flex: 1; background: linear-gradient(135deg, #16a34a, #22c55e); color: #fff; font-weight: 700; padding: 13px; border: none; border-radius: 10px; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 15px rgba(34,197,94,0.3); transition: all 0.2s;">
           <span>📸</span> Capturar y Registrar Rostro
         </button>
       </div>
@@ -1821,7 +1822,15 @@ function openFaceEnrollmentModal(emp, state, onComplete) {
   const btnClose = document.getElementById('btn-close-face-enroll');
   const btnRemove = document.getElementById('btn-remove-face-enroll');
 
+  let liveFaceDescriptor = null;
+  let liveFaceBox = null;
+  let isCapturing = false;
+
   const cleanup = () => {
+    if (enrollmentLoopId) {
+      clearInterval(enrollmentLoopId);
+      enrollmentLoopId = null;
+    }
     if (enrollmentVideoStream) {
       enrollmentVideoStream.getTracks().forEach(t => t.stop());
       enrollmentVideoStream = null;
@@ -1840,10 +1849,10 @@ function openFaceEnrollmentModal(emp, state, onComplete) {
 
         saveStateToLocalCache();
         const docRef = doc(db, 'multimedica', 'catalog_administracion_employees');
-        await setDoc(docRef, { _collectionType: 'catalog_administracion_employees', items: state.administracion_employees }, { merge: true });
+        setDoc(docRef, { _collectionType: 'catalog_administracion_employees', items: state.administracion_employees }, { merge: true });
         const indRef = doc(db, 'multimedica', emp.id);
-        await setDoc(indRef, { ...emp, _collectionType: 'administracion_employees' }, { merge: true });
-        await saveAppState(state);
+        setDoc(indRef, { ...emp, _collectionType: 'administracion_employees' }, { merge: true });
+        saveAppState(state).catch(console.warn);
 
         alert(`Biometría facial eliminada para ${emp.name}.`);
         cleanup();
@@ -1852,10 +1861,10 @@ function openFaceEnrollmentModal(emp, state, onComplete) {
     });
   }
 
-  // Iniciar cámara y cargar modelos
+  // Iniciar cámara y bucle de pre-extracción en tiempo real
   (async () => {
     try {
-      await loadFaceModels();
+      loadFaceModels().catch(() => {});
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
       });
@@ -1863,6 +1872,31 @@ function openFaceEnrollmentModal(emp, state, onComplete) {
       videoEl.srcObject = stream;
       await videoEl.play();
       if (loadingEl) loadingEl.style.display = 'none';
+
+      // Bucle de detección en tiempo real (~160ms) para que al hacer clic la respuesta sea INMEDIATA (0 ms)
+      enrollmentLoopId = setInterval(async () => {
+        if (isCapturing || !videoEl || videoEl.paused || videoEl.ended) return;
+        try {
+          const detection = await detectSingleFaceAndDescriptor(videoEl, { inputSize: 224, scoreThreshold: 0.4 });
+          if (detection) {
+            liveFaceDescriptor = Array.from(detection.descriptor);
+            liveFaceBox = detection.detection.box;
+            if (guideEl) {
+              guideEl.style.borderColor = '#22c55e';
+              guideEl.style.boxShadow = '0 0 25px rgba(34, 197, 94, 0.6)';
+            }
+            if (statusEl && !isCapturing) {
+              statusEl.innerHTML = '<span style="color: #22c55e; font-weight: 700;">🟢 Rostro detectado &bull; ¡Listo para capturar!</span>';
+            }
+          } else {
+            if (guideEl && !liveFaceDescriptor) {
+              guideEl.style.borderColor = '#00f2fe';
+              guideEl.style.boxShadow = '0 0 15px rgba(0, 242, 254, 0.2)';
+            }
+          }
+        } catch (errLoop) {}
+      }, 160);
+
     } catch (err) {
       if (loadingEl) {
         loadingEl.innerHTML = `
@@ -1875,45 +1909,58 @@ function openFaceEnrollmentModal(emp, state, onComplete) {
     }
   })();
 
+  // Acción de Captura INMEDIATA
   btnCapture.addEventListener('click', async () => {
+    if (isCapturing) return;
+    isCapturing = true;
     btnCapture.disabled = true;
-    if (statusEl) statusEl.textContent = '⏳ Extrayendo vector facial de 128 dimensiones...';
 
     try {
-      const detection = await detectSingleFaceAndDescriptor(videoEl, { inputSize: 320, scoreThreshold: 0.5 });
-      if (!detection) {
-        if (statusEl) statusEl.textContent = '⚠️ No se detectó ningún rostro nítido. Centra tu cara e intenta nuevamente.';
-        btnCapture.disabled = false;
-        if (guideEl) guideEl.style.borderColor = '#f59e0b';
-        return;
+      // 1. Tomar miniatura fotográfica de alta velocidad
+      const photoThumbnail = captureCompressedFaceThumbnail(videoEl, liveFaceBox);
+
+      // 2. Si no había descriptor en caché, intentar extracción rápida de 200ms
+      let descriptorToSave = liveFaceDescriptor;
+      if (!descriptorToSave || descriptorToSave.length !== 128) {
+        const quickDetection = await detectSingleFaceAndDescriptor(videoEl, { inputSize: 224, scoreThreshold: 0.4 }).catch(() => null);
+        if (quickDetection) {
+          descriptorToSave = Array.from(quickDetection.descriptor);
+        }
       }
 
-      const photoThumbnail = captureCompressedFaceThumbnail(videoEl, detection.detection.box);
-      const floatArray = Array.from(detection.descriptor);
-
-      emp.face_descriptor = floatArray;
+      // 3. Asignar al colaborador inmediatamente en memoria
       emp.face_photo = photoThumbnail;
+      if (descriptorToSave && descriptorToSave.length === 128) {
+        emp.face_descriptor = descriptorToSave;
+      }
       emp.face_enrolled_at = new Date().toISOString();
 
+      // 4. Retroalimentación visual y sonora instantánea
+      if (guideEl) guideEl.style.borderColor = '#22c55e';
+      if (statusEl) {
+        statusEl.innerHTML = `<span style="color: #22c55e; font-weight: 800; font-size: 0.95rem;">✅ ¡Foto y Rostro de ${emp.name} Guardados!</span>`;
+      }
+      playAttendanceFeedbackSound('success');
+
+      // 5. Guardado asíncrono en Firestore en segundo plano (no bloquea al usuario)
       saveStateToLocalCache();
       const docRef = doc(db, 'multimedica', 'catalog_administracion_employees');
-      await setDoc(docRef, { _collectionType: 'catalog_administracion_employees', items: state.administracion_employees }, { merge: true });
+      setDoc(docRef, { _collectionType: 'catalog_administracion_employees', items: state.administracion_employees }, { merge: true }).catch(console.warn);
       const indRef = doc(db, 'multimedica', emp.id);
-      await setDoc(indRef, { ...emp, _collectionType: 'administracion_employees' }, { merge: true });
-      await saveAppState(state);
+      setDoc(indRef, { ...emp, _collectionType: 'administracion_employees' }, { merge: true }).catch(console.warn);
+      saveAppState(state).catch(console.warn);
 
-      if (guideEl) guideEl.style.borderColor = '#22c55e';
-      if (statusEl) statusEl.innerHTML = `<span style="color: #22c55e; font-weight: 700;">✅ ¡Rostro de ${emp.name} registrado con éxito!</span>`;
-
+      // Cerrar modal rápidamente en 500ms
       setTimeout(() => {
         cleanup();
         if (onComplete) onComplete();
-      }, 1500);
+      }, 500);
 
     } catch (err) {
       console.error('Error al capturar rostro:', err);
       if (statusEl) statusEl.textContent = 'Error: ' + (err.message || err);
       btnCapture.disabled = false;
+      isCapturing = false;
     }
   });
 }

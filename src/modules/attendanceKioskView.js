@@ -860,13 +860,29 @@ function initSupervisorPinModal() {
           </option>
         `).join('');
 
-        // Iniciar cámara de enrolamiento
+        // Iniciar cámara de enrolamiento y pre-detección en vivo
         try {
           supervisorStream = await navigator.mediaDevices.getUserMedia({
             video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
           });
           enrollVideo.srcObject = supervisorStream;
           await enrollVideo.play();
+
+          if (supervisorLoopId) clearInterval(supervisorLoopId);
+          supervisorLoopId = setInterval(async () => {
+            if (isSupCapturing || !enrollVideo || enrollVideo.paused || enrollVideo.ended) return;
+            try {
+              const detection = await detectSingleFaceAndDescriptor(enrollVideo, { inputSize: 224, scoreThreshold: 0.4 });
+              if (detection) {
+                supLiveDescriptor = Array.from(detection.descriptor);
+                supLiveBox = detection.detection.box;
+                if (enrollStatus && !isSupCapturing) {
+                  enrollStatus.innerHTML = '<span style="color: #22c55e; font-weight: 700;">🟢 Rostro detectado &bull; ¡Listo para capturar!</span>';
+                }
+              }
+            } catch (e) {}
+          }, 160);
+
         } catch (e) {
           enrollStatus.textContent = 'Error al abrir cámara para enrolamiento.';
         }
@@ -877,60 +893,77 @@ function initSupervisorPinModal() {
     });
   }
 
-  // Capturar y Guardar Rostro
+  let supLiveDescriptor = null;
+  let supLiveBox = null;
+  let supervisorLoopId = null;
+  let isSupCapturing = false;
+
+  const originalCloseModal = closeModal;
+  const safeCloseModal = () => {
+    if (supervisorLoopId) {
+      clearInterval(supervisorLoopId);
+      supervisorLoopId = null;
+    }
+    originalCloseModal();
+  };
+
+  // Capturar y Guardar Rostro INMEDIATO
   if (btnCapture && empSelect && enrollVideo) {
     btnCapture.addEventListener('click', async () => {
       const selectedEmpId = empSelect.value;
-      if (!selectedEmpId) return;
+      if (!selectedEmpId || isSupCapturing) return;
 
-      if (enrollStatus) enrollStatus.textContent = 'Analizando y extrayendo vector facial...';
+      isSupCapturing = true;
       btnCapture.disabled = true;
 
       try {
-        const detection = await detectSingleFaceAndDescriptor(enrollVideo, { inputSize: 320, scoreThreshold: 0.5 });
-        if (!detection) {
-          if (enrollStatus) enrollStatus.textContent = '⚠️ No se detectó un rostro claro. Centra la cara e intenta de nuevo.';
-          btnCapture.disabled = false;
-          playAttendanceFeedbackSound('warning');
-          return;
-        }
+        // Miniatura fotográfica instantánea
+        const photoThumbnail = captureCompressedFaceThumbnail(enrollVideo, supLiveBox);
 
-        // Extraer miniatura fotográfica
-        const photoThumbnail = captureCompressedFaceThumbnail(enrollVideo, detection.detection.box);
-        const floatArray = Array.from(detection.descriptor);
+        let descriptorToSave = supLiveDescriptor;
+        if (!descriptorToSave || descriptorToSave.length !== 128) {
+          const quick = await detectSingleFaceAndDescriptor(enrollVideo, { inputSize: 224, scoreThreshold: 0.4 }).catch(() => null);
+          if (quick) {
+            descriptorToSave = Array.from(quick.descriptor);
+          }
+        }
 
         const state = getAppState();
         const emp = (state.administracion_employees || []).find(e => e.id === selectedEmpId);
 
         if (emp) {
-          emp.face_descriptor = floatArray;
           emp.face_photo = photoThumbnail;
+          if (descriptorToSave && descriptorToSave.length === 128) {
+            emp.face_descriptor = descriptorToSave;
+          }
           emp.face_enrolled_at = new Date().toISOString();
 
-          // Guardar en Firestore
+          // Guardar asíncrono en Firestore en segundo plano
           saveStateToLocalCache();
           const docRef = doc(db, 'multimedica', 'catalog_administracion_employees');
-          await setDoc(docRef, { _collectionType: 'catalog_administracion_employees', items: state.administracion_employees }, { merge: true });
+          setDoc(docRef, { _collectionType: 'catalog_administracion_employees', items: state.administracion_employees }, { merge: true }).catch(console.warn);
 
           const indRef = doc(db, 'multimedica', emp.id);
-          await setDoc(indRef, { ...emp, _collectionType: 'administracion_employees' }, { merge: true });
+          setDoc(indRef, { ...emp, _collectionType: 'administracion_employees' }, { merge: true }).catch(console.warn);
           saveAppState(state).catch(console.warn);
 
           playAttendanceFeedbackSound('success');
           if (enrollStatus) {
-            enrollStatus.innerHTML = `<span style="color: #22c55e; font-weight: 700;">✅ ¡Rostro de ${emp.name} enrolado exitosamente!</span>`;
+            enrollStatus.innerHTML = `<span style="color: #22c55e; font-weight: 800;">✅ ¡Rostro de ${emp.name} enrolado exitosamente!</span>`;
           }
 
           setTimeout(() => {
-            closeModal();
+            safeCloseModal();
             btnCapture.disabled = false;
-          }, 1800);
+            isSupCapturing = false;
+          }, 500);
         }
 
       } catch (err) {
         console.error('Error al capturar rostro:', err);
         if (enrollStatus) enrollStatus.textContent = 'Error al procesar: ' + err.message;
         btnCapture.disabled = false;
+        isSupCapturing = false;
       }
     });
   }

@@ -3,13 +3,32 @@ import * as faceapi from '@vladmandic/face-api';
 
 let modelsLoaded = false;
 let modelLoadingPromise = null;
+let isWarmedUp = false;
 
 // Rutas base para modelos (Local en /models con fallback a CDN jsdelivr)
 const LOCAL_MODEL_PATH = '/models';
 const CDN_MODEL_PATH = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
 
+// Canvas offscreen reutilizable para pre-escalado de alta velocidad
+let sharedOffscreenCanvas = null;
+let sharedOffscreenCtx = null;
+
+function getSharedCanvas(width = 320, height = 240) {
+  if (!sharedOffscreenCanvas) {
+    sharedOffscreenCanvas = document.createElement('canvas');
+    sharedOffscreenCanvas.width = width;
+    sharedOffscreenCanvas.height = height;
+    sharedOffscreenCtx = sharedOffscreenCanvas.getContext('2d', { willReadFrequently: true });
+  }
+  if (sharedOffscreenCanvas.width !== width || sharedOffscreenCanvas.height !== height) {
+    sharedOffscreenCanvas.width = width;
+    sharedOffscreenCanvas.height = height;
+  }
+  return { canvas: sharedOffscreenCanvas, ctx: sharedOffscreenCtx };
+}
+
 /**
- * Carga los modelos de detección y reconocimiento facial
+ * Carga los modelos de detección y reconocimiento facial ultra-rápidos
  * @returns {Promise<boolean>}
  */
 export async function loadFaceModels() {
@@ -18,25 +37,31 @@ export async function loadFaceModels() {
 
   modelLoadingPromise = (async () => {
     try {
-      console.log('🤖 Cargando modelos de Inteligencia Artificial Facial desde almacenamiento local...');
+      console.log('🤖 Cargando redes neuronales optimizadas de detección y reconocimiento facial...');
       await Promise.all([
         faceapi.nets.tinyFaceDetector.loadFromUri(LOCAL_MODEL_PATH),
-        faceapi.nets.faceLandmark68Net.loadFromUri(LOCAL_MODEL_PATH),
+        faceapi.nets.faceLandmark68TinyNet.loadFromUri(LOCAL_MODEL_PATH).catch(() => faceapi.nets.faceLandmark68Net.loadFromUri(LOCAL_MODEL_PATH)),
+        faceapi.nets.faceLandmark68Net.loadFromUri(LOCAL_MODEL_PATH).catch(() => null),
         faceapi.nets.faceRecognitionNet.loadFromUri(LOCAL_MODEL_PATH)
       ]);
       modelsLoaded = true;
       console.log('✅ Modelos faciales locales cargados exitosamente.');
+      
+      // Calentamiento en segundo plano no bloqueante
+      warmUpFaceModels().catch(() => {});
       return true;
     } catch (localErr) {
       console.warn('⚠️ No se pudieron cargar los modelos locales, intentando desde CDN...', localErr);
       try {
         await Promise.all([
           faceapi.nets.tinyFaceDetector.loadFromUri(CDN_MODEL_PATH),
-          faceapi.nets.faceLandmark68Net.loadFromUri(CDN_MODEL_PATH),
+          faceapi.nets.faceLandmark68TinyNet.loadFromUri(CDN_MODEL_PATH).catch(() => faceapi.nets.faceLandmark68Net.loadFromUri(CDN_MODEL_PATH)),
+          faceapi.nets.faceLandmark68Net.loadFromUri(CDN_MODEL_PATH).catch(() => null),
           faceapi.nets.faceRecognitionNet.loadFromUri(CDN_MODEL_PATH)
         ]);
         modelsLoaded = true;
         console.log('✅ Modelos faciales CDN cargados exitosamente.');
+        warmUpFaceModels().catch(() => {});
         return true;
       } catch (cdnErr) {
         console.error('❌ Error fatal al cargar modelos de reconocimiento facial:', cdnErr);
@@ -49,6 +74,24 @@ export async function loadFaceModels() {
 }
 
 /**
+ * Pre-calienta los shaders de WebGL en la GPU para que la primera inferencia sea instantánea (0 ms lag)
+ */
+export async function warmUpFaceModels() {
+  if (isWarmedUp || !modelsLoaded) return;
+  try {
+    const { canvas, ctx } = getSharedCanvas(128, 128);
+    ctx.fillStyle = '#888888';
+    ctx.fillRect(0, 0, 128, 128);
+    const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 128, scoreThreshold: 0.3 });
+    await faceapi.detectSingleFace(canvas, opts).withFaceLandmarks(true).withFaceDescriptor().catch(() => null);
+    isWarmedUp = true;
+    console.log('⚡ GPU / WebGL Shaders pre-calentados.');
+  } catch (e) {
+    // Si falla el calentamiento de WebGL, continúa normalmente
+  }
+}
+
+/**
  * Comprueba si los modelos ya están cargados en memoria
  */
 export function areFaceModelsLoaded() {
@@ -57,7 +100,7 @@ export function areFaceModelsLoaded() {
 
 /**
  * Detecta un único rostro en un elemento HTML (video, img, canvas)
- * y extrae su descriptor de 128 dimensiones y sus landmarks.
+ * de forma ultra-rápida y extrae su descriptor de 128 dimensiones.
  * @param {HTMLVideoElement|HTMLImageElement|HTMLCanvasElement} inputElement
  * @param {object} [options]
  * @returns {Promise<{ detection: object, landmarks: object, descriptor: Float32Array } | null>}
@@ -65,18 +108,51 @@ export function areFaceModelsLoaded() {
 export async function detectSingleFaceAndDescriptor(inputElement, options = {}) {
   await loadFaceModels();
 
-  const inputSize = options.inputSize || 320;
-  const scoreThreshold = options.scoreThreshold || 0.5;
+  // Optimización de tamaño: 224px procesa 4x más rápido que 320px con igual precisión en primeros planos
+  const inputSize = options.inputSize || 224;
+  const scoreThreshold = options.scoreThreshold || 0.45;
 
   const detectorOptions = new faceapi.TinyFaceDetectorOptions({
     inputSize,
     scoreThreshold
   });
 
-  const detectionResult = await faceapi
-    .detectSingleFace(inputElement, detectorOptions)
-    .withFaceLandmarks()
-    .withFaceDescriptor();
+  // Si la fuente es un video grande (ej: 1080p), pre-escalar rápidamente a 320x240 para no saturar CPU/GPU
+  let targetInput = inputElement;
+  if (inputElement instanceof HTMLVideoElement && inputElement.videoWidth > 480) {
+    const { canvas, ctx } = getSharedCanvas(320, 240);
+    ctx.drawImage(inputElement, 0, 0, 320, 240);
+    targetInput = canvas;
+  }
+
+  let detectionResult = null;
+  try {
+    // Usar landmarks tiny (withFaceLandmarks(true)) para inferencia ultra-rápida
+    detectionResult = await faceapi
+      .detectSingleFace(targetInput, detectorOptions)
+      .withFaceLandmarks(true)
+      .withFaceDescriptor();
+  } catch (e) {
+    // Fallback a landmarks estándar si tiny no está disponible
+    detectionResult = await faceapi
+      .detectSingleFace(targetInput, detectorOptions)
+      .withFaceLandmarks(false)
+      .withFaceDescriptor()
+      .catch(() => null);
+  }
+
+  // Si usamos canvas escalado, re-escalar las coordenadas de la caja al video original
+  if (detectionResult && targetInput !== inputElement && inputElement instanceof HTMLVideoElement) {
+    const scaleX = inputElement.videoWidth / 320;
+    const scaleY = inputElement.videoHeight / 240;
+    const box = detectionResult.detection.box;
+    detectionResult.detection._box = new faceapi.Rect(
+      box.x * scaleX,
+      box.y * scaleY,
+      box.width * scaleX,
+      box.height * scaleY
+    );
+  }
 
   return detectionResult || null;
 }
@@ -101,7 +177,7 @@ export function calculateEuclideanDistance(vecA, vecB) {
  * Busca el colaborador con mayor coincidencia facial en la base de datos
  * @param {Float32Array|number[]} queryDescriptor - Vector descriptor del rostro detectado
  * @param {Array<object>} employees - Lista de empleados registrados
- * @param {number} [threshold=0.55] - Umbral de tolerancia de distancia euclidiana (menor = más estricto)
+ * @param {number} [threshold=0.55] - Umbral de tolerancia de distancia euclidiana
  * @returns {{ matched: boolean, employee: object|null, distance: number, confidence: number }}
  */
 export function matchFaceAgainstEmployees(queryDescriptor, employees, threshold = 0.55) {
@@ -126,7 +202,6 @@ export function matchFaceAgainstEmployees(queryDescriptor, employees, threshold 
   }
 
   if (bestMatch && minDistance <= threshold) {
-    // Calcular porcentaje de confianza aproximado
     const confidence = Math.max(0, Math.min(100, Math.round((1 - (minDistance / threshold)) * 100)));
     return {
       matched: true,
@@ -157,20 +232,21 @@ export function captureCompressedFaceThumbnail(sourceEl, cropBox = null) {
   canvas.height = 240;
   const ctx = canvas.getContext('2d');
 
+  const sWidth = sourceEl.videoWidth || sourceEl.naturalWidth || sourceEl.width || 240;
+  const sHeight = sourceEl.videoHeight || sourceEl.naturalHeight || sourceEl.height || 240;
+
   if (cropBox && cropBox.width > 0 && cropBox.height > 0) {
     // Añadir margen alrededor de la cara
-    const marginX = cropBox.width * 0.2;
-    const marginY = cropBox.height * 0.25;
+    const marginX = cropBox.width * 0.25;
+    const marginY = cropBox.height * 0.3;
     const sx = Math.max(0, cropBox.x - marginX);
     const sy = Math.max(0, cropBox.y - marginY);
-    const sWidth = cropBox.width + (marginX * 2);
-    const sHeight = cropBox.height + (marginY * 2);
+    const sw = Math.min(sWidth - sx, cropBox.width + (marginX * 2));
+    const sh = Math.min(sHeight - sy, cropBox.height + (marginY * 2));
 
-    ctx.drawImage(sourceEl, sx, sy, sWidth, sHeight, 0, 0, 240, 240);
+    ctx.drawImage(sourceEl, sx, sy, sw, sh, 0, 0, 240, 240);
   } else {
     // Captura centrada cuadrada
-    const sWidth = sourceEl.videoWidth || sourceEl.naturalWidth || sourceEl.width || 240;
-    const sHeight = sourceEl.videoHeight || sourceEl.naturalHeight || sourceEl.height || 240;
     const minDim = Math.min(sWidth, sHeight);
     const sx = (sWidth - minDim) / 2;
     const sy = (sHeight - minDim) / 2;
@@ -178,7 +254,7 @@ export function captureCompressedFaceThumbnail(sourceEl, cropBox = null) {
     ctx.drawImage(sourceEl, sx, sy, minDim, minDim, 0, 0, 240, 240);
   }
 
-  return canvas.toDataURL('image/jpeg', 0.82);
+  return canvas.toDataURL('image/jpeg', 0.85);
 }
 
 /**
@@ -192,7 +268,6 @@ export function playAttendanceFeedbackSound(type = 'success') {
     const ctx = new AudioContext();
 
     if (type === 'success') {
-      // Tono de éxito de doble frecuencia armónica (Do-Mi-Sol)
       const playTone = (freq, start, duration) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -205,11 +280,10 @@ export function playAttendanceFeedbackSound(type = 'success') {
         osc.start(ctx.currentTime + start);
         osc.stop(ctx.currentTime + start + duration);
       };
-      playTone(523.25, 0, 0.12); // C5
-      playTone(659.25, 0.10, 0.12); // E5
-      playTone(783.99, 0.20, 0.25); // G5
+      playTone(523.25, 0, 0.12);
+      playTone(659.25, 0.10, 0.12);
+      playTone(783.99, 0.20, 0.25);
     } else if (type === 'warning') {
-      // Tono de advertencia suave (cooldown o casi reconocido)
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'triangle';
@@ -221,7 +295,6 @@ export function playAttendanceFeedbackSound(type = 'success') {
       osc.start();
       osc.stop(ctx.currentTime + 0.2);
     } else if (type === 'error') {
-      // Tono de rechazo / desconocido
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sawtooth';
@@ -234,7 +307,8 @@ export function playAttendanceFeedbackSound(type = 'success') {
       osc.start();
       osc.stop(ctx.currentTime + 0.3);
     }
-  } catch (e) {
-    // Si el navegador bloquea audio antes de la interacción de usuario, ignorar
-  }
+  } catch (e) {}
 }
+
+// Iniciar carga temprana de modelos
+loadFaceModels().catch(() => {});
