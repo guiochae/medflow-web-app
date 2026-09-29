@@ -139,10 +139,11 @@ export async function generateQRDataURL(text) {
  * @param {'ENTRADA'|'SALIDA'} params.type - Tipo de marcaje
  * @param {string} [params.ipAddress] - Dirección IP detectada
  * @param {string} [params.userAgent] - Agente de usuario
+ * @param {'FACIAL'|'QR'} [params.method='QR'] - Método biométrico o código utilizado
  * @param {object} params.state - Estado global de la aplicación
  * @returns {Promise<{ success: boolean, message?: string, error?: string, record?: object, employee?: object }>}
  */
-export async function recordAttendance({ employeeCode, type, ipAddress, userAgent, state }) {
+export async function recordAttendance({ employeeCode, type, method = 'QR', ipAddress, userAgent, state }) {
   if (!employeeCode || typeof employeeCode !== 'string') {
     return { success: false, error: 'Por favor ingrese su Código de Empleado.' };
   }
@@ -268,6 +269,7 @@ export async function recordAttendance({ employeeCode, type, ipAddress, userAgen
     time_out: type === 'SALIDA' ? nowIso : null,
     time_str: currentTimeStr,
     type: type,
+    method: method || 'QR',
     status: status,
     lateMinutes: lateMinutes,
     hoursWorked: hoursWorked,

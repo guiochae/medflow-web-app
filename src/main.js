@@ -12,6 +12,7 @@ import { renderQuirofano } from './modules/quirofano.js';
 import { renderAdministracion } from './modules/administracion.js';
 import { initQrWidget, removeQrWidget } from './modules/qrWidget.js';
 import { renderAttendanceMobileView } from './modules/attendanceMobileView.js';
+import { renderAttendanceKioskView } from './modules/attendanceKioskView.js';
 import logoUrl from './assets/logo.jpg';
 import {
   db,
@@ -1155,7 +1156,9 @@ function initializeSidebar(loggedUser) {
 // Configurar los listeners y el estado al cargar la app
 document.addEventListener('DOMContentLoaded', () => {
   const urlParams = new URLSearchParams(window.location.search);
-  const isAttendanceView = urlParams.get('view') === 'asistencia' || window.location.pathname.includes('/asistencia/marcar');
+  const isKioskView = urlParams.get('view') === 'kiosko' || urlParams.get('view') === 'kiosk';
+  const hasToken = !!urlParams.get('token');
+  const isAttendanceView = isKioskView || urlParams.get('view') === 'asistencia' || window.location.pathname.includes('/asistencia/marcar');
 
   if (isAttendanceView) {
     const appContainer = document.getElementById('app');
@@ -1167,15 +1170,19 @@ document.addEventListener('DOMContentLoaded', () => {
       <div style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #0b1120; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif;">
         <div class="spinner" style="width: 45px; height: 45px; border: 4px solid rgba(0, 242, 254, 0.15); border-top: 4px solid #00f2fe; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1.25rem;"></div>
         <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
-        <div style="font-size: 1.05rem; font-weight: 700; color: #00f2fe;">Cargando Terminal de Asistencia...</div>
-        <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 4px;">Hospital Privado Multimédica Sayaxché</div>
+        <div style="font-size: 1.05rem; font-weight: 700; color: #00f2fe;">Cargando Terminal Dual de Asistencia...</div>
+        <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 4px;">Hospital Privado Multimédica Sayaxché &bull; LUGAMED</div>
       </div>
     `;
 
     initRealtimeFirestore((initialState) => {
       lastSyncedState = JSON.parse(JSON.stringify(initialState));
       backfillEmployeeCodes(initialState);
-      renderAttendanceMobileView(document.body);
+      if (hasToken && !isKioskView) {
+        renderAttendanceMobileView(document.body);
+      } else {
+        renderAttendanceKioskView(document.body);
+      }
     });
     return;
   }

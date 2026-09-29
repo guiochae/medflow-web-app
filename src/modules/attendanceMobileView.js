@@ -343,6 +343,7 @@ export function renderAttendanceMobileView(rootContainer) {
       const result = await recordAttendance({
         employeeCode: code,
         type: type,
+        method: 'QR',
         ipAddress: 'Dispositivo Móvil',
         userAgent: userAgent,
         state: currentState

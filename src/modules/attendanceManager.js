@@ -19,6 +19,7 @@ export function renderRrhhAsistencia(container, state) {
   let filterDept = container.querySelector('#att-filter-dept')?.value || 'all';
   let filterStatus = container.querySelector('#att-filter-status')?.value || 'all';
   let filterType = container.querySelector('#att-filter-type')?.value || 'all';
+  let filterMethod = container.querySelector('#att-filter-method')?.value || 'all';
 
   // Métricas del día
   const todayRecords = state.administracion_asistencias.filter(a => a.date === todayYMD);
@@ -43,6 +44,7 @@ export function renderRrhhAsistencia(container, state) {
     if (filterDept !== 'all' && r.department !== filterDept) return false;
     if (filterStatus !== 'all' && r.status !== filterStatus) return false;
     if (filterType !== 'all' && r.type !== filterType) return false;
+    if (filterMethod !== 'all' && (r.method || 'QR') !== filterMethod) return false;
     return true;
   });
 
@@ -154,6 +156,14 @@ export function renderRrhhAsistencia(container, state) {
             <option value="SALIDA" ${filterType === 'SALIDA' ? 'selected' : ''}>Salida</option>
           </select>
         </div>
+        <div>
+          <label style="display: block; margin-bottom: 3px; color: var(--text-muted);">Método:</label>
+          <select id="att-filter-method" style="width: 100%; padding: 6px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+            <option value="all">Todos los métodos</option>
+            <option value="FACIAL" ${filterMethod === 'FACIAL' ? 'selected' : ''}>👤 Facial</option>
+            <option value="QR" ${filterMethod === 'QR' ? 'selected' : ''}>📱 QR / Código</option>
+          </select>
+        </div>
         <div style="display: flex; align-items: flex-end; gap: 6px;">
           <button class="btn btn-primary btn-small" id="btn-apply-att-filters" style="flex: 1; padding: 6px;">Filtrar</button>
           <button class="btn btn-secondary btn-small" id="btn-reset-att-filters" style="padding: 6px;" title="Limpiar filtros">🔄</button>
@@ -177,7 +187,7 @@ export function renderRrhhAsistencia(container, state) {
               <th style="padding: 8px;">Código</th>
               <th style="padding: 8px;">Colaborador</th>
               <th style="padding: 8px;">Depto / Turno</th>
-              <th style="padding: 8px; text-align: center;">Tipo</th>
+              <th style="padding: 8px; text-align: center;">Tipo / Método</th>
               <th style="padding: 8px; text-align: center;">Estado</th>
               <th style="padding: 8px;">Dispositivo / IP</th>
               <th style="padding: 8px; text-align: center;">Acciones</th>
@@ -227,6 +237,9 @@ export function renderRrhhAsistencia(container, state) {
                       <td style="padding: 8px; text-align: center;">
                         <span style="padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.72rem; background: ${r.type === 'ENTRADA' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${r.type === 'ENTRADA' ? '#22c55e' : '#ef4444'};">
                           ${r.type === 'ENTRADA' ? '🟢 ENTRADA' : '🔴 SALIDA'}
+                        </span><br>
+                        <span style="font-size: 0.68rem; color: ${r.method === 'FACIAL' ? '#00f2fe' : '#94a3b8'}; font-weight: 600; display: inline-block; margin-top: 3px;">
+                          ${r.method === 'FACIAL' ? '👤 Facial' : '📱 QR / Código'}
                         </span>
                       </td>
                       <td style="padding: 8px; text-align: center;">
@@ -404,6 +417,7 @@ export function renderRrhhAsistencia(container, state) {
       if (container.querySelector('#att-filter-dept')) container.querySelector('#att-filter-dept').value = 'all';
       if (container.querySelector('#att-filter-status')) container.querySelector('#att-filter-status').value = 'all';
       if (container.querySelector('#att-filter-type')) container.querySelector('#att-filter-type').value = 'all';
+      if (container.querySelector('#att-filter-method')) container.querySelector('#att-filter-method').value = 'all';
       renderRrhhAsistencia(container, state);
     });
   }

@@ -3,6 +3,9 @@ import { simulateOnPurchaseCreated, simulateOnPayrollGenerated } from '../utils/
 import { notifyEmployeeWelcome } from '../utils/whatsapp.js';
 import { renderRrhhAsistencia } from './attendanceManager.js';
 import { renderRrhhReportes } from './attendanceReports.js';
+import { detectSingleFaceAndDescriptor, captureCompressedFaceThumbnail, loadFaceModels } from '../utils/faceAttendance.js';
+import { db, saveStateToLocalCache } from '../firebase.js';
+import { doc, setDoc } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import logoUrl from '../assets/logo.jpg';
 
@@ -1496,27 +1499,34 @@ function renderRrhhEmpleados(container, state) {
             ? `<div style="text-align: center; color: var(--text-muted); font-style: italic; padding: 20px 0; font-size: 0.85rem;">No se registran colaboradores activos.</div>`
             : state.administracion_employees.map(e => `
                 <div style="border: 1px solid var(--border-color); border-radius: 6px; background: rgba(255,255,255,0.01); padding: 10px; font-size: 0.82rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
-                  <div style="flex: 1;">
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                      <span style="background: rgba(0, 242, 254, 0.15); color: var(--accent-primary); padding: 1px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; font-size: 0.75rem;">
-                        ${e.employee_code || 'EMP-S/C'}
+                  <div style="flex: 1; display: flex; gap: 10px; align-items: flex-start;">
+                    ${e.face_photo 
+                      ? `<img src="${e.face_photo}" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid #00f2fe; margin-top: 2px; flex-shrink: 0; box-shadow: 0 0 10px rgba(0,242,254,0.3);" alt="Foto Facial">` 
+                      : `<div style="width: 44px; height: 44px; border-radius: 50%; background: rgba(0,242,254,0.08); color: #00f2fe; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; margin-top: 2px; border: 1px dashed rgba(0,242,254,0.3);">👤</div>`}
+                    <div style="flex: 1;">
+                      <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                        <span style="background: rgba(0, 242, 254, 0.15); color: var(--accent-primary); padding: 1px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; font-size: 0.75rem;">
+                          ${e.employee_code || 'EMP-S/C'}
+                        </span>
+                        <strong style="font-size: 0.88rem; color: var(--text-primary);">${e.name}</strong>
+                        ${e.face_descriptor ? `<span style="background: rgba(34,197,94,0.15); color: #22c55e; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">👤 Rostro Enrolado</span>` : `<span style="background: rgba(239,68,68,0.1); color: #f87171; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem;">⚠️ Sin Rostro</span>`}
+                      </div>
+                      <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 3px;">
+                        ${e.position} &bull; <strong style="color: #cbd5e1;">${e.department || 'General'}</strong> &bull; Turno: ${e.shift || 'Matutino'}
+                        ${isDoctorOrPhysician(e) ? `<span style="margin-left: 6px; background: rgba(59,130,246,0.15); color: #60a5fa; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">🩺 Honorarios Médicos (Exento de Nómina)</span>` : `<span style="margin-left: 6px; background: rgba(34,197,94,0.15); color: #4ade80; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">💼 En Planilla Mensual</span>`}
                       </span>
-                      <strong style="font-size: 0.88rem; color: var(--text-primary);">${e.name}</strong>
-                    </div>
-                    <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 3px;">
-                      ${e.position} &bull; <strong style="color: #cbd5e1;">${e.department || 'General'}</strong> &bull; Turno: ${e.shift || 'Matutino'}
-                      ${isDoctorOrPhysician(e) ? `<span style="margin-left: 6px; background: rgba(59,130,246,0.15); color: #60a5fa; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">🩺 Honorarios Médicos (Exento de Nómina)</span>` : `<span style="margin-left: 6px; background: rgba(34,197,94,0.15); color: #4ade80; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 500;">💼 En Planilla Mensual</span>`}
-                    </span>
-                    <span style="font-size: 0.73rem; color: var(--accent-secondary); display: block; margin-top: 2px;">
-                      📱 WhatsApp: ${e.whatsapp_number || e.phone || 'No asignado'} &bull; Sueldo: Q${parseFloat(e.salary).toFixed(2)}
-                    </span>
-                    <div style="display: flex; gap: 6px; margin-top: 5px; font-size: 0.7rem;">
-                      <span style="background: rgba(239,68,68,0.1); color: #ef4444; padding: 1px 6px; border-radius: 4px;">Faltas: ${e.absences || 0}</span>
-                      <span style="background: rgba(245,158,11,0.1); color: #f59e0b; padding: 1px 6px; border-radius: 4px;">Amonestaciones: ${e.warnings || 0}</span>
+                      <span style="font-size: 0.73rem; color: var(--accent-secondary); display: block; margin-top: 2px;">
+                        📱 WhatsApp: ${e.whatsapp_number || e.phone || 'No asignado'} &bull; Sueldo: Q${parseFloat(e.salary).toFixed(2)}
+                      </span>
+                      <div style="display: flex; gap: 6px; margin-top: 5px; font-size: 0.7rem;">
+                        <span style="background: rgba(239,68,68,0.1); color: #ef4444; padding: 1px 6px; border-radius: 4px;">Faltas: ${e.absences || 0}</span>
+                        <span style="background: rgba(245,158,11,0.1); color: #f59e0b; padding: 1px 6px; border-radius: 4px;">Amonestaciones: ${e.warnings || 0}</span>
+                      </div>
                     </div>
                   </div>
 
                   <div style="display: flex; flex-direction: column; gap: 4px; min-width: 110px;">
+                    <button class="btn btn-secondary btn-small btn-enroll-face" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px; color: #00f2fe;" title="Enrolar o actualizar rostro con cámara">📸 ${e.face_descriptor ? 'Rostro OK' : 'Enrolar'}</button>
                     <button class="btn btn-secondary btn-small btn-edit-emp" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px;">✏️ Editar</button>
                     <button class="btn btn-secondary btn-small btn-resend-whatsapp" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px; color: #22c55e;">📲 Enviar Código</button>
                     <button class="btn btn-secondary btn-small btn-add-absence" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px;">➕ Falta</button>
@@ -1663,6 +1673,18 @@ function renderRrhhEmpleados(container, state) {
     });
   }
 
+  container.querySelectorAll('.btn-enroll-face').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const emp = state.administracion_employees.find(e => e.id === id);
+      if (emp) {
+        openFaceEnrollmentModal(emp, state, () => {
+          renderRrhhEmpleados(container, state);
+        });
+      }
+    });
+  });
+
   container.querySelectorAll('.btn-edit-emp').forEach(btn => {
     btn.addEventListener('click', () => {
       editingEmployeeId = btn.getAttribute('data-id');
@@ -1717,6 +1739,182 @@ function renderRrhhEmpleados(container, state) {
         renderRrhhEmpleados(container, state);
       }
     });
+  });
+}
+
+let enrollmentVideoStream = null;
+
+/**
+ * Modal interactivo para enrolar rostro con cámara en RRHH
+ */
+function openFaceEnrollmentModal(emp, state, onComplete) {
+  let modal = document.getElementById('face-enroll-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'face-enroll-modal';
+    modal.style.position = 'fixed';
+    modal.style.inset = '0';
+    modal.style.background = 'rgba(0,0,0,0.85)';
+    modal.style.zIndex = '99999';
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.style.padding = '15px';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div style="background: #0f172a; border: 1px solid rgba(0,242,254,0.3); border-radius: 16px; width: 100%; max-width: 480px; padding: 20px; box-shadow: 0 25px 50px rgba(0,0,0,0.8); position: relative; color: #fff; font-family: system-ui, -apple-system, sans-serif;">
+      
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+        <div>
+          <h2 style="margin: 0; font-size: 1.1rem; color: #00f2fe; display: flex; align-items: center; gap: 8px;">
+            <span>📸</span> Enrolamiento Biométrico Facial
+          </h2>
+          <div style="font-size: 0.78rem; color: #94a3b8; margin-top: 2px;">
+            Colaborador: <strong style="color: #fff;">${emp.name}</strong> (${emp.employee_code || 'EMP-S/C'})
+          </div>
+        </div>
+        <button id="btn-close-face-enroll" style="background: transparent; border: none; color: #94a3b8; font-size: 1.4rem; cursor: pointer;">✕</button>
+      </div>
+
+      <!-- Visor de Cámara con Guía -->
+      <div style="position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 12px; overflow: hidden; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; border: 2px solid rgba(0,242,254,0.2);">
+        <video id="face-enroll-video" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1);"></video>
+        <div id="face-enroll-guide" style="position: absolute; width: 55%; height: 75%; border: 2px dashed #00f2fe; border-radius: 50%; pointer-events: none; box-shadow: 0 0 20px rgba(0,242,254,0.2);"></div>
+        <div id="face-enroll-loading" style="position: absolute; inset: 0; background: rgba(15,23,42,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;">
+          <div style="width: 35px; height: 35px; border: 3px solid rgba(0,242,254,0.2); border-top: 3px solid #00f2fe; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+          <span style="font-size: 0.82rem; color: #94a3b8;">Iniciando cámara y cargando modelos de IA...</span>
+        </div>
+      </div>
+
+      <!-- Estado de Detección -->
+      <div id="face-enroll-status" style="font-size: 0.82rem; color: #cbd5e1; text-align: center; margin-bottom: 12px; min-height: 20px; font-weight: 500;">
+        Centra el rostro del empleado dentro del óvalo
+      </div>
+
+      <!-- Botón de Captura -->
+      <div style="display: flex; gap: 10px;">
+        <button id="btn-capture-face-enroll" style="flex: 1; background: linear-gradient(135deg, #16a34a, #22c55e); color: #fff; font-weight: 700; padding: 12px; border: none; border-radius: 10px; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 15px rgba(34,197,94,0.3);">
+          <span>📸</span> Capturar y Registrar Rostro
+        </button>
+      </div>
+
+      ${emp.face_descriptor ? `
+        <div style="margin-top: 10px; text-align: center;">
+          <button id="btn-remove-face-enroll" style="background: transparent; border: none; color: #ef4444; font-size: 0.75rem; text-decoration: underline; cursor: pointer;">
+            🗑️ Eliminar datos biométricos actuales de este empleado
+          </button>
+        </div>
+      ` : ''}
+
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  const videoEl = document.getElementById('face-enroll-video');
+  const loadingEl = document.getElementById('face-enroll-loading');
+  const statusEl = document.getElementById('face-enroll-status');
+  const guideEl = document.getElementById('face-enroll-guide');
+  const btnCapture = document.getElementById('btn-capture-face-enroll');
+  const btnClose = document.getElementById('btn-close-face-enroll');
+  const btnRemove = document.getElementById('btn-remove-face-enroll');
+
+  const cleanup = () => {
+    if (enrollmentVideoStream) {
+      enrollmentVideoStream.getTracks().forEach(t => t.stop());
+      enrollmentVideoStream = null;
+    }
+    modal.style.display = 'none';
+  };
+
+  btnClose.addEventListener('click', cleanup);
+
+  if (btnRemove) {
+    btnRemove.addEventListener('click', async () => {
+      if (confirm(`¿Deseas eliminar el registro biométrico facial de ${emp.name}?`)) {
+        delete emp.face_descriptor;
+        delete emp.face_photo;
+        delete emp.face_enrolled_at;
+
+        saveStateToLocalCache();
+        const docRef = doc(db, 'multimedica', 'catalog_administracion_employees');
+        await setDoc(docRef, { _collectionType: 'catalog_administracion_employees', items: state.administracion_employees }, { merge: true });
+        const indRef = doc(db, 'multimedica', emp.id);
+        await setDoc(indRef, { ...emp, _collectionType: 'administracion_employees' }, { merge: true });
+        await saveAppState(state);
+
+        alert(`Biometría facial eliminada para ${emp.name}.`);
+        cleanup();
+        if (onComplete) onComplete();
+      }
+    });
+  }
+
+  // Iniciar cámara y cargar modelos
+  (async () => {
+    try {
+      await loadFaceModels();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
+      });
+      enrollmentVideoStream = stream;
+      videoEl.srcObject = stream;
+      await videoEl.play();
+      if (loadingEl) loadingEl.style.display = 'none';
+    } catch (err) {
+      if (loadingEl) {
+        loadingEl.innerHTML = `
+          <div style="font-size: 1.8rem; color: #ef4444; margin-bottom: 4px;">⚠️</div>
+          <span style="font-size: 0.82rem; color: #fca5a5; text-align: center; padding: 0 10px;">
+            Error accediendo a la cámara: ${err.message || 'Permiso denegado'}
+          </span>
+        `;
+      }
+    }
+  })();
+
+  btnCapture.addEventListener('click', async () => {
+    btnCapture.disabled = true;
+    if (statusEl) statusEl.textContent = '⏳ Extrayendo vector facial de 128 dimensiones...';
+
+    try {
+      const detection = await detectSingleFaceAndDescriptor(videoEl, { inputSize: 320, scoreThreshold: 0.5 });
+      if (!detection) {
+        if (statusEl) statusEl.textContent = '⚠️ No se detectó ningún rostro nítido. Centra tu cara e intenta nuevamente.';
+        btnCapture.disabled = false;
+        if (guideEl) guideEl.style.borderColor = '#f59e0b';
+        return;
+      }
+
+      const photoThumbnail = captureCompressedFaceThumbnail(videoEl, detection.detection.box);
+      const floatArray = Array.from(detection.descriptor);
+
+      emp.face_descriptor = floatArray;
+      emp.face_photo = photoThumbnail;
+      emp.face_enrolled_at = new Date().toISOString();
+
+      saveStateToLocalCache();
+      const docRef = doc(db, 'multimedica', 'catalog_administracion_employees');
+      await setDoc(docRef, { _collectionType: 'catalog_administracion_employees', items: state.administracion_employees }, { merge: true });
+      const indRef = doc(db, 'multimedica', emp.id);
+      await setDoc(indRef, { ...emp, _collectionType: 'administracion_employees' }, { merge: true });
+      await saveAppState(state);
+
+      if (guideEl) guideEl.style.borderColor = '#22c55e';
+      if (statusEl) statusEl.innerHTML = `<span style="color: #22c55e; font-weight: 700;">✅ ¡Rostro de ${emp.name} registrado con éxito!</span>`;
+
+      setTimeout(() => {
+        cleanup();
+        if (onComplete) onComplete();
+      }, 1500);
+
+    } catch (err) {
+      console.error('Error al capturar rostro:', err);
+      if (statusEl) statusEl.textContent = 'Error: ' + (err.message || err);
+      btnCapture.disabled = false;
+    }
   });
 }
 
