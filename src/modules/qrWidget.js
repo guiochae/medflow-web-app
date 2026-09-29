@@ -346,6 +346,23 @@ function renderWidgetContent() {
             cursor: pointer;
           " title="Ocultar">▼</button>
         </div>
+
+        <!-- Botón para abrir Kiosko Pantalla Completa -->
+        <div style="margin-top: 8px;">
+          <a href="?view=kiosko" target="_blank" style="
+            display: block;
+            text-align: center;
+            background: linear-gradient(135deg, rgba(0, 242, 254, 0.15), rgba(34, 197, 94, 0.15));
+            border: 1px solid rgba(0, 242, 254, 0.4);
+            color: #00f2fe;
+            padding: 7px;
+            border-radius: 6px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-decoration: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          ">🖥️ Abrir Terminal Kiosko Completo</a>
+        </div>
       </div>
     `;
 

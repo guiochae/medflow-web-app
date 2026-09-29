@@ -101,9 +101,14 @@ export function renderRrhhAsistencia(container, state) {
         <h3 style="font-size: 0.95rem; color: var(--accent-primary); margin: 0; font-family: var(--font-heading);">
           🔍 Filtros de Búsqueda y Auditoría
         </h3>
-        <button class="btn btn-primary btn-small" id="btn-open-manual-attendance" style="padding: 6px 12px; font-weight: 600;">
-          ➕ Registrar Marcaje Manual
-        </button>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <a href="?view=kiosko" target="_blank" class="btn btn-secondary btn-small" style="padding: 6px 12px; font-weight: 600; color: #00f2fe; text-decoration: none; border: 1px solid rgba(0, 242, 254, 0.4); display: inline-flex; align-items: center; gap: 5px; background: rgba(0,242,254,0.08);" title="Abrir la terminal perimetral aislada en pantalla completa">
+            <span>🖥️</span> Abrir Terminal Kiosko
+          </a>
+          <button class="btn btn-primary btn-small" id="btn-open-manual-attendance" style="padding: 6px 12px; font-weight: 600;">
+            ➕ Registrar Marcaje Manual
+          </button>
+        </div>
       </div>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; font-size: 0.82rem;">
