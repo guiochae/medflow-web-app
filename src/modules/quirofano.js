@@ -1,5 +1,6 @@
 // src/modules/quirofano.js
 import { getAppState, saveAppState, setActivePatientId } from '../main.js';
+import { findExistingPatientByDpi, showDuplicatePatientModal } from '../utils/patientDpiValidator.js';
 
 // Catálogo de Procedimientos Quirúrgicos Comunes
 const SURGICAL_PROCEDURES_CATALOG = [
@@ -933,6 +934,21 @@ export function renderQuirofano(container) {
         dpi = 'Menor de Edad';
       } else if (!dpi) {
         dpi = 'No Presenta Documento';
+      }
+
+      // Validar si el paciente ya se encuentra registrado por DPI
+      const existingPatient = findExistingPatientByDpi(dpi, state.patients);
+      if (existingPatient) {
+        showDuplicatePatientModal(existingPatient, (selectedPat) => {
+          extModal.style.display = 'none';
+          setActivePatientId(selectedPat.id);
+          renderCandidatos();
+          const pSelect = document.getElementById('q-patient-select');
+          if (pSelect) pSelect.value = selectedPat.id;
+        }, () => {
+          document.getElementById('q-ext-dpi')?.focus();
+        });
+        return;
       }
 
       // Crear paciente del sistema

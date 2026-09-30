@@ -2,6 +2,7 @@ import { getAppState, saveAppState, getActivePatientId, setActivePatientId } fro
 import { showLocalLabReportPrintWindow } from './laboratorio.js';
 import { initPartogramaChart } from './partogramaChart.js';
 import { notifyDoctorViaWhatsApp } from '../utils/whatsapp.js';
+import { findExistingPatientByDpi, showDuplicatePatientModal } from '../utils/patientDpiValidator.js';
 
 function isCurrentUserAdmin() {
   const loggedUser = sessionStorage.getItem('medflow_logged_user');
@@ -259,6 +260,23 @@ function showNewPatientForm() {
     if (ageYears >= 18 && !dpiInput.value.trim()) {
       dpiInput.value = 'No Presenta Documento';
     }
+
+    // Validación preventiva al salir del campo DPI
+    const valDpi = dpiInput.value.trim();
+    if (valDpi) {
+      const stateObj = getAppState();
+      const existingPatient = findExistingPatientByDpi(valDpi, stateObj.patients);
+      if (existingPatient) {
+        showDuplicatePatientModal(existingPatient, (selectedPat) => {
+          setActivePatientId(selectedPat.id);
+          renderPatientList();
+          renderPatientDetails();
+        }, () => {
+          dpiInput.focus();
+          dpiInput.select();
+        });
+      }
+    }
   });
 
   document.getElementById('btn-cancel-new-patient').addEventListener('click', renderPatientDetails);
@@ -277,6 +295,20 @@ function showNewPatientForm() {
       finalDpi = 'Menor de Edad';
     } else if (!finalDpi || finalDpi === '') {
       finalDpi = 'No Presenta Documento';
+    }
+
+    // VALIDACIÓN ESTRICTA ANTI-DUPLICADOS POR DPI
+    const existingPatient = findExistingPatientByDpi(finalDpi, stateObj.patients);
+    if (existingPatient) {
+      showDuplicatePatientModal(existingPatient, (selectedPat) => {
+        setActivePatientId(selectedPat.id);
+        renderPatientList();
+        renderPatientDetails();
+      }, () => {
+        dpiInput.focus();
+        dpiInput.select();
+      });
+      return;
     }
 
     const docSelect = document.getElementById('p-assigned-doctor');
@@ -418,6 +450,23 @@ function showEditPatientForm(patient) {
     if (ageYears >= 18 && !dpiInput.value.trim()) {
       dpiInput.value = 'No Presenta Documento';
     }
+
+    // Validación preventiva al salir del campo DPI en edición
+    const valDpi = dpiInput.value.trim();
+    if (valDpi) {
+      const stateObj = getAppState();
+      const existingPatient = findExistingPatientByDpi(valDpi, stateObj.patients, patient.id);
+      if (existingPatient) {
+        showDuplicatePatientModal(existingPatient, (selectedPat) => {
+          setActivePatientId(selectedPat.id);
+          renderPatientList();
+          renderPatientDetails();
+        }, () => {
+          dpiInput.focus();
+          dpiInput.select();
+        });
+      }
+    }
   });
 
   document.getElementById('btn-cancel-edit-patient').addEventListener('click', renderPatientDetails);
@@ -438,6 +487,20 @@ function showEditPatientForm(patient) {
       finalDpi = 'Menor de Edad';
     } else if (!finalDpi || finalDpi === '') {
       finalDpi = 'No Presenta Documento';
+    }
+
+    // VALIDACIÓN ESTRICTA ANTI-DUPLICADOS POR DPI AL EDITAR
+    const existingPatient = findExistingPatientByDpi(finalDpi, stateObj.patients, patient.id);
+    if (existingPatient) {
+      showDuplicatePatientModal(existingPatient, (selectedPat) => {
+        setActivePatientId(selectedPat.id);
+        renderPatientList();
+        renderPatientDetails();
+      }, () => {
+        dpiInput.focus();
+        dpiInput.select();
+      });
+      return;
     }
 
     const docSelect = document.getElementById('ep-assigned-doctor');

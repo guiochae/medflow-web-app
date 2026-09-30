@@ -2,6 +2,7 @@
 import { getAppState, saveAppState, removeFromFirestore, purgeAllDatabases, saveDocumentsBatch, purgeCollectionFromFirestore } from '../main.js';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
+import { findExistingPatientByDpi, isGenericDpi } from '../utils/patientDpiValidator.js';
 
 let editingUserId = null;
 let activeCatalogType = null; // 'medications' | 'laboratoryTests' | 'imagingStudies' | 'consultationTypes'
@@ -2063,13 +2064,18 @@ function importDatabaseExcel(file, callback) {
           const pid = String(pr['ID Paciente'] || pr['ID Expediente'] || ('p-' + Math.random().toString(36).substr(2, 5)));
           const pname = pr['Nombre Completo'] || pr['Nombre'];
           if (!pname || String(pid).includes('TOTAL')) return;
+          const pDpi = String(pr['DPI / CUI'] || pr['DPI'] || 'No Presenta Documento');
 
           let pObj = currentState.patients.find(p => p.id === pid || p.name === pname);
+          if (!pObj && !isGenericDpi(pDpi)) {
+            pObj = findExistingPatientByDpi(pDpi, currentState.patients);
+          }
+
           if (!pObj) {
             pObj = {
               id: pid,
               name: pname,
-              dpi: String(pr['DPI / CUI'] || pr['DPI'] || 'No Presenta Documento'),
+              dpi: pDpi,
               birthdate: String(pr['Fecha Nacimiento'] || ''),
               gender: (String(pr['Sexo'] || pr['Género'] || '').toUpperCase().includes('H') || String(pr['Sexo'] || '').toUpperCase().includes('MASC')) ? 'Masculino' : 'Femenino',
               telephone: String(pr['Teléfono'] || '00000000'),
