@@ -545,8 +545,15 @@ export async function saveAppState(state) {
       });
     }
 
-    // Sincronizar Empleados/Colaboradores (modificados y eliminados)
+    // Sincronizar Empleados/Colaboradores (modificados, eliminados y catálogo consolidado)
     if (state.administracion_employees && Array.isArray(state.administracion_employees)) {
+      const prevEmps = lastSyncedState && lastSyncedState.administracion_employees;
+      if (!prevEmps || JSON.stringify(prevEmps) !== JSON.stringify(state.administracion_employees)) {
+        const docRef = doc(db, 'multimedica', 'catalog_administracion_employees');
+        batch.set(docRef, { _collectionType: 'catalog_administracion_employees', items: state.administracion_employees });
+        hasWrites = true;
+      }
+
       state.administracion_employees.forEach(emp => {
         if (emp && emp.id) {
           const prevEmp = lastSyncedState && lastSyncedState.administracion_employees && lastSyncedState.administracion_employees.find(x => x.id === emp.id);

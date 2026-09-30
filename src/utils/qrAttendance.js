@@ -148,40 +148,61 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
     return { success: false, error: 'Por favor ingrese su Código de Empleado.' };
   }
 
-  let cleanCode = employeeCode.trim().toUpperCase();
-  // Normalizar códigos numéricos simples (ej: "1" o "001" -> "EMP-001")
-  if (/^\d+$/.test(cleanCode)) {
-    cleanCode = `EMP-${cleanCode.padStart(3, '0')}`;
-  } else if (/^EMP\d+$/i.test(cleanCode)) {
-    const numPart = cleanCode.replace(/^EMP/i, '');
-    cleanCode = `EMP-${numPart.padStart(3, '0')}`;
-  } else if (/^EMP-\d+$/i.test(cleanCode)) {
-    const numPart = cleanCode.replace(/^EMP-/i, '');
-    cleanCode = `EMP-${numPart.padStart(3, '0')}`;
-  }
+  const rawInput = employeeCode.trim();
+  const rawInputUpper = rawInput.toUpperCase();
+
+  // 1. Extraer el número del código para comparación flexible (ej: "EMP-017", "EMP-17", "EMP17", "017", "17")
+  const numMatch = rawInputUpper.match(/^EMP[-_\s]*0*(\d+)$/i) || rawInputUpper.match(/^0*(\d+)$/);
+  const codeNum = numMatch && numMatch[1] ? parseInt(numMatch[1], 10) : null;
+  const standardCode = codeNum !== null ? `EMP-${String(codeNum).padStart(3, '0')}` : rawInputUpper;
 
   state.administracion_employees = state.administracion_employees || [];
   state.administracion_asistencias = state.administracion_asistencias || [];
 
-  // Buscar por código normalizado, código original, o ID de colaborador
-  let employee = state.administracion_employees.find(e => 
-    (e.employee_code && e.employee_code.trim().toUpperCase() === cleanCode) ||
-    (e.employee_code && e.employee_code.trim().toUpperCase() === employeeCode.trim().toUpperCase()) ||
-    (e.id && String(e.id).trim().toUpperCase() === employeeCode.trim().toUpperCase())
-  );
+  // 2. Si la lista local de empleados está vacía, intentar lectura directa de respaldo desde Firestore
+  if (!state.administracion_employees || state.administracion_employees.length === 0) {
+    try {
+      const docSnap = await getDoc(doc(db, 'multimedica', 'catalog_administracion_employees'));
+      if (docSnap.exists()) {
+        const dData = docSnap.data();
+        const emps = dData.items || [];
+        if (Array.isArray(emps) && emps.length > 0) {
+          state.administracion_employees = emps;
+          if (firestoreState) firestoreState.administracion_employees = emps;
+        }
+      }
+    } catch (e) {
+      console.warn("Aviso en consulta de respaldo de empleados:", e);
+    }
+  }
+
+  // 3. Buscar por coincidencia exacta, estándar o numérica
+  let employee = (state.administracion_employees || []).find(e => {
+    if (!e) return false;
+    const eCode = e.employee_code ? String(e.employee_code).trim().toUpperCase() : '';
+    const eId = e.id ? String(e.id).trim().toUpperCase() : '';
+
+    if (eCode === standardCode || eCode === rawInputUpper || eId === rawInputUpper) return true;
+
+    if (codeNum !== null) {
+      const eNumMatch = eCode.match(/^EMP[-_\s]*0*(\d+)$/i) || eCode.match(/^0*(\d+)$/);
+      if (eNumMatch && eNumMatch[1] && parseInt(eNumMatch[1], 10) === codeNum) return true;
+    }
+    return false;
+  });
 
   // Búsqueda alternativa por nombre exacto si el código no coincide
   if (!employee) {
-    const rawInputLower = employeeCode.trim().toLowerCase();
-    employee = state.administracion_employees.find(e => 
-      e.name && e.name.trim().toLowerCase() === rawInputLower
+    const rawInputLower = rawInput.toLowerCase();
+    employee = (state.administracion_employees || []).find(e => 
+      e && e.name && e.name.trim().toLowerCase() === rawInputLower
     );
   }
 
   if (!employee) {
     return { 
       success: false, 
-      error: `El código "${cleanCode}" no corresponde a ningún colaborador registrado en LUGAMED. Verifica tu código en Recursos Humanos.` 
+      error: `El código "${standardCode}" no corresponde a ningún colaborador registrado en LUGAMED. Verifica tu código en Recursos Humanos.` 
     };
   }
 

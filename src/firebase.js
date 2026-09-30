@@ -418,6 +418,30 @@ export function initRealtimeFirestore(onFirstLoad) {
           autorizacionesList.push(...(dData.items || []));
           return;
         }
+        if (dId === 'catalog_administracion_employees') {
+          employees.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_administracion_nominas') {
+          nominas.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_administracion_bancos') {
+          bancos.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_administracion_compras') {
+          compras.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_administracion_contabilidad') {
+          contabilidad.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_administracion_caja') {
+          caja.push(...(dData.items || []));
+          return;
+        }
         if (dId === 'catalog_administracion_activos_fijos') {
           activosFijos.push(...(dData.items || []));
           return;
@@ -428,6 +452,14 @@ export function initRealtimeFirestore(onFirstLoad) {
         }
         if (dId === 'catalog_administracion_asistencias_audit') {
           asistenciasAudit.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_external_doctors') {
+          doctors.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_accounts_payable') {
+          payables.push(...(dData.items || []));
           return;
         }
 
@@ -487,15 +519,26 @@ export function initRealtimeFirestore(onFirstLoad) {
       firestoreState.administracion_compras = compras;
       firestoreState.administracion_contabilidad = contabilidad;
       firestoreState.administracion_caja = caja;
+
+      // Deduplicar empleados por id (combinando catálogo empaquetado y documentos individuales)
+      const uniqueEmployees = [];
+      const seenEmpIds = new Set();
+      employees.forEach(emp => {
+        if (emp && emp.id && !seenEmpIds.has(emp.id)) {
+          seenEmpIds.add(emp.id);
+          uniqueEmployees.push(emp);
+        }
+      });
+
       // Auto-asignación de seguridad para garantizar códigos EMP-xxx inmediatos
       let maxEmpSeq = 0;
-      employees.forEach(emp => {
+      uniqueEmployees.forEach(emp => {
         if (emp && emp.employee_code && /^EMP-\d+$/i.test(String(emp.employee_code).trim())) {
           const n = parseInt(String(emp.employee_code).trim().replace(/^EMP-/i, ''), 10);
           if (!isNaN(n) && n > maxEmpSeq) maxEmpSeq = n;
         }
       });
-      employees.forEach(emp => {
+      uniqueEmployees.forEach(emp => {
         if (emp) {
           if (!emp.employee_code || String(emp.employee_code).trim() === '' || String(emp.employee_code).trim() === 'EMP-S/C') {
             maxEmpSeq++;
@@ -508,7 +551,15 @@ export function initRealtimeFirestore(onFirstLoad) {
         }
       });
 
-      firestoreState.administracion_employees = employees;
+      firestoreState.administracion_employees = uniqueEmployees;
+      firestoreState.administracion_nominas = nominas;
+      firestoreState.administracion_bancos = bancos;
+      firestoreState.administracion_activos_fijos = activosFijos;
+      firestoreState.administracion_asistencias = asistencias;
+      firestoreState.administracion_asistencias_audit = asistenciasAudit;
+      firestoreState.external_doctors = doctors;
+      firestoreState.accounts_payable = payables;
+      if (clinic) firestoreState.clinicInfo = clinic;
       firestoreState.administracion_nominas = nominas;
       firestoreState.administracion_bancos = bancos;
       firestoreState.administracion_activos_fijos = activosFijos;
@@ -623,6 +674,30 @@ export function initRealtimeFirestore(onFirstLoad) {
               autorizacionesList.push(...(dData.items || []));
               return;
             }
+            if (dId === 'catalog_administracion_employees') {
+              employees.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_administracion_nominas') {
+              nominas.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_administracion_bancos') {
+              bancos.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_administracion_compras') {
+              compras.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_administracion_contabilidad') {
+              contabilidad.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_administracion_caja') {
+              caja.push(...(dData.items || []));
+              return;
+            }
             if (dId === 'catalog_administracion_activos_fijos') {
               activosFijos.push(...(dData.items || []));
               return;
@@ -633,6 +708,14 @@ export function initRealtimeFirestore(onFirstLoad) {
             }
             if (dId === 'catalog_administracion_asistencias_audit') {
               asistenciasAudit.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_external_doctors') {
+              doctors.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_accounts_payable') {
+              payables.push(...(dData.items || []));
               return;
             }
 
@@ -692,15 +775,26 @@ export function initRealtimeFirestore(onFirstLoad) {
           firestoreState.administracion_compras = compras;
           firestoreState.administracion_contabilidad = contabilidad;
           firestoreState.administracion_caja = caja;
+
+          // Deduplicar empleados en fallback
+          const uniqueEmployeesFallback = [];
+          const seenEmpIdsFallback = new Set();
+          employees.forEach(emp => {
+            if (emp && emp.id && !seenEmpIdsFallback.has(emp.id)) {
+              seenEmpIdsFallback.add(emp.id);
+              uniqueEmployeesFallback.push(emp);
+            }
+          });
+
           // Auto-asignación de seguridad en caché nativo
           let maxEmpSeqFallback = 0;
-          employees.forEach(emp => {
+          uniqueEmployeesFallback.forEach(emp => {
             if (emp && emp.employee_code && /^EMP-\d+$/i.test(String(emp.employee_code).trim())) {
               const n = parseInt(String(emp.employee_code).trim().replace(/^EMP-/i, ''), 10);
               if (!isNaN(n) && n > maxEmpSeqFallback) maxEmpSeqFallback = n;
             }
           });
-          employees.forEach(emp => {
+          uniqueEmployeesFallback.forEach(emp => {
             if (emp) {
               if (!emp.employee_code || String(emp.employee_code).trim() === '' || String(emp.employee_code).trim() === 'EMP-S/C') {
                 maxEmpSeqFallback++;
@@ -713,7 +807,7 @@ export function initRealtimeFirestore(onFirstLoad) {
             }
           });
 
-          firestoreState.administracion_employees = employees;
+          firestoreState.administracion_employees = uniqueEmployeesFallback;
           firestoreState.administracion_nominas = nominas;
           firestoreState.administracion_bancos = bancos;
           firestoreState.administracion_activos_fijos = activosFijos;
