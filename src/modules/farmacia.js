@@ -1343,7 +1343,10 @@ function renderPendingRecipes() {
           <td style="padding: 6px 0; text-align: center; font-size: 0.8rem; color: ${stockAvailable > 0 ? '#10b981' : '#ef4444'};">
             ${stockAvailable} unds PEPS
           </td>
-          <td style="padding: 6px 0; color: var(--text-muted); font-size: 0.82rem;">Dosis: ${m.dosage || 'Regular'} | Duración: ${m.duration || 'N/A'}</td>
+          <td style="padding: 6px 0; color: var(--text-muted); font-size: 0.82rem;">
+            Dosis: ${m.dosage || 'Regular'} | Duración: ${m.duration || 'N/A'}
+            ${m.schedule ? `<span style="display: block; color: var(--accent-primary); font-weight: bold; margin-top: 2px;">⏰ Horario: ${m.schedule}</span>` : ''}
+          </td>
         </tr>
       `;
     }).join('');

@@ -2131,7 +2131,10 @@ function showClinicalHistoryModal(patient) {
                   <tbody>
                     ${(r.medicines || []).map(m => `
                       <tr>
-                        <td><strong>${m.name || 'Medicamento'}</strong> (${m.presentation || '-'})</td>
+                        <td>
+                          <strong>${m.name || 'Medicamento'}</strong> (${m.presentation || '-'})
+                          ${m.schedule ? `<div style="font-size: 0.78rem; font-weight: 700; color: var(--accent-primary); margin-top: 2px;">⏰ Horario: ${m.schedule}</div>` : ''}
+                        </td>
                         <td>${m.quantity || 1}</td>
                         <td>${m.dosage || '-'}</td>
                         <td>${m.duration || '-'}</td>

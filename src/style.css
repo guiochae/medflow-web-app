@@ -1117,6 +1117,14 @@ tbody tr:hover {
   margin-top: 4px;
 }
 
+.prescription-med-schedule {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0284c7;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
 .prescription-preview-footer {
   margin-top: 4rem;
   display: flex;
@@ -1230,6 +1238,12 @@ tbody tr:hover {
     font-size: 0.75rem !important;
     color: #333 !important;
     margin-top: 6px !important;
+  }
+
+  .prescription-med-schedule {
+    color: #000 !important;
+    font-weight: 800 !important;
+    font-size: 1.05rem !important;
   }
 
   /* Payroll Payslips Grid - Exact 6 vouchers per Letter sheet (2 cols x 3 rows) */

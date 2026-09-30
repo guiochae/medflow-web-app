@@ -719,20 +719,41 @@ function renderRecipeBuilder(patient, doctors) {
               <div class="form-row">
                 <div class="form-group" style="flex: 2;">
                   <label for="m-dosage">Dosis y Frecuencia</label>
-                  <input type="text" id="m-dosage" required placeholder="Ej. 1 tableta cada 8 horas">
+                  <input type="text" id="m-dosage" required placeholder="Ej. 1 tableta por las noches / Tomar 10ml">
                 </div>
                 <div class="form-group" style="flex: 2;">
                   <label for="m-duration">Indicaciones / Duración</label>
-                  <input type="text" id="m-duration" required placeholder="Ej. Tomar después de comida por 7 días">
+                  <input type="text" id="m-duration" required placeholder="Ej. Hasta nueva orden médica / Por 15 días">
                 </div>
               </div>
+
+              <!-- Horarios de Inicio y Mantenimiento de Dosis -->
+              <div class="form-row" style="margin-top: 4px;">
+                <div class="form-group" style="flex: 1;">
+                  <label for="m-schedule" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>⏰ Horario(s) de Inicio y Mantenimiento de Dosis <small style="color: var(--accent-primary); font-weight: normal;">(Opcional)</small></span>
+                    <span style="font-size: 0.72rem; color: var(--text-muted);">Ej. 8:00 am, 8:00 pm, 10:00am - 4:00pm</span>
+                  </label>
+                  <input type="text" id="m-schedule" placeholder="Ej. 8:00 am, 8:00 pm, 10:00am - 4:00pm ó 2:00 pm" style="font-weight: 700; color: var(--accent-primary);">
+                  <!-- Pastillas de Acceso Rápido para Horarios Médicos Frecuentes -->
+                  <div id="quick-schedule-pills" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;">
+                    <button type="button" class="btn-schedule-pill" data-val="8:00 am" style="font-size: 0.72rem; padding: 3px 9px; border-radius: 12px; background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.25); color: #00f2fe; cursor: pointer;">8:00 am</button>
+                    <button type="button" class="btn-schedule-pill" data-val="2:00 pm" style="font-size: 0.72rem; padding: 3px 9px; border-radius: 12px; background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.25); color: #00f2fe; cursor: pointer;">2:00 pm</button>
+                    <button type="button" class="btn-schedule-pill" data-val="8:00 pm" style="font-size: 0.72rem; padding: 3px 9px; border-radius: 12px; background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.25); color: #00f2fe; cursor: pointer;">8:00 pm</button>
+                    <button type="button" class="btn-schedule-pill" data-val="8:00 am - 8:00 pm" style="font-size: 0.72rem; padding: 3px 9px; border-radius: 12px; background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.25); color: #00f2fe; cursor: pointer;">8:00 am - 8:00 pm</button>
+                    <button type="button" class="btn-schedule-pill" data-val="10:00 am - 4:00 pm" style="font-size: 0.72rem; padding: 3px 9px; border-radius: 12px; background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.25); color: #00f2fe; cursor: pointer;">10:00 am - 4:00 pm</button>
+                    <button type="button" class="btn-schedule-pill" data-val="6:00 am - 2:00 pm - 10:00 pm" style="font-size: 0.72rem; padding: 3px 9px; border-radius: 12px; background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.25); color: #00f2fe; cursor: pointer;">6:00 am - 2:00 pm - 10:00 pm</button>
+                  </div>
+                </div>
+              </div>
+
               <div style="display: flex; align-items: center; gap: 1.25rem; margin-top: 1.25rem; flex-wrap: wrap;">
                 <button type="submit" class="btn btn-secondary btn-small">
                   <span>+</span> Agregar a la Receta
                 </button>
                 <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.88rem; color: var(--accent-primary); font-weight: 500; user-select: none; margin: 0;">
                   <input type="checkbox" id="m-breakdown-schedule" style="width: 17px; height: 17px; accent-color: var(--accent-primary); cursor: pointer;">
-                  Desglosar horarios de administración
+                  Desglosar horarios en descripción
                 </label>
               </div>
             </form>
@@ -995,6 +1016,23 @@ function renderRecipeBuilder(patient, doctors) {
     return rawDosage;
   }
 
+  // Bind botones de pastillas rápidas de horarios
+  const scheduleInput = document.getElementById('m-schedule');
+  document.querySelectorAll('.btn-schedule-pill').forEach(pill => {
+    pill.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (scheduleInput) {
+        const val = pill.getAttribute('data-val') || '';
+        if (!scheduleInput.value.trim()) {
+          scheduleInput.value = val;
+        } else if (!scheduleInput.value.includes(val)) {
+          scheduleInput.value = `${scheduleInput.value.trim()} - ${val}`;
+        }
+        scheduleInput.focus();
+      }
+    });
+  });
+
   // Bind Agregar Medicamento Form
   document.getElementById('add-medicine-form').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -1003,6 +1041,7 @@ function renderRecipeBuilder(patient, doctors) {
     const quantity = parseFloat(document.getElementById('m-quantity').value) || 1;
     const rawDosage = document.getElementById('m-dosage').value;
     const duration = document.getElementById('m-duration').value;
+    const schedule = document.getElementById('m-schedule')?.value.trim() || '';
     const breakdownCheck = document.getElementById('m-breakdown-schedule');
     const shouldBreakdown = breakdownCheck ? breakdownCheck.checked : false;
 
@@ -1049,6 +1088,7 @@ function renderRecipeBuilder(patient, doctors) {
       quantity: quantityText,
       dosage,
       duration,
+      schedule,
       breakdownSchedule: shouldBreakdown,
       tipoPrescripcion: type,
       cantidad_o_dosis: quantity,
@@ -1064,6 +1104,7 @@ function renderRecipeBuilder(patient, doctors) {
     document.getElementById('m-quantity').value = '';
     document.getElementById('m-dosage').value = '';
     document.getElementById('m-duration').value = '';
+    if (scheduleInput) scheduleInput.value = '';
     if (breakdownCheck) breakdownCheck.checked = false;
     autocompleteList.style.display = 'none';
 
@@ -1239,8 +1280,15 @@ function renderCurrentMedicinesTable() {
   currentPrescriptionMedicines.forEach((med, idx) => {
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td><strong>${med.name}</strong> (${med.presentation})</td>
-      <td>${med.quantity}</td>
+      <td>
+        <strong style="color: var(--text-primary); font-size: 0.95rem;">${med.name}</strong> (${med.presentation})
+        ${med.schedule ? `
+          <div style="font-size: 0.8rem; font-weight: 700; color: var(--accent-primary); margin-top: 3px; display: flex; align-items: center; gap: 4px;">
+            <span>⏰ Horario:</span> <strong>${med.schedule}</strong>
+          </div>
+        ` : ''}
+      </td>
+      <td style="font-weight: 600;">${med.quantity}</td>
       <td>${med.dosage}</td>
       <td>${med.duration}</td>
       <td>
@@ -1331,18 +1379,27 @@ function showPrescriptionPreviewModal(patient, recipe) {
                 <table class="prescription-preview-table">
                   <thead>
                     <tr>
-                      <th style="width: 70%; text-align: left;">Medicamento y Dosis</th>
-                      <th style="width: 30%; text-align: right;">Cantidad</th>
+                      <th style="width: 72%; text-align: left;">MEDICAMENTO Y DOSIS</th>
+                      <th style="width: 28%; text-align: right;">CANTIDAD</th>
                     </tr>
                   </thead>
                   <tbody>
                     ${recipe.medicines.map(m => `
                       <tr>
-                        <td style="text-align: left; padding: 12px 8px;">
-                          <strong style="color: #000; font-size: 1.15rem;">${m.name} (${m.presentation})</strong>
-                          <div class="prescription-preview-indications">${m.dosage} — ${m.duration}</div>
+                        <td style="text-align: left; padding: 12px 8px; vertical-align: top;">
+                          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 3px; flex-wrap: wrap;">
+                            <strong style="color: #000; font-size: 1.15rem; text-transform: uppercase;">${m.name} (${m.presentation})</strong>
+                            ${m.schedule ? `
+                              <span class="prescription-med-schedule" style="font-size: 1.05rem; font-weight: 700; color: #0284c7; white-space: nowrap; font-family: system-ui, -apple-system, sans-serif;">
+                                ${m.schedule}
+                              </span>
+                            ` : ''}
+                          </div>
+                          <div class="prescription-preview-indications" style="text-transform: uppercase; font-size: 0.92rem; color: #222; line-height: 1.4;">
+                            ${m.dosage} — ${m.duration}
+                          </div>
                         </td>
-                        <td style="text-align: right; font-weight: 700; padding: 12px 8px; font-size: 1.15rem; color: #333;">
+                        <td style="text-align: right; font-weight: 700; padding: 12px 8px; font-size: 1.12rem; color: #111; vertical-align: top; text-transform: uppercase;">
                           ${m.quantity}
                         </td>
                       </tr>
