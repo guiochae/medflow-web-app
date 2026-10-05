@@ -3,6 +3,7 @@ import { showLocalLabReportPrintWindow } from './laboratorio.js';
 import { initPartogramaChart } from './partogramaChart.js';
 import { notifyDoctorViaWhatsApp } from '../utils/whatsapp.js';
 import { findExistingPatientByDpi, showDuplicatePatientModal } from '../utils/patientDpiValidator.js';
+import { isPatientAccessibleByDoctor } from './consulta.js';
 
 function isCurrentUserAdmin() {
   const loggedUser = sessionStorage.getItem('medflow_logged_user');
@@ -113,20 +114,19 @@ function renderPatientList(query = '') {
   const currentUser = state.currentUser;
   let basePatients = state.patients || [];
 
-  // Si el usuario es médico (incluyendo Medico 1, Medico 2, Medico 3, etc.), ve únicamente los pacientes que le fueron asignados
+  // Si el usuario es médico y no hay búsqueda activa, filtrar según asignación, interconsulta o pool común
   const roleNorm = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const isDoctor = roleNorm.startsWith('medico');
-  if (currentUser && isDoctor) {
-    basePatients = basePatients.filter(p => 
-      p.assignedDoctorId === currentUser.id || 
-      p.assignedDoctorName === currentUser.name
-    );
+  const isDoctor = roleNorm.includes('medico') || roleNorm.includes('médico') || roleNorm.includes('doctor');
+  if (currentUser && isDoctor && !query.trim()) {
+    basePatients = basePatients.filter(p => isPatientAccessibleByDoctor(p, currentUser));
   }
 
   const filtered = basePatients.filter(p => {
     const nameVal = p.name ? String(p.name).toLowerCase() : '';
     const telVal = p.telephone ? String(p.telephone) : '';
-    return nameVal.includes(query.toLowerCase()) || telVal.includes(query);
+    const dpiVal = p.dpi ? String(p.dpi) : '';
+    const qLower = query.toLowerCase();
+    return nameVal.includes(qLower) || telVal.includes(qLower) || dpiVal.includes(qLower);
   });
 
   if (filtered.length === 0) {
@@ -532,14 +532,14 @@ function renderPatientDetails() {
 
   const currentUser = state.currentUser;
   const activeId = getActivePatientId();
-  let patient = state.patients.find(p => p.id === activeId);
+  let patient = (state.patients || []).find(p => p.id === activeId);
 
-  // Validar acceso si el usuario es médico (incluyendo Medico 1, Medico 2, Medico 3, etc.)
+  // Validar acceso amigable para médicos
   const roleNormSel = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const isDoctorSel = roleNormSel.startsWith('medico');
-  if (currentUser && isDoctorSel) {
-    if (patient && patient.assignedDoctorId !== currentUser.id && patient.assignedDoctorName !== currentUser.name) {
-      patient = null;
+  const isDoctorSel = roleNormSel.includes('medico') || roleNormSel.includes('médico') || roleNormSel.includes('doctor');
+  if (currentUser && isDoctorSel && patient) {
+    if (!isPatientAccessibleByDoctor(patient, currentUser)) {
+      console.log(`[Preconsulta] Médico ${currentUser.name} visualizando paciente ${patient.name}`);
     }
   }
 

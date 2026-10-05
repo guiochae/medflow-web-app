@@ -1,6 +1,5 @@
-// src/main.js
 import { renderPreconsulta } from './modules/preconsulta.js';
-import { renderConsulta } from './modules/consulta.js';
+import { renderConsulta, reconcileAndRecoverConsultations } from './modules/consulta.js';
 import { renderRecetario } from './modules/recetario.js';
 import { renderLaboratorio } from './modules/laboratorio.js';
 import { renderImagenologia } from './modules/imagenologia.js';
@@ -168,6 +167,7 @@ export function getAppState() {
     // Asegurar que todo el personal en memoria tenga siempre código asignado y nóminas depuradas
     backfillEmployeeCodes(firestoreState);
     purgeAndSanitizePayrolls(firestoreState);
+    reconcileAndRecoverConsultations(firestoreState);
 
     return firestoreState;
   }
@@ -231,6 +231,7 @@ export async function saveAppState(state) {
   migrateLaboratoryTestsCategories(state);
   backfillEmployeeCodes(state);
   purgeAndSanitizePayrolls(state);
+  reconcileAndRecoverConsultations(state);
   updateSidebarInfo(state);
 
   // Sincronizar de inmediato el estado en memoria para reactividad local offline
@@ -283,7 +284,7 @@ export async function saveAppState(state) {
     // Helper interno para estructurar documentos dentro de las colecciones correspondientes
     function addWriteToBatch(collectionName, docId, data) {
       let targetCollection = 'multimedica';
-      let docData = { ...data };
+      let docData = JSON.parse(JSON.stringify(data));
 
       if (collectionName === 'users') {
         targetCollection = 'multimedica_users';

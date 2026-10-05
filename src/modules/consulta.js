@@ -30,6 +30,223 @@ function isCurrentUserAdmin() {
   }
 }
 
+export function normalizeDoctorName(name) {
+  if (!name) return '';
+  return String(name)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/^(dr\.|dra\.|lic\.|médico|medico)\s+/g, '')
+    .trim();
+}
+
+export function isPatientAccessibleByDoctor(patient, currentUser) {
+  if (!currentUser || !patient) return true;
+  const roleNorm = String(currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (!roleNorm.includes('medico') && !roleNorm.includes('médico') && !roleNorm.includes('doctor')) {
+    return true;
+  }
+  // Si el paciente no tiene médico asignado, está en la lista de espera común para todos los médicos
+  if (!patient.assignedDoctorId && !patient.assignedDoctorName) {
+    return true;
+  }
+  // Coincidencia por ID de usuario
+  if (patient.assignedDoctorId && (patient.assignedDoctorId === currentUser.id || patient.assignedDoctorId === currentUser.name)) {
+    return true;
+  }
+  // Coincidencia por nombre normalizado
+  const userNorm = normalizeDoctorName(currentUser.name);
+  const assignedNorm = normalizeDoctorName(patient.assignedDoctorName);
+  if (userNorm && assignedNorm && (userNorm === assignedNorm || userNorm.includes(assignedNorm) || assignedNorm.includes(userNorm))) {
+    return true;
+  }
+  // Interconsultas / referencias médicas recibidas
+  if (Array.isArray(patient.referredDoctorIds) && patient.referredDoctorIds.includes(currentUser.id)) {
+    return true;
+  }
+  if (Array.isArray(patient.referredDoctorNames) && patient.referredDoctorNames.some(n => normalizeDoctorName(n) === userNorm)) {
+    return true;
+  }
+  // Si el médico ya atendió o recetó previamente a este paciente
+  if (Array.isArray(patient.consultations) && patient.consultations.some(c => c.doctor && (normalizeDoctorName(c.doctor) === userNorm || c.doctor === currentUser.name || c.doctor === currentUser.id))) {
+    return true;
+  }
+  return false;
+}
+
+// Reconciliación y recuperación automática de consultas registradas hoy o previamente
+export function reconcileAndRecoverConsultations(state) {
+  if (!state || !Array.isArray(state.patients)) return false;
+  let hasRecoveries = false;
+
+  state.patients.forEach(patient => {
+    if (!patient) return;
+    patient.consultations = Array.isArray(patient.consultations) ? patient.consultations : [];
+    patient.billingHistory = Array.isArray(patient.billingHistory) ? patient.billingHistory : [];
+    patient.prescriptions = Array.isArray(patient.prescriptions) ? patient.prescriptions : [];
+
+    // 1. Recuperar consultas a partir de patient.billingHistory
+    patient.billingHistory.forEach(bill => {
+      if (!bill) return;
+      const concept = String(bill.concept || '');
+      const details = Array.isArray(bill.details) ? bill.details : [];
+      const isConsultationBill = 
+        concept.toLowerCase().includes('consulta') || 
+        details.some(d => {
+          const desc = String(d.description || '').toLowerCase();
+          return desc.includes('honorarios de consulta') || desc.includes('consulta médica') || desc.includes('consulta medica');
+        });
+
+      if (isConsultationBill) {
+        let extractedSpecialty = 'Medicina General';
+        let extractedDoctor = patient.assignedDoctorName || 'Médico Tratante';
+
+        const matchFull = concept.match(/Consulta\s+M[eé]dica\s*-\s*([^(]+)(?:\(([^)]+)\))?/i);
+        if (matchFull) {
+          if (matchFull[1]) extractedSpecialty = matchFull[1].trim();
+          if (matchFull[2]) extractedDoctor = matchFull[2].trim();
+        } else {
+          const matchDocOnly = concept.match(/\(([^)]+)\)/);
+          if (matchDocOnly) extractedDoctor = matchDocOnly[1].trim();
+        }
+
+        const billDateStr = (bill.date || '').substring(0, 10);
+        const alreadyExists = patient.consultations.some(c => {
+          const cDateStr = (c.date || '').substring(0, 10);
+          const cId = String(c.id || '');
+          const bId = String(bill.id || '');
+          if (c.billId === bill.id) return true;
+          if (cId === ('c-' + bId.replace('FAC-', ''))) return true;
+          if (billDateStr && cDateStr === billDateStr) {
+            if (c.doctor === extractedDoctor || c.clinicalDiagnosis === bill.diagnosis || normalizeDoctorName(c.doctor) === normalizeDoctorName(extractedDoctor)) {
+              return true;
+            }
+          }
+          return false;
+        });
+
+        if (!alreadyExists) {
+          const labs = [];
+          const imaging = [];
+          const treatments = [];
+          const procedures = [];
+          let fee = 0;
+
+          details.forEach(d => {
+            const desc = String(d.description || '');
+            const amt = parseFloat(d.amount) || 0;
+            if (desc.toLowerCase().includes('honorarios')) {
+              fee += amt;
+            } else if (desc.toLowerCase().includes('examen de laboratorio:')) {
+              labs.push(desc.replace(/Examen de Laboratorio:\s*/i, '').trim());
+            } else if (desc.toLowerCase().includes('estudio de imagenolog[ií]a:')) {
+              imaging.push(desc.replace(/Estudio de Imagenolog[ií]a:\s*/i, '').trim());
+            } else if (desc.toLowerCase().includes('medicamento prescrito:')) {
+              treatments.push({
+                name: desc.replace(/Medicamento Prescrito:\s*/i, '').trim(),
+                presentation: 'Tabletas',
+                quantity: '1',
+                dosage: 'Tomar según indicaciones',
+                duration: 'N/A'
+              });
+            } else if (desc.toLowerCase().includes('procedimiento en consulta:')) {
+              procedures.push({
+                id: 'proc-rec-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+                name: desc.replace(/Procedimiento en Consulta:\s*/i, '').trim(),
+                cost: amt,
+                notes: 'Recuperado de facturación'
+              });
+            }
+          });
+
+          // Cruzar con recetas del mismo día para enriquecer tratamientos
+          const matchingRx = patient.prescriptions.find(rx => {
+            const rxDateStr = (rx.date || '').substring(0, 10);
+            return rxDateStr === billDateStr;
+          });
+
+          if (matchingRx && Array.isArray(matchingRx.medicines) && matchingRx.medicines.length > 0) {
+            matchingRx.medicines.forEach(med => {
+              if (!treatments.some(t => t.name === med.name)) {
+                treatments.push(med);
+              }
+            });
+            if (matchingRx.doctorName && (!extractedDoctor || extractedDoctor === 'Médico Tratante')) {
+              extractedDoctor = matchingRx.doctorName;
+            }
+          }
+
+          const diagText = bill.diagnosis && bill.diagnosis !== 'Ninguno' ? bill.diagnosis : 'Consulta Médica';
+          const reconstructedConsultation = {
+            id: 'c-' + (bill.id ? bill.id.replace('FAC-', '') : Date.now()),
+            billId: bill.id,
+            date: bill.date || new Date().toISOString(),
+            specialty: extractedSpecialty,
+            doctor: extractedDoctor,
+            reason: `Consulta médica - ${extractedSpecialty}`,
+            symptoms: 'Evaluación y diagnóstico médico registrado.',
+            clinicalDiagnosis: diagText,
+            referral: null,
+            diagnoses: [{ code: 'Z00.0', description: diagText }],
+            diagnosisCodes: ['Z00.0'],
+            diagnosisNames: [diagText],
+            acceptedStudies: {
+              labs,
+              imaging
+            },
+            acceptedTreatments: treatments,
+            procedures,
+            fee: fee > 0 ? fee : (parseFloat(bill.total) || 200),
+            gyoData: null,
+            recovered: true
+          };
+
+          patient.consultations.unshift(reconstructedConsultation);
+          hasRecoveries = true;
+          console.log(`[Reconciliación] Se recuperó consulta médica para paciente ${patient.name} (${patient.id}) a partir de factura ${bill.id}`);
+        }
+      }
+    });
+
+    // 2. Recuperar consultas a partir de patient.prescriptions si no hay consulta registrada en ese día
+    patient.prescriptions.forEach(rx => {
+      if (!rx) return;
+      const rxDateStr = (rx.date || '').substring(0, 10);
+      const alreadyHasConsultation = patient.consultations.some(c => {
+        const cDateStr = (c.date || '').substring(0, 10);
+        return cDateStr === rxDateStr;
+      });
+
+      if (!alreadyHasConsultation && rxDateStr) {
+        const reconstructedFromRx = {
+          id: 'c-rx-' + (rx.id ? rx.id.replace('r-', '') : Date.now()),
+          date: rx.date || new Date().toISOString(),
+          specialty: 'Medicina General',
+          doctor: rx.doctorName || patient.assignedDoctorName || 'Médico Tratante',
+          reason: rx.indications || 'Emisión de receta médica',
+          symptoms: 'Evaluación y prescripción farmacológica.',
+          clinicalDiagnosis: 'Consulta Médica y Prescripción',
+          referral: null,
+          diagnoses: [{ code: 'Z00.0', description: 'Examen médico y tratamiento' }],
+          diagnosisCodes: ['Z00.0'],
+          diagnosisNames: ['Examen médico y tratamiento'],
+          acceptedStudies: { labs: [], imaging: [] },
+          acceptedTreatments: Array.isArray(rx.medicines) ? [...rx.medicines] : [],
+          procedures: [],
+          fee: 0,
+          gyoData: null,
+          recovered: true
+        };
+        patient.consultations.unshift(reconstructedFromRx);
+        hasRecoveries = true;
+        console.log(`[Reconciliación] Se recuperó consulta médica para paciente ${patient.name} (${patient.id}) a partir de receta ${rx.id}`);
+      }
+    });
+  });
+
+  return hasRecoveries;
+}
+
 function getBMICategory(bmi) {
   const val = parseFloat(bmi);
   if (isNaN(val)) return '';
@@ -149,6 +366,14 @@ let activeConsultationState = {
 let shouldRedirectToPrescriptionOnSave = false;
 
 export function renderConsulta(container) {
+  const state = getAppState();
+
+  // Ejecutar reconciliación y auto-recuperación de consultas si hubiera registros pendientes
+  const hadRecoveries = reconcileAndRecoverConsultations(state);
+  if (hadRecoveries) {
+    saveAppState(state);
+  }
+
   // HTML Layout del módulo Consulta
   container.innerHTML = `
     <div class="module-header">
@@ -221,20 +446,19 @@ function renderPatientList(query = '') {
   const currentUser = state.currentUser;
   let basePatients = state.patients || [];
 
-  // Si el usuario es médico (incluyendo Medico 1, Medico 2, Medico 3, etc.), ve únicamente los pacientes que le fueron asignados
+  // Si el usuario es médico y no hay búsqueda activa, filtrar según asignación, interconsulta o pool común
   const roleNorm = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const isDoctor = roleNorm.startsWith('medico');
-  if (currentUser && isDoctor) {
-    basePatients = basePatients.filter(p => 
-      p.assignedDoctorId === currentUser.id || 
-      p.assignedDoctorName === currentUser.name
-    );
+  const isDoctor = roleNorm.includes('medico') || roleNorm.includes('médico') || roleNorm.includes('doctor');
+  if (currentUser && isDoctor && !query.trim()) {
+    basePatients = basePatients.filter(p => isPatientAccessibleByDoctor(p, currentUser));
   }
 
   const filtered = basePatients.filter(p => {
     const nameVal = p.name ? String(p.name).toLowerCase() : '';
     const telVal = p.telephone ? String(p.telephone) : '';
-    return nameVal.includes(query.toLowerCase()) || telVal.includes(query);
+    const dpiVal = p.dpi ? String(p.dpi) : '';
+    const qLower = query.toLowerCase();
+    return nameVal.includes(qLower) || telVal.includes(qLower) || dpiVal.includes(qLower);
   });
 
   if (filtered.length === 0) {
@@ -356,14 +580,14 @@ function selectPatient(patientId) {
   const items = document.querySelectorAll('#consult-patient-list .patient-item');
   const state = getAppState();
   const currentUser = state.currentUser;
-  let patient = state.patients.find(p => p.id === patientId);
+  let patient = (state.patients || []).find(p => p.id === patientId);
 
-  // Validar acceso si el usuario es médico (incluyendo Medico 1, Medico 2, Medico 3, etc.)
+  // Validar acceso amigable para médicos
   const roleNormSel = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const isDoctorSel = roleNormSel.startsWith('medico');
-  if (currentUser && isDoctorSel) {
-    if (patient && patient.assignedDoctorId !== currentUser.id && patient.assignedDoctorName !== currentUser.name) {
-      patient = null;
+  const isDoctorSel = roleNormSel.includes('medico') || roleNormSel.includes('médico') || roleNormSel.includes('doctor');
+  if (currentUser && isDoctorSel && patient) {
+    if (!isPatientAccessibleByDoctor(patient, currentUser)) {
+      console.log(`[Consulta] Médico ${currentUser.name} atendiendo paciente ${patient.name}`);
     }
   }
 
@@ -1805,216 +2029,261 @@ function renderConsultationForm(patient, doctors) {
   });
 
   // Guardar Consulta
-  document.getElementById('consult-record-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    
-    const doctor = document.getElementById('c-doctor').value;
-    const specialty = document.getElementById('c-specialty').value;
-    const date = document.getElementById('c-date').value;
-    const time = document.getElementById('c-time').value;
-    const reason = document.getElementById('c-reason').value;
-    const symptoms = document.getElementById('c-symptoms').value;
-    const clinicalDiagnosis = document.getElementById('c-clinical-diagnosis') ? document.getElementById('c-clinical-diagnosis').value : '';
-    const referralDoctorId = document.getElementById('c-referral-doctor') ? document.getElementById('c-referral-doctor').value : '';
-    const referralNotes = document.getElementById('c-referral-notes') ? document.getElementById('c-referral-notes').value : '';
-    const fee = parseFloat(document.getElementById('c-fee').value);
-
-    const stateObj = getAppState();
-    const patientObj = stateObj.patients.find(p => p.id === patient.id);
-
-    let referralObj = null;
-    if (referralDoctorId) {
-      const refDoctor = (stateObj.users || []).find(u => u.id === referralDoctorId);
-      const refDoctorName = refDoctor ? refDoctor.name : '';
+  const consultForm = document.getElementById('consult-record-form');
+  if (consultForm) {
+    consultForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
       
-      referralObj = {
-        doctorId: referralDoctorId,
-        doctorName: refDoctorName,
-        notes: referralNotes
-      };
-
-      patientObj.referredDoctorIds = patientObj.referredDoctorIds || [];
-      patientObj.referredDoctorNames = patientObj.referredDoctorNames || [];
-
-      if (!patientObj.referredDoctorIds.includes(referralDoctorId)) {
-        patientObj.referredDoctorIds.push(referralDoctorId);
+      const submitBtn = consultForm.querySelector('button[type="submit"]');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Guardando...';
       }
-      if (refDoctorName && !patientObj.referredDoctorNames.includes(refDoctorName)) {
-        patientObj.referredDoctorNames.push(refDoctorName);
-      }
-    }
 
-    const newConsultation = {
-      id: 'c-' + Date.now(),
-      date: `${date}T${time}:00Z`,
-      specialty,
-      doctor,
-      reason,
-      symptoms,
-      clinicalDiagnosis,
-      referral: referralObj,
-      diagnoses: [...activeConsultationState.diagnoses],
-      diagnosisCodes: activeConsultationState.diagnoses.map(d => d.code),
-      diagnosisNames: activeConsultationState.diagnoses.map(d => d.description),
-      acceptedStudies: {
-        labs: [...activeConsultationState.labs],
-        imaging: [...activeConsultationState.imaging]
-      },
-      acceptedTreatments: [...activeConsultationState.treatments],
-      procedures: (activeConsultationState.procedures || []).map(p => ({
-        id: p.id || ('proc-' + Date.now()),
-        name: p.name,
-        cost: parseFloat(p.cost) || 0,
-        notes: p.notes || ''
-      })),
-      fee,
-      gyoData: specialty === 'Ginecología y Obstetricia' ? {
-        fur: document.getElementById('gyo-fur').value,
-        eg: document.getElementById('gyo-eg').value,
-        gestas: parseInt(document.getElementById('gyo-gestas').value) || 0,
-        partos: parseInt(document.getElementById('gyo-partos').value) || 0,
-        abortos: parseInt(document.getElementById('gyo-abortos').value) || 0,
-        alturaUterina: parseFloat(document.getElementById('gyo-altura-uterina').value) || 0,
-        fcf: parseInt(document.getElementById('gyo-fcf').value) || 0,
-        actividadUterina: document.getElementById('gyo-actividad-uterina').value,
-        movimientosFetales: document.getElementById('gyo-movimientos-fetales').value,
-        tactoVaginal: {
-          dilatacion: parseInt(document.getElementById('gyo-tacto-dilatacion').value) || 0,
-          borramiento: parseInt(document.getElementById('gyo-tacto-borramiento').value) || 0,
-          altitud: document.getElementById('gyo-tacto-altitud').value
+      try {
+        const doctor = document.getElementById('c-doctor') ? document.getElementById('c-doctor').value : '';
+        const specialty = document.getElementById('c-specialty') ? document.getElementById('c-specialty').value : 'Medicina General';
+        const date = document.getElementById('c-date') ? document.getElementById('c-date').value : new Date().toISOString().substring(0, 10);
+        const time = document.getElementById('c-time') ? document.getElementById('c-time').value : new Date().toTimeString().substring(0, 5);
+        const reason = document.getElementById('c-reason') ? document.getElementById('c-reason').value : '';
+        const symptoms = document.getElementById('c-symptoms') ? document.getElementById('c-symptoms').value : '';
+        const clinicalDiagnosis = document.getElementById('c-clinical-diagnosis') ? document.getElementById('c-clinical-diagnosis').value : '';
+        const referralDoctorId = document.getElementById('c-referral-doctor') ? document.getElementById('c-referral-doctor').value : '';
+        const referralNotes = document.getElementById('c-referral-notes') ? document.getElementById('c-referral-notes').value : '';
+        const feeInput = document.getElementById('c-fee');
+        const fee = feeInput ? (parseFloat(feeInput.value) || 0) : 0;
+
+        const stateObj = getAppState();
+        const patientObj = (stateObj.patients || []).find(p => p.id === patient.id);
+        if (!patientObj) {
+          alert("Error: No se encontró la ficha del paciente seleccionado en el sistema.");
+          return;
         }
-      } : null
-    };
 
-    // Guardar en el historial clínico del paciente
-    patientObj.consultations.unshift(newConsultation);
+        // Asegurar que existan todos los arreglos requeridos
+        patientObj.consultations = Array.isArray(patientObj.consultations) ? patientObj.consultations : [];
+        patientObj.billingHistory = Array.isArray(patientObj.billingHistory) ? patientObj.billingHistory : [];
+        patientObj.prescriptions = Array.isArray(patientObj.prescriptions) ? patientObj.prescriptions : [];
 
-    // Guardar en el historial de facturación del paciente (detalle de cobro consolidado)
-    const todayStr = new Date().toISOString().substring(0, 10);
-    patientObj.billingHistory = patientObj.billingHistory || [];
-    
-    let bill = patientObj.billingHistory.find(b => 
-      b.status === 'Pendiente' && 
-      b.date.substring(0, 10) === todayStr
-    );
+        let referralObj = null;
+        if (referralDoctorId) {
+          const refDoctor = (stateObj.users || []).find(u => u.id === referralDoctorId);
+          const refDoctorName = refDoctor ? refDoctor.name : '';
+          
+          referralObj = {
+            doctorId: referralDoctorId,
+            doctorName: refDoctorName,
+            notes: referralNotes
+          };
 
-    const details = [{ description: `Honorarios de consulta médica (${specialty})`, amount: fee }];
-    let total = fee;
+          patientObj.referredDoctorIds = Array.isArray(patientObj.referredDoctorIds) ? patientObj.referredDoctorIds : [];
+          patientObj.referredDoctorNames = Array.isArray(patientObj.referredDoctorNames) ? patientObj.referredDoctorNames : [];
 
-    // Agregar procedimientos realizados en consulta al cobro / factura
-    if (newConsultation.procedures && newConsultation.procedures.length > 0) {
-      newConsultation.procedures.forEach(proc => {
-        const pCost = parseFloat(proc.cost) || 0;
-        const pDesc = `Procedimiento en Consulta: ${proc.name}${proc.notes ? ` (${proc.notes})` : ''}`;
-        details.push({ description: pDesc, amount: pCost });
-        total += pCost;
-      });
-    }
+          if (!patientObj.referredDoctorIds.includes(referralDoctorId)) {
+            patientObj.referredDoctorIds.push(referralDoctorId);
+          }
+          if (refDoctorName && !patientObj.referredDoctorNames.includes(refDoctorName)) {
+            patientObj.referredDoctorNames.push(refDoctorName);
+          }
+        }
 
-    // Agregar laboratorios aceptados al cobro
-    if (newConsultation.acceptedStudies && newConsultation.acceptedStudies.labs) {
-      newConsultation.acceptedStudies.labs.forEach(labName => {
-        const found = stateObj.laboratoryTests && stateObj.laboratoryTests.find(l => l.name === labName);
-        const price = found ? parseFloat(found.price) : 125.00;
-        details.push({ description: `Examen de Laboratorio: ${labName}`, amount: price });
-        total += price;
-      });
-    }
+        let gyoData = null;
+        if (specialty === 'Ginecología y Obstetricia') {
+          const gFur = document.getElementById('gyo-fur');
+          const gEg = document.getElementById('gyo-eg');
+          const gGestas = document.getElementById('gyo-gestas');
+          const gPartos = document.getElementById('gyo-partos');
+          const gAbortos = document.getElementById('gyo-abortos');
+          const gAu = document.getElementById('gyo-altura-uterina');
+          const gFcf = document.getElementById('gyo-fcf');
+          const gActUt = document.getElementById('gyo-actividad-uterina');
+          const gMovFet = document.getElementById('gyo-movimientos-fetales');
+          const gDil = document.getElementById('gyo-tacto-dilatacion');
+          const gBorr = document.getElementById('gyo-tacto-borramiento');
+          const gAlt = document.getElementById('gyo-tacto-altitud');
 
-    // Agregar imagenología aceptada al cobro
-    if (newConsultation.acceptedStudies && newConsultation.acceptedStudies.imaging) {
-      newConsultation.acceptedStudies.imaging.forEach(imgName => {
-        const found = stateObj.imagingStudies && stateObj.imagingStudies.find(i => i.name === imgName);
-        const price = found ? parseFloat(found.price) : 300.00;
-        details.push({ description: `Estudio de Imagenología: ${imgName}`, amount: price });
-        total += price;
-      });
-    }
+          gyoData = {
+            fur: gFur ? gFur.value : '',
+            eg: gEg ? gEg.value : '',
+            gestas: gGestas ? (parseInt(gGestas.value) || 0) : 0,
+            partos: gPartos ? (parseInt(gPartos.value) || 0) : 0,
+            abortos: gAbortos ? (parseInt(gAbortos.value) || 0) : 0,
+            alturaUterina: gAu ? (parseFloat(gAu.value) || 0) : 0,
+            fcf: gFcf ? (parseInt(gFcf.value) || 0) : 0,
+            actividadUterina: gActUt ? gActUt.value : 'No',
+            movimientosFetales: gMovFet ? gMovFet.value : 'Si',
+            tactoVaginal: {
+              dilatacion: gDil ? (parseInt(gDil.value) || 0) : 0,
+              borramiento: gBorr ? (parseInt(gBorr.value) || 0) : 0,
+              altitud: gAlt ? gAlt.value : '0'
+            }
+          };
+        }
 
-    // Agregar tratamientos aceptados al cobro
-    if (newConsultation.acceptedTreatments) {
-      newConsultation.acceptedTreatments.forEach(med => {
-        const found = stateObj.medications && stateObj.medications.find(m => m.name === med.name);
-        const price = found ? parseFloat(found.price) : 50.00;
-        details.push({ description: `Medicamento Prescrito: ${med.name}`, amount: price });
-        total += price;
-      });
-    }
-
-      const finalDiag = clinicalDiagnosis || (activeConsultationState.diagnoses.map(d => `${d.code} - ${d.description}`).join(', ') || 'Consulta General');
-      if (bill) {
-        // Consolidar en la factura pendiente del día
-        bill.details = [...bill.details, ...details];
-        bill.total = parseFloat(bill.total) + total;
-        bill.diagnosis = bill.diagnosis && bill.diagnosis !== 'Ninguno' ? `${bill.diagnosis}, ${finalDiag}` : finalDiag;
-      } else {
-        // Crear nueva factura pendiente
-        const newBill = {
-          id: 'FAC-' + Date.now(),
-          date: new Date().toISOString(),
-          concept: `Consulta Médica - ${specialty} (${doctor})`,
-          details,
-          diagnosis: finalDiag,
-          total,
-          status: 'Pendiente'
+        const newConsultation = {
+          id: 'c-' + Date.now(),
+          date: `${date}T${time}:00Z`,
+          specialty: specialty || 'Medicina General',
+          doctor: doctor || patientObj.assignedDoctorName || 'Médico Tratante',
+          reason: reason || 'Consulta Médica',
+          symptoms: symptoms || '',
+          clinicalDiagnosis: clinicalDiagnosis || '',
+          referral: referralObj,
+          diagnoses: [...(activeConsultationState.diagnoses || [])],
+          diagnosisCodes: (activeConsultationState.diagnoses || []).map(d => d.code),
+          diagnosisNames: (activeConsultationState.diagnoses || []).map(d => d.description),
+          acceptedStudies: {
+            labs: [...(activeConsultationState.labs || [])],
+            imaging: [...(activeConsultationState.imaging || [])]
+          },
+          acceptedTreatments: [...(activeConsultationState.treatments || [])],
+          procedures: (activeConsultationState.procedures || []).map(p => ({
+            id: p.id || ('proc-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4)),
+            name: p.name || '',
+            cost: parseFloat(p.cost) || 0,
+            notes: p.notes || ''
+          })),
+          fee: fee,
+          gyoData: gyoData
         };
-        patientObj.billingHistory.unshift(newBill);
+
+        // Guardar en el historial clínico del paciente
+        patientObj.consultations.unshift(newConsultation);
+        patient.consultations = patientObj.consultations;
+
+        // Guardar en el historial de facturación del paciente (detalle de cobro consolidado)
+        const todayStr = new Date().toISOString().substring(0, 10);
+        let bill = patientObj.billingHistory.find(b => 
+          b.status === 'Pendiente' && 
+          b.date && b.date.substring(0, 10) === todayStr
+        );
+
+        const details = [{ description: `Honorarios de consulta médica (${specialty})`, amount: fee }];
+        let total = fee;
+
+        // Agregar procedimientos realizados en consulta al cobro / factura
+        if (newConsultation.procedures && newConsultation.procedures.length > 0) {
+          newConsultation.procedures.forEach(proc => {
+            const pCost = parseFloat(proc.cost) || 0;
+            const pDesc = `Procedimiento en Consulta: ${proc.name}${proc.notes ? ` (${proc.notes})` : ''}`;
+            details.push({ description: pDesc, amount: pCost });
+            total += pCost;
+          });
+        }
+
+        // Agregar laboratorios aceptados al cobro
+        if (newConsultation.acceptedStudies && newConsultation.acceptedStudies.labs) {
+          newConsultation.acceptedStudies.labs.forEach(labName => {
+            const found = stateObj.laboratoryTests && stateObj.laboratoryTests.find(l => l.name === labName);
+            const price = found ? parseFloat(found.price) : 125.00;
+            details.push({ description: `Examen de Laboratorio: ${labName}`, amount: price });
+            total += price;
+          });
+        }
+
+        // Agregar imagenología aceptada al cobro
+        if (newConsultation.acceptedStudies && newConsultation.acceptedStudies.imaging) {
+          newConsultation.acceptedStudies.imaging.forEach(imgName => {
+            const found = stateObj.imagingStudies && stateObj.imagingStudies.find(i => i.name === imgName);
+            const price = found ? parseFloat(found.price) : 300.00;
+            details.push({ description: `Estudio de Imagenología: ${imgName}`, amount: price });
+            total += price;
+          });
+        }
+
+        // Agregar tratamientos aceptados al cobro
+        if (newConsultation.acceptedTreatments) {
+          newConsultation.acceptedTreatments.forEach(med => {
+            const found = stateObj.medications && stateObj.medications.find(m => m.name === med.name);
+            const price = found ? parseFloat(found.price) : 50.00;
+            details.push({ description: `Medicamento Prescrito: ${med.name}`, amount: price });
+            total += price;
+          });
+        }
+
+        const finalDiag = clinicalDiagnosis || ((activeConsultationState.diagnoses || []).map(d => `${d.code} - ${d.description}`).join(', ') || 'Consulta General');
+        if (bill) {
+          // Consolidar en la factura pendiente del día
+          bill.details = [...(bill.details || []), ...details];
+          bill.total = (parseFloat(bill.total) || 0) + total;
+          bill.diagnosis = bill.diagnosis && bill.diagnosis !== 'Ninguno' ? `${bill.diagnosis}, ${finalDiag}` : finalDiag;
+        } else {
+          // Crear nueva factura pendiente
+          const newBill = {
+            id: 'FAC-' + Date.now(),
+            date: new Date().toISOString(),
+            concept: `Consulta Médica - ${specialty} (${doctor})`,
+            details,
+            diagnosis: finalDiag,
+            total,
+            status: 'Pendiente'
+          };
+          patientObj.billingHistory.unshift(newBill);
+        }
+
+        // Crear receta automática si hay tratamientos prescritos en la consulta
+        if (activeConsultationState.treatments && activeConsultationState.treatments.length > 0) {
+          const doctorObj = (stateObj.users || []).find(u => u.name === doctor || u.id === doctor || (String(u.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").startsWith('medico') && u.name.includes(doctor)));
+          const finalBill = bill || (patientObj.billingHistory && patientObj.billingHistory[0]);
+          const billId = finalBill ? finalBill.id : ('FAC-' + Date.now());
+
+          const newRecipe = {
+            id: 'r-' + Date.now(),
+            date: new Date().toISOString(),
+            doctorName: doctorObj ? doctorObj.name : doctor,
+            doctorLicense: doctorObj ? (doctorObj.license || 'N/A') : 'N/A',
+            doctorPhone: doctorObj ? (doctorObj.phone || 'N/A') : 'N/A',
+            medicines: activeConsultationState.treatments.map(t => ({
+              name: t.name,
+              presentation: t.presentation || 'Tabletas',
+              quantity: t.quantity || '1',
+              dosage: t.dosage || 'Tomar según indicaciones',
+              duration: t.duration || 'N/A'
+            })),
+            indications: `Tratamiento recetado en la consulta médica.`,
+            billId: billId,
+            dispenseStatus: 'Pendiente'
+          };
+          patientObj.prescriptions.unshift(newRecipe);
+        }
+
+        await saveAppState(stateObj);
+
+        alert("✅ Consulta registrada exitosamente. Se ha guardado en el expediente clínico y se ha generado el comprobante de cobro en Facturación de Preconsulta.");
+
+        // Redirección diferida a recetario si fue solicitada mediante el botón "Emitir Receta"
+        if (shouldRedirectToPrescriptionOnSave) {
+          const doctorObj = (stateObj.users || []).find(u => u.name === doctor);
+          const parsedMeds = (activeConsultationState.treatments || []).map(tx => parseTreatmentToMedicine(tx));
+          
+          sessionStorage.setItem('medflow_prescription_draft', JSON.stringify(parsedMeds));
+          if (doctorObj) {
+            sessionStorage.setItem('medflow_doctor_draft', doctorObj.id);
+          }
+          
+          shouldRedirectToPrescriptionOnSave = false;
+
+          // Navegar programáticamente a Recetario
+          const navItem = document.querySelector('.nav-item[data-target="recetario"]');
+          if (navItem) {
+            navItem.click();
+          }
+        } else {
+          // Recargar panel lateral y formulario de forma normal
+          renderConsultationHistory(patientObj);
+          renderConsultationForm(patientObj, doctors);
+        }
+      } catch (err) {
+        console.error("Error guardando consulta médica:", err);
+        alert("Ocurrió un error al guardar la consulta médica: " + (err.message || err));
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Grabar Consulta';
+        }
       }
-
-    // Crear receta automática si hay tratamientos prescritos en la consulta
-    if (activeConsultationState.treatments && activeConsultationState.treatments.length > 0) {
-      const doctorObj = stateObj.users.find(u => u.name === doctor || u.id === doctor || (String(u.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").startsWith('medico') && u.name.includes(doctor)));
-      const finalBill = bill || (patientObj.billingHistory && patientObj.billingHistory[0]);
-      const billId = finalBill ? finalBill.id : ('FAC-' + Date.now());
-
-      const newRecipe = {
-        id: 'r-' + Date.now(),
-        date: new Date().toISOString(),
-        doctorName: doctorObj ? doctorObj.name : doctor,
-        doctorLicense: doctorObj ? (doctorObj.license || 'N/A') : 'N/A',
-        doctorPhone: doctorObj ? (doctorObj.phone || 'N/A') : 'N/A',
-        medicines: activeConsultationState.treatments.map(t => ({
-          name: t.name,
-          presentation: t.presentation || 'Tabletas',
-          quantity: t.quantity || '1',
-          dosage: t.dosage || 'Tomar según indicaciones',
-          duration: t.duration || 'N/A'
-        })),
-        indications: `Tratamiento recetado en la consulta médica.`,
-        billId: billId,
-        dispenseStatus: 'Pendiente'
-      };
-      patientObj.prescriptions = patientObj.prescriptions || [];
-      patientObj.prescriptions.unshift(newRecipe);
-    }
-
-    saveAppState(stateObj);
-
-    alert("Consulta registrada exitosamente. Se ha generado el comprobante de cobro en la sección Facturación de Preconsulta.");
-
-    // Redirección diferida a recetario si fue solicitada mediante el botón "Emitir Receta"
-    if (shouldRedirectToPrescriptionOnSave) {
-      const doctorObj = stateObj.users.find(u => u.name === doctor);
-      const parsedMeds = activeConsultationState.treatments.map(tx => parseTreatmentToMedicine(tx));
-      
-      sessionStorage.setItem('medflow_prescription_draft', JSON.stringify(parsedMeds));
-      if (doctorObj) {
-        sessionStorage.setItem('medflow_doctor_draft', doctorObj.id);
-      }
-      
-      shouldRedirectToPrescriptionOnSave = false;
-
-      // Navegar programáticamente a Recetario
-      const navItem = document.querySelector('.nav-item[data-target="recetario"]');
-      if (navItem) {
-        navItem.click();
-      }
-    } else {
-      // Recargar panel lateral y formulario de forma normal
-      renderConsultationHistory(patientObj);
-      renderConsultationForm(patientObj, doctors);
-    }
-  });
+    });
+  }
 
   // Inicializar botones de acción del asistente (se renderizan vacíos)
   updateAssistantActionButtons();
