@@ -1538,6 +1538,9 @@ function renderRrhhEmpleados(container, state) {
                     <button class="btn btn-secondary btn-small btn-resend-whatsapp" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px; color: #22c55e;">📲 Enviar Código</button>
                     <button class="btn btn-secondary btn-small btn-add-absence" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px;">➕ Falta</button>
                     <button class="btn btn-secondary btn-small btn-add-warning" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px;">⚠️ Amonestar</button>
+                    ${e.resignationDoc ? `
+                      <button class="btn btn-secondary btn-small btn-view-emp-resignation" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px; color: #38bdf8; border-color: rgba(56,189,248,0.3);" title="Ver Carta de Renuncia">📄 Doc. Renuncia</button>
+                    ` : ''}
                     <button class="btn btn-small btn-fire-emp" data-id="${e.id}" style="font-size: 0.7rem; padding: 2px 4px; background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);">Dar de Baja</button>
                   </div>
                 </div>
@@ -1730,6 +1733,16 @@ function renderRrhhEmpleados(container, state) {
       saveAppState(state);
       alert(`Llamada de atención registrada para ${emp.name}.`);
       renderRrhhEmpleados(container, state);
+    });
+  });
+
+  container.querySelectorAll('.btn-view-emp-resignation').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const emp = state.administracion_employees.find(e => e.id === id);
+      if (emp && emp.resignationDoc) {
+        openDocumentViewerModal(emp.resignationDoc);
+      }
     });
   });
 
@@ -2629,6 +2642,8 @@ function renderRrhhLiquidaciones(container, state) {
   state.administracion_liquidaciones = state.administracion_liquidaciones || [];
   state.administracion_employees = state.administracion_employees || [];
 
+  let tempResignationDoc = null;
+
   // Empleados disponibles para liquidación (activos y registrados, excluyendo admin y médicos externos/honorarios)
   const candidateEmployees = state.administracion_employees.filter(e => {
     if (!e) return false;
@@ -2714,9 +2729,9 @@ function renderRrhhLiquidaciones(container, state) {
             <div class="form-group">
               <label style="font-size: 0.82rem;">Motivo de Salida / Baja *</label>
               <select id="liq-reason" class="form-control" required style="width: 100%; padding: 8px; font-size: 0.85rem; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+                <option value="Renuncia Voluntaria" selected>Renuncia Voluntaria</option>
                 <option value="Despido (Rescisión Patronal)">Despido (Rescisión Patronal)</option>
                 <option value="Despido Justificado">Despido Justificado</option>
-                <option value="Renuncia Voluntaria">Renuncia Voluntaria</option>
                 <option value="Fin de Contrato de Trabajo">Fin de Contrato de Trabajo</option>
                 <option value="Mutuo Acuerdo">Mutuo Acuerdo</option>
               </select>
@@ -2726,6 +2741,43 @@ function renderRrhhLiquidaciones(container, state) {
             <div class="form-group">
               <label style="font-size: 0.82rem;">Fecha de Baja (Último Día Laborado) *</label>
               <input type="date" id="liq-exit-date" required value="${todayStr}" class="form-control" style="width: 100%; padding: 8px; font-size: 0.85rem; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+            </div>
+          </div>
+
+          <!-- Sección para Adjuntar Carta / Documento de Renuncia -->
+          <div id="liq-resignation-doc-container" style="background: rgba(2, 132, 199, 0.06); border: 1px dashed rgba(2, 132, 199, 0.4); border-radius: 6px; padding: 12px; margin-top: 2px; transition: all 0.2s;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 4px;">
+              <label style="font-size: 0.82rem; font-weight: bold; color: var(--accent-primary); display: flex; align-items: center; gap: 6px; margin: 0;">
+                <span>📄</span> Carta / Documento de Renuncia (PDF o Imagen)
+              </label>
+              <span id="liq-doc-optional-badge" style="font-size: 0.7rem; color: #38bdf8; background: rgba(56,189,248,0.12); padding: 2px 8px; border-radius: 4px; font-weight: 600;">
+                ⚡ Carta de Renuncia Adjunta
+              </span>
+            </div>
+
+            <input type="file" id="liq-resignation-file-input" accept="application/pdf,image/png,image/jpeg,image/jpg" style="display: none;">
+            
+            <div id="liq-resignation-dropzone" style="border: 2px dashed rgba(255,255,255,0.15); border-radius: 6px; padding: 14px; text-align: center; cursor: pointer; transition: all 0.2s; background: rgba(0,0,0,0.15);">
+              <div id="liq-file-placeholder" style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                <span style="font-size: 1.6rem;">📤</span>
+                <span style="font-size: 0.82rem; color: var(--text-primary); font-weight: 600;">Haz clic aquí para seleccionar o arrastrar la carta de renuncia</span>
+                <span style="font-size: 0.72rem; color: var(--text-muted);">Formatos admitidos: PDF, JPG, PNG (hasta 8MB)</span>
+              </div>
+
+              <!-- Vista previa de archivo cargado -->
+              <div id="liq-file-preview-card" style="display: none; align-items: center; justify-content: space-between; gap: 10px; background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(0,242,254,0.3);">
+                <div style="display: flex; align-items: center; gap: 10px; overflow: hidden; text-align: left;">
+                  <span id="liq-file-preview-icon" style="font-size: 1.5rem; flex-shrink: 0;">📄</span>
+                  <div style="overflow: hidden;">
+                    <div id="liq-file-preview-name" style="font-weight: bold; font-size: 0.82rem; color: #fff; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">archivo.pdf</div>
+                    <div id="liq-file-preview-size" style="font-size: 0.7rem; color: var(--text-muted);">120 KB</div>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 6px; flex-shrink: 0;">
+                  <button type="button" class="btn btn-secondary btn-small" id="btn-preview-uploaded-doc" style="padding: 3px 8px; font-size: 0.75rem;">👁️ Ver Doc</button>
+                  <button type="button" class="btn btn-danger btn-small" id="btn-remove-uploaded-doc" style="padding: 3px 8px; font-size: 0.75rem;">🗑️ Quitar</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -2846,7 +2898,12 @@ function renderRrhhLiquidaciones(container, state) {
                       <strong style="color: var(--accent-success); font-size: 1.05rem; font-family: monospace;">
                         Q${parseFloat(liq.netAmount || 0).toFixed(2)}
                       </strong>
-                      <div style="display: flex; gap: 4px;">
+                      <div style="display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end;">
+                        ${liq.resignationDoc ? `
+                          <button class="btn btn-secondary btn-small btn-view-resignation-doc" data-id="${liq.id}" style="padding: 3px 8px; font-size: 0.74rem; color: #38bdf8; border-color: rgba(56,189,248,0.3);" title="Ver Carta de Renuncia Adjunta (${liq.resignationDoc.name || 'Doc'})">
+                            📎 Carta Renuncia
+                          </button>
+                        ` : ''}
                         <button class="btn btn-secondary btn-small btn-print-liq" data-id="${liq.id}" style="padding: 3px 8px; font-size: 0.74rem;" title="Imprimir Recibo de Finiquito Oficial">
                           🖨️ Finiquito
                         </button>
@@ -2879,6 +2936,10 @@ function renderRrhhLiquidaciones(container, state) {
   const cardDept = document.getElementById('card-emp-dept');
   const cardHdate = document.getElementById('card-emp-hdate');
 
+  const reasonSelect = document.getElementById('liq-reason');
+  const docContainer = document.getElementById('liq-resignation-doc-container');
+  const docBadge = document.getElementById('liq-doc-optional-badge');
+
   const baseSalaryInput = document.getElementById('liq-base-salary');
   const monthDaysInput = document.getElementById('liq-month-days');
   const daysWorkedInput = document.getElementById('liq-days-worked');
@@ -2892,6 +2953,132 @@ function renderRrhhLiquidaciones(container, state) {
   const summaryBonusProp = document.getElementById('summary-bonus-prop');
   const summaryDeductions = document.getElementById('summary-deductions');
   const summaryTotalLiquid = document.getElementById('summary-total-liquid');
+
+  // Elementos de Carga de Documento de Renuncia
+  const fileInput = document.getElementById('liq-resignation-file-input');
+  const dropzone = document.getElementById('liq-resignation-dropzone');
+  const placeholder = document.getElementById('liq-file-placeholder');
+  const previewCard = document.getElementById('liq-file-preview-card');
+  const previewName = document.getElementById('liq-file-preview-name');
+  const previewSize = document.getElementById('liq-file-preview-size');
+  const previewIcon = document.getElementById('liq-file-preview-icon');
+  const btnPreviewUploaded = document.getElementById('btn-preview-uploaded-doc');
+  const btnRemoveUploaded = document.getElementById('btn-remove-uploaded-doc');
+
+  // Dinámica de Motivo de Salida
+  if (reasonSelect) {
+    reasonSelect.addEventListener('change', () => {
+      const isResignation = reasonSelect.value === 'Renuncia Voluntaria';
+      if (docContainer) {
+        if (isResignation) {
+          docContainer.style.background = 'rgba(2, 132, 199, 0.08)';
+          docContainer.style.borderColor = 'var(--accent-primary)';
+          if (docBadge) {
+            docBadge.textContent = '⚡ Carta de Renuncia Obligatoria / Adjunta';
+            docBadge.style.color = '#38bdf8';
+          }
+        } else {
+          docContainer.style.background = 'rgba(255, 255, 255, 0.02)';
+          docContainer.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+          if (docBadge) {
+            docBadge.textContent = 'Opcional (Documento de Rescisión)';
+            docBadge.style.color = 'var(--text-muted)';
+          }
+        }
+      }
+    });
+  }
+
+  // Carga de Archivo (PDF o Imagen)
+  if (dropzone && fileInput) {
+    dropzone.addEventListener('click', (e) => {
+      if (e.target === btnPreviewUploaded || e.target === btnRemoveUploaded || btnPreviewUploaded?.contains(e.target) || btnRemoveUploaded?.contains(e.target)) return;
+      fileInput.click();
+    });
+
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.style.borderColor = 'var(--accent-primary)';
+      dropzone.style.background = 'rgba(0, 242, 254, 0.1)';
+    });
+
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.style.borderColor = 'rgba(255,255,255,0.15)';
+      dropzone.style.background = 'rgba(0,0,0,0.15)';
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.style.borderColor = 'rgba(255,255,255,0.15)';
+      dropzone.style.background = 'rgba(0,0,0,0.15)';
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+        handleResignationFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        handleResignationFile(e.target.files[0]);
+      }
+    });
+  }
+
+  const handleResignationFile = (file) => {
+    if (!file) return;
+
+    if (file.size > 8 * 1024 * 1024) {
+      alert("El archivo seleccionado supera el límite de 8MB. Por favor suba un documento más liviano.");
+      if (fileInput) fileInput.value = '';
+      return;
+    }
+
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const isImg = file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(file.name);
+
+    if (!isPdf && !isImg) {
+      alert("Formato no compatible. Por favor suba un archivo PDF o una imagen (JPG, PNG).");
+      if (fileInput) fileInput.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      tempResignationDoc = {
+        name: file.name,
+        type: isPdf ? 'pdf' : 'image',
+        mimeType: file.type || (isPdf ? 'application/pdf' : 'image/jpeg'),
+        size: (file.size / 1024).toFixed(1) + ' KB',
+        dataUrl: event.target.result,
+        uploadedAt: new Date().toISOString()
+      };
+
+      if (placeholder) placeholder.style.display = 'none';
+      if (previewCard) previewCard.style.display = 'flex';
+      if (previewName) previewName.textContent = file.name;
+      if (previewSize) previewSize.textContent = tempResignationDoc.size;
+      if (previewIcon) previewIcon.textContent = isPdf ? '📕' : '🖼️';
+    };
+    reader.readAsDataURL(file);
+  };
+
+  if (btnRemoveUploaded) {
+    btnRemoveUploaded.addEventListener('click', (e) => {
+      e.stopPropagation();
+      tempResignationDoc = null;
+      if (fileInput) fileInput.value = '';
+      if (previewCard) previewCard.style.display = 'none';
+      if (placeholder) placeholder.style.display = 'flex';
+    });
+  }
+
+  if (btnPreviewUploaded) {
+    btnPreviewUploaded.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (tempResignationDoc) {
+        openDocumentViewerModal(tempResignationDoc);
+      }
+    });
+  }
 
   // Función de cálculo reactivo en tiempo real
   const recalculateLiquidation = () => {
@@ -3006,6 +3193,12 @@ function renderRrhhLiquidaciones(container, state) {
       const exitD = new Date(exitDateVal + 'T00:00:00');
       const monthName = `${monthNames[exitD.getMonth()]} ${exitD.getFullYear()}`;
 
+      if (reasonVal === 'Renuncia Voluntaria' && !tempResignationDoc) {
+        if (!confirm(`⚠️ Atención: No se ha adjuntado la Carta de Renuncia (PDF o Imagen) para ${emp.name}.\n\n¿Desea continuar y procesar el finiquito de todas formas sin adjuntar el documento?`)) {
+          return;
+        }
+      }
+
       if (!confirm(`¿Confirma procesar la liquidación laboral de ${emp.name} por Q${netAmount.toFixed(2)} correspondientes a ${daysWorked} días trabajados en ${monthName}?`)) {
         return;
       }
@@ -3031,6 +3224,7 @@ function renderRrhhLiquidaciones(container, state) {
         deductions: deductions,
         netAmount: netAmount,
         notes: notes,
+        resignationDoc: tempResignationDoc || null,
         autoDeactivate: autoDeactivate,
         createdAt: new Date().toISOString(),
         status: 'Liquidado'
@@ -3044,6 +3238,9 @@ function renderRrhhLiquidaciones(container, state) {
         emp.exitDate = exitDateVal;
         emp.exitReason = reasonVal;
         emp.exitNotes = notes;
+        if (tempResignationDoc) {
+          emp.resignationDoc = tempResignationDoc;
+        }
         emp.liquidatedAt = newLiq.createdAt;
 
         // Sincronizar en Firestore catálogo individual
@@ -3091,6 +3288,17 @@ function renderRrhhLiquidaciones(container, state) {
     });
   }
 
+  // Bind Botones Ver Carta de Renuncia Adjunta
+  container.querySelectorAll('.btn-view-resignation-doc').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const liqId = btn.getAttribute('data-id');
+      const liq = state.administracion_liquidaciones.find(x => x.id === liqId);
+      if (liq && liq.resignationDoc) {
+        openDocumentViewerModal(liq.resignationDoc);
+      }
+    });
+  });
+
   // Bind Botones Imprimir Finiquito del Historial
   container.querySelectorAll('.btn-print-liq').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -3129,6 +3337,7 @@ function renderRrhhLiquidaciones(container, state) {
               delete emp.exitDate;
               delete emp.exitReason;
               delete emp.exitNotes;
+              delete emp.resignationDoc;
               delete emp.liquidatedAt;
             }
           }
@@ -3140,6 +3349,78 @@ function renderRrhhLiquidaciones(container, state) {
       }
     });
   });
+}
+
+// ==========================================
+// 👁️ VISOR MODAL DE DOCUMENTOS DE RENUNCIA (PDF O IMAGEN)
+// ==========================================
+export function openDocumentViewerModal(docObj) {
+  if (!docObj || !docObj.dataUrl) {
+    alert("No hay documento disponible para visualizar.");
+    return;
+  }
+
+  let modal = document.getElementById('resignation-doc-viewer-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'resignation-doc-viewer-modal';
+    modal.className = 'modal-overlay';
+    modal.style.display = 'none';
+    modal.style.position = 'fixed';
+    modal.style.inset = '0';
+    modal.style.background = 'rgba(0,0,0,0.85)';
+    modal.style.zIndex = '99999';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.style.padding = '15px';
+    document.body.appendChild(modal);
+  }
+
+  const isPdf = docObj.type === 'pdf' || (docObj.name && docObj.name.toLowerCase().endsWith('.pdf')) || (docObj.dataUrl && docObj.dataUrl.startsWith('data:application/pdf'));
+
+  modal.innerHTML = `
+    <div style="background: #0f172a; border: 1px solid rgba(0,242,254,0.3); border-radius: 12px; width: 100%; max-width: 850px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.8); color: #fff; font-family: system-ui, -apple-system, sans-serif;">
+      
+      <!-- Modal Header -->
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(15,23,42,0.95);">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.3rem;">${isPdf ? '📕' : '🖼️'}</span>
+          <div>
+            <h3 style="margin: 0; font-size: 1rem; color: var(--accent-primary);">${docObj.name || 'Carta de Renuncia'}</h3>
+            <span style="font-size: 0.72rem; color: var(--text-muted);">${docObj.size || ''} &bull; Documento Adjunto de Renuncia</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <a href="${docObj.dataUrl}" download="${docObj.name || 'carta_renuncia'}" class="btn btn-secondary btn-small" style="padding: 4px 10px; font-size: 0.75rem; text-decoration: none; color: #38bdf8; border-color: rgba(56,189,248,0.3);">
+            ⬇️ Descargar
+          </a>
+          <button id="btn-close-doc-viewer" style="background: transparent; border: none; color: #94a3b8; font-size: 1.4rem; cursor: pointer; line-height: 1;">✕</button>
+        </div>
+      </div>
+
+      <!-- Modal Body (Viewer) -->
+      <div style="flex: 1; padding: 15px; overflow-y: auto; display: flex; align-items: center; justify-content: center; background: #000; min-height: 380px;">
+        ${isPdf 
+          ? `<iframe src="${docObj.dataUrl}" style="width: 100%; height: 68vh; border: none; border-radius: 6px; background: #fff;"></iframe>`
+          : `<img src="${docObj.dataUrl}" style="max-width: 100%; max-height: 70vh; object-fit: contain; border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);" alt="Documento de Renuncia">`
+        }
+      </div>
+
+      <!-- Modal Footer -->
+      <div style="padding: 10px 18px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: flex-end; background: rgba(15,23,42,0.95);">
+        <button id="btn-close-doc-viewer-btn" class="btn btn-secondary btn-small" style="padding: 6px 14px;">Cerrar</button>
+      </div>
+
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  const closeFn = () => { modal.style.display = 'none'; };
+  const btnClose = document.getElementById('btn-close-doc-viewer');
+  const btnClose2 = document.getElementById('btn-close-doc-viewer-btn');
+  if (btnClose) btnClose.addEventListener('click', closeFn);
+  if (btnClose2) btnClose2.addEventListener('click', closeFn);
 }
 
 // ==========================================
@@ -3229,6 +3510,7 @@ export function showLiquidationPrintPreview(liq, state) {
             <td style="padding: 4px 8px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold;">Motivo de Salida:</td>
             <td colspan="3" style="padding: 4px 8px; border: 1px solid #cbd5e1; font-weight: 600; color: #0f172a;">
               ${liq.reason || 'Liquidación por Días Trabajados'} ${liq.notes ? ` &bull; <span style="font-weight: normal; color: #475569;">(${liq.notes})</span>` : ''}
+              ${liq.resignationDoc ? `<div style="margin-top: 4px; font-size: 0.72rem; color: #0284c7; font-weight: bold;">📎 Carta de Renuncia Adjunta en Archivo: ${liq.resignationDoc.name || 'Documento'} (${liq.resignationDoc.size || ''})</div>` : ''}
             </td>
           </tr>
         </tbody>
