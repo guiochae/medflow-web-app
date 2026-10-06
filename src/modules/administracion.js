@@ -3,6 +3,7 @@ import { simulateOnPurchaseCreated, simulateOnPayrollGenerated } from '../utils/
 import { notifyEmployeeWelcome } from '../utils/whatsapp.js';
 import { renderRrhhAsistencia } from './attendanceManager.js';
 import { renderRrhhReportes } from './attendanceReports.js';
+import { renderReportesTab } from './reportesAdmin.js';
 import { detectSingleFaceAndDescriptor, captureCompressedFaceThumbnail, loadFaceModels } from '../utils/faceAttendance.js';
 import { db, saveStateToLocalCache } from '../firebase.js';
 import { doc, setDoc } from 'firebase/firestore';
@@ -99,6 +100,7 @@ export function renderAdministracion(container) {
       <button class="tab-btn ${activeAdminTab === 'rrhh' ? 'active' : ''}" id="admin-tab-rrhh">👥 Recursos Humanos</button>
       <button class="tab-btn ${activeAdminTab === 'medicos' ? 'active' : ''}" id="admin-tab-medicos">🩺 Médicos Externos</button>
       <button class="tab-btn ${activeAdminTab === 'activos_fijos' ? 'active' : ''}" id="admin-tab-activos-fijos">🏷️ Activos Fijos</button>
+      <button class="tab-btn ${activeAdminTab === 'reportes' ? 'active' : ''}" id="admin-tab-reportes">📈 Reportes y Analítica</button>
     </div>
 
     <div id="admin-module-content">
@@ -113,6 +115,7 @@ export function renderAdministracion(container) {
   document.getElementById('admin-tab-rrhh').addEventListener('click', () => { activeAdminTab = 'rrhh'; renderAdminContent(state); });
   document.getElementById('admin-tab-medicos').addEventListener('click', () => { activeAdminTab = 'medicos'; renderAdminContent(state); });
   document.getElementById('admin-tab-activos-fijos').addEventListener('click', () => { activeAdminTab = 'activos_fijos'; renderAdminContent(state); });
+  document.getElementById('admin-tab-reportes').addEventListener('click', () => { activeAdminTab = 'reportes'; renderAdminContent(state); });
 
   // Cargar contenido
   renderAdminContent(state);
@@ -143,6 +146,8 @@ function renderAdminContent(state) {
     renderExternalDoctorsTab(contentArea, state);
   } else if (activeAdminTab === 'activos_fijos') {
     renderActivosFijosTab(contentArea, state);
+  } else if (activeAdminTab === 'reportes') {
+    renderReportesTab(contentArea, state);
   }
 }
 
