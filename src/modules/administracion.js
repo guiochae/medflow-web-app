@@ -4,6 +4,7 @@ import { notifyEmployeeWelcome } from '../utils/whatsapp.js';
 import { renderRrhhAsistencia } from './attendanceManager.js';
 import { renderRrhhReportes } from './attendanceReports.js';
 import { renderReportesTab } from './reportesAdmin.js';
+import { renderRrhhEnfermeria } from './enfermeriaDepartment.js';
 import { detectSingleFaceAndDescriptor, captureCompressedFaceThumbnail, loadFaceModels } from '../utils/faceAttendance.js';
 import { db, saveStateToLocalCache } from '../firebase.js';
 import { doc, setDoc } from 'firebase/firestore';
@@ -1351,6 +1352,7 @@ function renderRrhhTab(container, state) {
     <!-- Sub-Pestañas de RRHH -->
     <div style="display: flex; gap: 10px; margin-bottom: 1.25rem; font-size: 0.85rem; overflow-x: auto; padding-bottom: 4px;">
       <button class="btn ${activeRrhhSubTab === 'empleados' ? 'btn-primary' : 'btn-secondary'}" id="rrhh-subtab-empleados" style="padding: 6px 14px;">👔 Gestión de Empleados</button>
+      <button class="btn ${activeRrhhSubTab === 'enfermeria' ? 'btn-primary' : 'btn-secondary'}" id="rrhh-subtab-enfermeria" style="padding: 6px 14px;">👩‍⚕️ Depto. Enfermería</button>
       <button class="btn ${activeRrhhSubTab === 'asistencia' ? 'btn-primary' : 'btn-secondary'}" id="rrhh-subtab-asistencia" style="padding: 6px 14px;">🕒 Control de Asistencia</button>
       <button class="btn ${activeRrhhSubTab === 'reportes' ? 'btn-primary' : 'btn-secondary'}" id="rrhh-subtab-reportes" style="padding: 6px 14px;">📊 Reportes de Asistencia</button>
       <button class="btn ${activeRrhhSubTab === 'nomina' ? 'btn-primary' : 'btn-secondary'}" id="rrhh-subtab-nomina" style="padding: 6px 14px;">🏦 Nómina Mensual</button>
@@ -1362,6 +1364,7 @@ function renderRrhhTab(container, state) {
   `;
 
   document.getElementById('rrhh-subtab-empleados').addEventListener('click', () => { activeRrhhSubTab = 'empleados'; renderRrhhTab(container, state); });
+  document.getElementById('rrhh-subtab-enfermeria').addEventListener('click', () => { activeRrhhSubTab = 'enfermeria'; renderRrhhTab(container, state); });
   document.getElementById('rrhh-subtab-asistencia').addEventListener('click', () => { activeRrhhSubTab = 'asistencia'; renderRrhhTab(container, state); });
   document.getElementById('rrhh-subtab-reportes').addEventListener('click', () => { activeRrhhSubTab = 'reportes'; renderRrhhTab(container, state); });
   document.getElementById('rrhh-subtab-nomina').addEventListener('click', () => { activeRrhhSubTab = 'nomina'; renderRrhhTab(container, state); });
@@ -1370,6 +1373,8 @@ function renderRrhhTab(container, state) {
 
   if (activeRrhhSubTab === 'empleados') {
     renderRrhhEmpleados(subArea, state);
+  } else if (activeRrhhSubTab === 'enfermeria') {
+    renderRrhhEnfermeria(subArea, state);
   } else if (activeRrhhSubTab === 'asistencia') {
     renderRrhhAsistencia(subArea, state);
   } else if (activeRrhhSubTab === 'reportes') {
@@ -1418,6 +1423,7 @@ function renderRrhhEmpleados(container, state) {
             <div class="form-group">
               <label>Departamento / Servicio *</label>
               <select id="e-department" required style="width: 100%; padding: 8px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+                <option value="Enfermería" ${editingEmp && editingEmp.department === 'Enfermería' ? 'selected' : ''}>Departamento de Enfermería</option>
                 <option value="Hospitalización" ${editingEmp && editingEmp.department === 'Hospitalización' ? 'selected' : ''}>Hospitalización / Encamamiento</option>
                 <option value="Emergencias" ${editingEmp && editingEmp.department === 'Emergencias' ? 'selected' : ''}>Emergencias y Observación</option>
                 <option value="Farmacia" ${editingEmp && editingEmp.department === 'Farmacia' ? 'selected' : ''}>Farmacia e Inventarios</option>

@@ -205,6 +205,9 @@ export function getAppState() {
     administracion_activos_fijos: [],
     administracion_asistencias: [],
     administracion_asistencias_audit: [],
+    administracion_enfermeria_roles: [],
+    administracion_enfermeria_cambios: [],
+    administracion_enfermeria_permisos: [],
     external_doctors: [],
     accounts_payable: [],
     clinicInfo: {
@@ -266,6 +269,9 @@ export async function saveAppState(state) {
   if (state.administracion_activos_fijos) firestoreState.administracion_activos_fijos = state.administracion_activos_fijos;
   if (state.administracion_asistencias) firestoreState.administracion_asistencias = state.administracion_asistencias;
   if (state.administracion_asistencias_audit) firestoreState.administracion_asistencias_audit = state.administracion_asistencias_audit;
+  if (state.administracion_enfermeria_roles) firestoreState.administracion_enfermeria_roles = state.administracion_enfermeria_roles;
+  if (state.administracion_enfermeria_cambios) firestoreState.administracion_enfermeria_cambios = state.administracion_enfermeria_cambios;
+  if (state.administracion_enfermeria_permisos) firestoreState.administracion_enfermeria_permisos = state.administracion_enfermeria_permisos;
   if (state.external_doctors) firestoreState.external_doctors = state.external_doctors;
   if (state.accounts_payable) firestoreState.accounts_payable = state.accounts_payable;
   if (state.clinicInfo) firestoreState.clinicInfo = state.clinicInfo;

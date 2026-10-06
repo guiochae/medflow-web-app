@@ -113,6 +113,9 @@ export const firestoreState = {
   administracion_activos_fijos: [],
   administracion_asistencias: [],
   administracion_asistencias_audit: [],
+  administracion_enfermeria_roles: [],
+  administracion_enfermeria_cambios: [],
+  administracion_enfermeria_permisos: [],
   external_doctors: [],
   accounts_payable: [],
   clinicInfo: {
@@ -161,6 +164,9 @@ function loadStateFromLocalCache() {
         if (Array.isArray(parsed.administracion_activos_fijos)) firestoreState.administracion_activos_fijos = parsed.administracion_activos_fijos;
         if (Array.isArray(parsed.administracion_asistencias)) firestoreState.administracion_asistencias = parsed.administracion_asistencias;
         if (Array.isArray(parsed.administracion_asistencias_audit)) firestoreState.administracion_asistencias_audit = parsed.administracion_asistencias_audit;
+        if (Array.isArray(parsed.administracion_enfermeria_roles)) firestoreState.administracion_enfermeria_roles = parsed.administracion_enfermeria_roles;
+        if (Array.isArray(parsed.administracion_enfermeria_cambios)) firestoreState.administracion_enfermeria_cambios = parsed.administracion_enfermeria_cambios;
+        if (Array.isArray(parsed.administracion_enfermeria_permisos)) firestoreState.administracion_enfermeria_permisos = parsed.administracion_enfermeria_permisos;
         if (Array.isArray(parsed.external_doctors)) firestoreState.external_doctors = parsed.external_doctors;
         if (Array.isArray(parsed.accounts_payable)) firestoreState.accounts_payable = parsed.accounts_payable;
         if (parsed.clinicInfo) firestoreState.clinicInfo = parsed.clinicInfo;
@@ -208,6 +214,9 @@ export function saveStateToLocalCache() {
       administracion_activos_fijos: firestoreState.administracion_activos_fijos,
       administracion_asistencias: firestoreState.administracion_asistencias,
       administracion_asistencias_audit: firestoreState.administracion_asistencias_audit,
+      administracion_enfermeria_roles: firestoreState.administracion_enfermeria_roles,
+      administracion_enfermeria_cambios: firestoreState.administracion_enfermeria_cambios,
+      administracion_enfermeria_permisos: firestoreState.administracion_enfermeria_permisos,
       external_doctors: firestoreState.external_doctors,
       accounts_payable: firestoreState.accounts_payable,
       clinicInfo: firestoreState.clinicInfo
@@ -347,6 +356,9 @@ export function initRealtimeFirestore(onFirstLoad) {
       const activosFijos = [];
       const asistencias = [];
       const asistenciasAudit = [];
+      const enfermeriaRoles = [];
+      const enfermeriaCambios = [];
+      const enfermeriaPermisos = [];
       const doctors = [];
       const payables = [];
       let clinic = null;
@@ -454,6 +466,18 @@ export function initRealtimeFirestore(onFirstLoad) {
           asistenciasAudit.push(...(dData.items || []));
           return;
         }
+        if (dId === 'catalog_administracion_enfermeria_roles') {
+          enfermeriaRoles.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_administracion_enfermeria_cambios') {
+          enfermeriaCambios.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_administracion_enfermeria_permisos') {
+          enfermeriaPermisos.push(...(dData.items || []));
+          return;
+        }
         if (dId === 'catalog_external_doctors') {
           doctors.push(...(dData.items || []));
           return;
@@ -493,6 +517,9 @@ export function initRealtimeFirestore(onFirstLoad) {
         else if (type === 'administracion_activos_fijos') activosFijos.push(cleanDoc);
         else if (type === 'administracion_asistencias') asistencias.push(cleanDoc);
         else if (type === 'administracion_asistencias_audit') asistenciasAudit.push(cleanDoc);
+        else if (type === 'administracion_enfermeria_roles') enfermeriaRoles.push(cleanDoc);
+        else if (type === 'administracion_enfermeria_cambios') enfermeriaCambios.push(cleanDoc);
+        else if (type === 'administracion_enfermeria_permisos') enfermeriaPermisos.push(cleanDoc);
         else if (type === 'external_doctors') doctors.push(cleanDoc);
         else if (type === 'accounts_payable') payables.push(cleanDoc);
         else if (type === 'clinicInfo') clinic = cleanDoc;
@@ -557,14 +584,9 @@ export function initRealtimeFirestore(onFirstLoad) {
       firestoreState.administracion_activos_fijos = activosFijos;
       firestoreState.administracion_asistencias = asistencias;
       firestoreState.administracion_asistencias_audit = asistenciasAudit;
-      firestoreState.external_doctors = doctors;
-      firestoreState.accounts_payable = payables;
-      if (clinic) firestoreState.clinicInfo = clinic;
-      firestoreState.administracion_nominas = nominas;
-      firestoreState.administracion_bancos = bancos;
-      firestoreState.administracion_activos_fijos = activosFijos;
-      firestoreState.administracion_asistencias = asistencias;
-      firestoreState.administracion_asistencias_audit = asistenciasAudit;
+      firestoreState.administracion_enfermeria_roles = enfermeriaRoles;
+      firestoreState.administracion_enfermeria_cambios = enfermeriaCambios;
+      firestoreState.administracion_enfermeria_permisos = enfermeriaPermisos;
       firestoreState.external_doctors = doctors;
       firestoreState.accounts_payable = payables;
       if (clinic) firestoreState.clinicInfo = clinic;
