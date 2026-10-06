@@ -200,6 +200,7 @@ export function getAppState() {
     administracion_caja: [],
     administracion_employees: [],
     administracion_nominas: [],
+    administracion_liquidaciones: [],
     administracion_bancos: [],
     administracion_activos_fijos: [],
     administracion_asistencias: [],

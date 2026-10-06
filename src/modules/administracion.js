@@ -15,6 +15,7 @@ let activeCajaSubTab = 'cobros'; // 'cobros', 'cxp', 'nominas'
 let activeContabilidadSubTab = 'diario'; // 'diario', 'impuestos'
 let activeRrhhSubTab = 'empleados'; // 'empleados', 'asistencia', 'reportes', 'nomina'
 let activeRrhhReportSubTab = 'diario'; // 'diario', 'mensual', 'anual', 'empleado'
+let activeNominaSubTab = 'planilla'; // 'planilla', 'liquidaciones'
 let editingEmployeeId = null;
 let editingAttendanceId = null;
 let selectedPayrollMonth = 'Agosto 2026';
@@ -68,6 +69,7 @@ export function renderAdministracion(container) {
   state.administracion_rrhh = state.administracion_rrhh || [];
   state.administracion_caja = state.administracion_caja || [];
   state.administracion_bancos = state.administracion_bancos || [];
+  state.administracion_liquidaciones = state.administracion_liquidaciones || [];
 
   // Filtrar de forma retroactiva partidas mock previas de Q250,000.00
   if (state.administracion_contabilidad && Array.isArray(state.administracion_contabilidad)) {
@@ -2300,10 +2302,16 @@ export function isDoctorOrPhysician(emp) {
   return false;
 }
 
-// Planilla / Nómina Mensual
+// Planilla / Nómina Mensual & Liquidaciones
 function renderRrhhNomina(container, state) {
   // Asegurar depuración automática de nóminas archivadas existentes (ej. Septiembre)
   purgeAndSanitizePayrolls(state);
+  state.administracion_liquidaciones = state.administracion_liquidaciones || [];
+
+  if (activeNominaSubTab === 'liquidaciones') {
+    renderRrhhLiquidaciones(container, state);
+    return;
+  }
 
   // En la nómina únicamente figuran los colaboradores registrados y activos del submódulo de Gestión de Empleados
   // Se excluyen directivos de sistema y todos los médicos/especialistas (ya que liquidan por honorarios/consultas)
@@ -2351,6 +2359,21 @@ function renderRrhhNomina(container, state) {
   };
 
   container.innerHTML = `
+    <!-- Barra Superior de Sub-Pestañas de Nómina -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+      <div style="display: flex; gap: 8px;">
+        <button class="btn ${activeNominaSubTab === 'planilla' ? 'btn-primary' : 'btn-secondary'}" id="nomina-tab-btn-planilla" style="padding: 6px 14px; font-size: 0.85rem;">
+          🏦 Planilla Mensual Ordinaria
+        </button>
+        <button class="btn ${activeNominaSubTab === 'liquidaciones' ? 'btn-primary' : 'btn-secondary'}" id="nomina-tab-btn-liquidaciones" style="padding: 6px 14px; font-size: 0.85rem;">
+          📜 Liquidación / Finiquito (Días Trabajados)
+        </button>
+      </div>
+      <div style="font-size: 0.8rem; color: var(--text-muted);">
+        Total Liquidaciones Registradas: <strong style="color: var(--accent-secondary);">${(state.administracion_liquidaciones || []).length}</strong>
+      </div>
+    </div>
+
     <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; align-items: start;">
       
       <!-- Creador de Nómina -->
@@ -2453,6 +2476,12 @@ function renderRrhhNomina(container, state) {
     </div>
   `;
 
+  // Bind Subtab Navigation
+  const btnTabPlanilla = document.getElementById('nomina-tab-btn-planilla');
+  const btnTabLiquidaciones = document.getElementById('nomina-tab-btn-liquidaciones');
+  if (btnTabPlanilla) btnTabPlanilla.addEventListener('click', () => { activeNominaSubTab = 'planilla'; renderRrhhNomina(container, state); });
+  if (btnTabLiquidaciones) btnTabLiquidaciones.addEventListener('click', () => { activeNominaSubTab = 'liquidaciones'; renderRrhhNomina(container, state); });
+
   // Listener para cambio de mes seleccionado
   const monthSelect = document.getElementById('payroll-month');
   if (monthSelect) {
@@ -2515,17 +2544,11 @@ function renderRrhhNomina(container, state) {
       const payroll = state.administracion_nominas.find(n => n.id === payrollId);
       if (payroll) {
         if (confirm(`¿Confirma eliminar permanentemente la nómina de ${payroll.month}? Esta acción también anulará los pagos de caja y asientos contables asociados.`)) {
-          // 1. Eliminar la nómina
           state.administracion_nominas = state.administracion_nominas.filter(n => n.id !== payrollId);
-          
-          // 2. Eliminar registros de caja asociados
           state.administracion_caja = (state.administracion_caja || []).filter(c => c.refId !== payrollId);
-          
-          // 3. Eliminar partida contable asociada
           state.administracion_contabilidad = (state.administracion_contabilidad || []).filter(entry => 
             !(entry.concept && entry.concept.includes(`Periodo: ${payroll.month}`))
           );
-          
           saveAppState(state);
           alert(`Nómina de ${payroll.month} eliminada correctamente.`);
           renderRrhhNomina(container, state);
@@ -2597,6 +2620,704 @@ function renderRrhhNomina(container, state) {
       renderRrhhNomina(container, state);
     });
   }
+}
+
+// ==========================================
+// 📜 SUB-SECCIÓN: FINIQUITOS Y LIQUIDACIÓN LABORAL (DÍAS TRABAJADOS)
+// ==========================================
+function renderRrhhLiquidaciones(container, state) {
+  state.administracion_liquidaciones = state.administracion_liquidaciones || [];
+  state.administracion_employees = state.administracion_employees || [];
+
+  // Empleados disponibles para liquidación (activos y registrados, excluyendo admin y médicos externos/honorarios)
+  const candidateEmployees = state.administracion_employees.filter(e => {
+    if (!e) return false;
+    const nameLower = String(e.name || '').toLowerCase();
+    const idLower = String(e.id || '').toLowerCase();
+    if (nameLower.includes('antigravity') || nameLower === 'administrador maestro' || idLower === 'admin' || idLower === 'u-admin') {
+      return false;
+    }
+    if (isDoctorOrPhysician(e)) {
+      return false;
+    }
+    return true;
+  });
+
+  const todayStr = new Date().toISOString().substring(0, 10);
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonthIdx = now.getMonth();
+  const daysInCurMonth = new Date(currentYear, currentMonthIdx + 1, 0).getDate();
+  const currentDayNum = now.getDate();
+
+  const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  const curMonthName = `${monthNames[currentMonthIdx]} ${currentYear}`;
+
+  container.innerHTML = `
+    <!-- Barra Superior de Sub-Pestañas de Nómina -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+      <div style="display: flex; gap: 8px;">
+        <button class="btn ${activeNominaSubTab === 'planilla' ? 'btn-primary' : 'btn-secondary'}" id="nomina-tab-btn-planilla" style="padding: 6px 14px; font-size: 0.85rem;">
+          🏦 Planilla Mensual Ordinaria
+        </button>
+        <button class="btn ${activeNominaSubTab === 'liquidaciones' ? 'btn-primary' : 'btn-secondary'}" id="nomina-tab-btn-liquidaciones" style="padding: 6px 14px; font-size: 0.85rem;">
+          📜 Liquidación / Finiquito (Días Trabajados)
+        </button>
+      </div>
+      <div style="font-size: 0.8rem; color: var(--text-muted);">
+        Total Liquidaciones Procesadas: <strong style="color: var(--accent-secondary);">${state.administracion_liquidaciones.length}</strong>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 20px; align-items: start;">
+      
+      <!-- Formulario / Calculadora de Liquidación -->
+      <div class="glass-card" style="padding: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <div>
+            <h3 style="font-size: 1rem; color: var(--accent-primary); margin: 0; font-family: var(--font-heading);">
+              🧮 Cálculo de Liquidación por Días Trabajados
+            </h3>
+            <p style="margin: 2px 0 0 0; color: var(--text-muted); font-size: 0.78rem;">
+              Cálculo proporcional de salario por días laborados en el mes corriente (por despido o renuncia).
+            </p>
+          </div>
+        </div>
+
+        <form id="form-liquidate-employee" style="display: flex; flex-direction: column; gap: 12px;">
+          
+          <!-- Seleccionar Empleado -->
+          <div class="form-group">
+            <label style="font-weight: 600; font-size: 0.82rem; color: var(--text-primary);">Seleccionar Colaborador *</label>
+            <select id="liq-emp-select" class="form-control" required style="width: 100%; padding: 8px; font-size: 0.85rem; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+              <option value="">-- Seleccionar colaborador a liquidar --</option>
+              ${candidateEmployees.map(e => `
+                <option value="${e.id}" data-salary="${e.salary || 0}" data-hdate="${e.hireDate || ''}" data-pos="${e.position || ''}" data-dept="${e.department || ''}" data-code="${e.employee_code || ''}" data-status="${e.status || 'Activo'}">
+                  ${e.name} (${e.employee_code || 'EMP-S/C'}) - ${e.position} [Sueldo: Q${parseFloat(e.salary || 0).toFixed(2)}] ${e.status !== 'Activo' ? `(${e.status})` : ''}
+                </option>
+              `).join('')}
+            </select>
+          </div>
+
+          <!-- Ficha de Datos Rápidos del Empleado Seleccionado -->
+          <div id="liq-emp-details-card" style="display: none; background: rgba(0, 242, 254, 0.04); border: 1px solid rgba(0, 242, 254, 0.25); border-radius: 6px; padding: 10px; font-size: 0.78rem;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; color: var(--text-muted);">
+              <div>Código: <strong id="card-emp-code" style="color: var(--accent-primary); font-family: monospace;">-</strong></div>
+              <div>Puesto: <strong id="card-emp-pos" style="color: var(--text-primary);">-</strong></div>
+              <div>Departamento: <strong id="card-emp-dept" style="color: var(--text-primary);">-</strong></div>
+              <div>Fecha Ingreso: <strong id="card-emp-hdate" style="color: var(--text-primary);">-</strong></div>
+            </div>
+          </div>
+
+          <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <!-- Motivo de Liquidación -->
+            <div class="form-group">
+              <label style="font-size: 0.82rem;">Motivo de Salida / Baja *</label>
+              <select id="liq-reason" class="form-control" required style="width: 100%; padding: 8px; font-size: 0.85rem; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+                <option value="Despido (Rescisión Patronal)">Despido (Rescisión Patronal)</option>
+                <option value="Despido Justificado">Despido Justificado</option>
+                <option value="Renuncia Voluntaria">Renuncia Voluntaria</option>
+                <option value="Fin de Contrato de Trabajo">Fin de Contrato de Trabajo</option>
+                <option value="Mutuo Acuerdo">Mutuo Acuerdo</option>
+              </select>
+            </div>
+
+            <!-- Fecha de Egreso / Último día laborado -->
+            <div class="form-group">
+              <label style="font-size: 0.82rem;">Fecha de Baja (Último Día Laborado) *</label>
+              <input type="date" id="liq-exit-date" required value="${todayStr}" class="form-control" style="width: 100%; padding: 8px; font-size: 0.85rem; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+            </div>
+          </div>
+
+          <!-- Días Laborados y Sueldo Base -->
+          <div class="form-row" style="display: grid; grid-template-columns: 1.1fr 0.9fr 1fr; gap: 10px;">
+            <div class="form-group">
+              <label style="font-size: 0.82rem;">Sueldo Base Mensual (Q)</label>
+              <input type="number" id="liq-base-salary" min="0" step="any" readonly value="0.00" style="width: 100%; padding: 8px; font-size: 0.85rem; background: rgba(0,0,0,0.3); color: var(--accent-primary); border: 1px solid var(--border-color); border-radius: 4px; font-weight: bold; font-family: monospace;">
+            </div>
+            <div class="form-group">
+              <label style="font-size: 0.82rem;">Días del Mes</label>
+              <input type="number" id="liq-month-days" readonly value="${daysInCurMonth}" style="width: 100%; padding: 8px; font-size: 0.85rem; background: rgba(0,0,0,0.3); color: var(--text-muted); border: 1px solid var(--border-color); border-radius: 4px; font-family: monospace; text-align: center;">
+            </div>
+            <div class="form-group">
+              <label style="font-size: 0.82rem;">Días Laborados *</label>
+              <input type="number" id="liq-days-worked" required min="1" max="31" value="${currentDayNum}" style="width: 100%; padding: 8px; font-size: 0.85rem; background: var(--bg-card); color: var(--accent-secondary); border: 1px solid var(--border-color); border-radius: 4px; font-weight: bold; font-family: monospace; text-align: center;">
+            </div>
+          </div>
+
+          <!-- Bonificación Proporcional y Deducciones -->
+          <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="form-group">
+              <label style="font-size: 0.82rem;">Bonificación Incentivo Proporcional (Q)</label>
+              <input type="number" id="liq-bonus-prop" min="0" step="any" value="0.00" style="width: 100%; padding: 8px; font-size: 0.85rem; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; font-family: monospace;">
+              <span style="font-size: 0.7rem; color: var(--text-muted);">Dec. 37-2001 prorrateado (Opcional)</span>
+            </div>
+            <div class="form-group">
+              <label style="font-size: 0.82rem;">Descuentos / Deducciones (Q)</label>
+              <input type="number" id="liq-deductions" min="0" step="any" value="0.00" style="width: 100%; padding: 8px; font-size: 0.85rem; background: var(--bg-card); color: #f87171; border: 1px solid var(--border-color); border-radius: 4px; font-family: monospace;">
+              <span style="font-size: 0.7rem; color: var(--text-muted);">Anticipos, deudas o faltas</span>
+            </div>
+          </div>
+
+          <!-- Observaciones / Comentarios -->
+          <div class="form-group">
+            <label style="font-size: 0.82rem;">Observaciones / Entrega de Puesto</label>
+            <textarea id="liq-notes" rows="2" placeholder="Motivo de la baja, entrega de llaves/uniforme, notas de finiquito..." style="width: 100%; padding: 8px; font-size: 0.82rem; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;"></textarea>
+          </div>
+
+          <!-- Opciones adicionales -->
+          <div style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.02); padding: 8px 10px; border-radius: 4px; border: 1px solid var(--border-color);">
+            <input type="checkbox" id="liq-deactivate-chk" checked style="width: 16px; height: 16px; cursor: pointer;">
+            <label for="liq-deactivate-chk" style="font-size: 0.78rem; cursor: pointer; color: var(--text-primary); margin: 0;">
+              <strong>Dar de baja al colaborador en el sistema</strong> (Cambia su estado a <em>Inactivo</em> y lo excluye automáticamente de futuras nóminas).
+            </label>
+          </div>
+
+          <!-- Resumen de Liquidación en Vivo -->
+          <div style="background: rgba(34, 197, 94, 0.05); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 8px; padding: 12px;">
+            <div style="font-size: 0.78rem; color: var(--text-muted); display: grid; grid-template-columns: 1.4fr 0.6fr; gap: 6px; margin-bottom: 6px;">
+              <span>Salario Diario Calculado:</span>
+              <span style="text-align: right; font-family: monospace;" id="summary-daily-sal">Q0.00 / día</span>
+              
+              <span>Importe Días Laborados (<span id="summary-days-count">${currentDayNum}</span> días):</span>
+              <span style="text-align: right; font-family: monospace;" id="summary-worked-subtotal">Q0.00</span>
+
+              <span>(+) Bonificación Proporcional:</span>
+              <span style="text-align: right; font-family: monospace; color: #4ade80;" id="summary-bonus-prop">Q0.00</span>
+
+              <span>(-) Deducciones / Descuentos:</span>
+              <span style="text-align: right; font-family: monospace; color: #f87171;" id="summary-deductions">- Q0.00</span>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed rgba(34, 197, 94, 0.4); padding-top: 8px; margin-top: 6px;">
+              <span style="font-size: 0.88rem; font-weight: bold; color: var(--text-primary);">TOTAL LÍQUIDO A PAGAR (FINIQUITO):</span>
+              <strong style="font-size: 1.15rem; color: var(--accent-success); font-family: monospace;" id="summary-total-liquid">Q0.00</strong>
+            </div>
+          </div>
+
+          <!-- Botones de Acción -->
+          <div style="display: flex; gap: 10px; margin-top: 4px;">
+            <button type="submit" class="btn btn-primary" style="flex: 1; padding: 10px; font-weight: 700; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 8px;">
+              <span>💾</span> Procesar Liquidación y Generar Finiquito
+            </button>
+          </div>
+
+        </form>
+      </div>
+
+      <!-- Historial de Finiquitos / Liquidaciones Emitidas -->
+      <div class="glass-card" style="padding: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 8px;">
+          <h3 style="font-size: 1rem; color: var(--accent-primary); margin: 0; font-family: var(--font-heading);">
+            📜 Historial de Finiquitos Emitidos
+          </h3>
+          <span style="font-size: 0.72rem; background: rgba(0, 242, 254, 0.1); color: var(--accent-primary); padding: 2px 8px; border-radius: 10px; font-weight: bold;">
+            ${state.administracion_liquidaciones.length} Registros
+          </span>
+        </div>
+
+        <div style="max-height: 520px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+          ${state.administracion_liquidaciones.length === 0
+            ? `<div style="text-align: center; color: var(--text-muted); font-style: italic; padding: 30px 10px; font-size: 0.85rem;">
+                 No se registran finiquitos o liquidaciones laborales emitidas.
+               </div>`
+            : state.administracion_liquidaciones.map(liq => `
+                <div style="border: 1px solid var(--border-color); border-radius: 8px; background: rgba(255,255,255,0.01); padding: 12px; font-size: 0.82rem;">
+                  <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; margin-bottom: 6px; font-size: 0.72rem; color: var(--text-muted);">
+                    <div>
+                      <strong style="color: var(--accent-primary); font-family: monospace;">${liq.id}</strong>
+                      <span style="margin-left: 6px; background: rgba(239, 68, 68, 0.12); color: #f87171; padding: 1px 6px; border-radius: 3px; font-weight: 600;">${liq.reason || 'Baja'}</span>
+                    </div>
+                    <span>📅 Salida: ${liq.exitDate || new Date(liq.createdAt).toLocaleDateString('es-GT')}</span>
+                  </div>
+
+                  <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                    <div>
+                      <strong style="font-size: 0.9rem; color: var(--text-primary);">${liq.employeeName}</strong>
+                      <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">
+                        ${liq.employeePosition} &bull; Cód: <span style="font-family: monospace;">${liq.employeeCode}</span>
+                      </div>
+                      <div style="font-size: 0.73rem; color: var(--accent-secondary); margin-top: 2px;">
+                        Días liquidados: <strong>${liq.daysWorked} días</strong> (${liq.monthName || ''})
+                      </div>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+                      <strong style="color: var(--accent-success); font-size: 1.05rem; font-family: monospace;">
+                        Q${parseFloat(liq.netAmount || 0).toFixed(2)}
+                      </strong>
+                      <div style="display: flex; gap: 4px;">
+                        <button class="btn btn-secondary btn-small btn-print-liq" data-id="${liq.id}" style="padding: 3px 8px; font-size: 0.74rem;" title="Imprimir Recibo de Finiquito Oficial">
+                          🖨️ Finiquito
+                        </button>
+                        <button class="btn btn-danger btn-small btn-delete-liq" data-id="${liq.id}" style="padding: 3px 6px; font-size: 0.74rem;" title="Anular Liquidación">
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              `).join('')
+          }
+        </div>
+      </div>
+
+    </div>
+  `;
+
+  // Bind Subtab Navigation
+  const btnTabPlanilla = document.getElementById('nomina-tab-btn-planilla');
+  const btnTabLiquidaciones = document.getElementById('nomina-tab-btn-liquidaciones');
+  if (btnTabPlanilla) btnTabPlanilla.addEventListener('click', () => { activeNominaSubTab = 'planilla'; renderRrhhNomina(container, state); });
+  if (btnTabLiquidaciones) btnTabLiquidaciones.addEventListener('click', () => { activeNominaSubTab = 'liquidaciones'; renderRrhhNomina(container, state); });
+
+  // Elementos del formulario interactivo
+  const empSelect = document.getElementById('liq-emp-select');
+  const detailsCard = document.getElementById('liq-emp-details-card');
+  const cardCode = document.getElementById('card-emp-code');
+  const cardPos = document.getElementById('card-emp-pos');
+  const cardDept = document.getElementById('card-emp-dept');
+  const cardHdate = document.getElementById('card-emp-hdate');
+
+  const baseSalaryInput = document.getElementById('liq-base-salary');
+  const monthDaysInput = document.getElementById('liq-month-days');
+  const daysWorkedInput = document.getElementById('liq-days-worked');
+  const bonusPropInput = document.getElementById('liq-bonus-prop');
+  const deductionsInput = document.getElementById('liq-deductions');
+  const exitDateInput = document.getElementById('liq-exit-date');
+
+  const summaryDailySal = document.getElementById('summary-daily-sal');
+  const summaryDaysCount = document.getElementById('summary-days-count');
+  const summaryWorkedSubtotal = document.getElementById('summary-worked-subtotal');
+  const summaryBonusProp = document.getElementById('summary-bonus-prop');
+  const summaryDeductions = document.getElementById('summary-deductions');
+  const summaryTotalLiquid = document.getElementById('summary-total-liquid');
+
+  // Función de cálculo reactivo en tiempo real
+  const recalculateLiquidation = () => {
+    const baseSalary = parseFloat(baseSalaryInput.value) || 0;
+    const daysInMonth = parseInt(monthDaysInput.value) || 30;
+    const daysWorked = parseInt(daysWorkedInput.value) || 0;
+    const bonusProp = parseFloat(bonusPropInput.value) || 0;
+    const deductions = parseFloat(deductionsInput.value) || 0;
+
+    const dailySalary = daysInMonth > 0 ? (baseSalary / daysInMonth) : 0;
+    const workedSubtotal = dailySalary * daysWorked;
+    const netAmount = Math.max(0, workedSubtotal + bonusProp - deductions);
+
+    if (summaryDailySal) summaryDailySal.textContent = `Q${dailySalary.toFixed(2)} / día`;
+    if (summaryDaysCount) summaryDaysCount.textContent = daysWorked;
+    if (summaryWorkedSubtotal) summaryWorkedSubtotal.textContent = `Q${workedSubtotal.toFixed(2)}`;
+    if (summaryBonusProp) summaryBonusProp.textContent = `Q${bonusProp.toFixed(2)}`;
+    if (summaryDeductions) summaryDeductions.textContent = `- Q${deductions.toFixed(2)}`;
+    if (summaryTotalLiquid) summaryTotalLiquid.textContent = `Q${netAmount.toFixed(2)}`;
+  };
+
+  // Evento Cambio de Colaborador
+  if (empSelect) {
+    empSelect.addEventListener('change', () => {
+      const opt = empSelect.options[empSelect.selectedIndex];
+      if (opt && opt.value) {
+        const salary = parseFloat(opt.getAttribute('data-salary')) || 0;
+        const hdate = opt.getAttribute('data-hdate') || 'N/D';
+        const pos = opt.getAttribute('data-pos') || 'Colaborador';
+        const dept = opt.getAttribute('data-dept') || 'General';
+        const code = opt.getAttribute('data-code') || 'EMP-S/C';
+
+        baseSalaryInput.value = salary.toFixed(2);
+        if (cardCode) cardCode.textContent = code;
+        if (cardPos) cardPos.textContent = pos;
+        if (cardDept) cardDept.textContent = dept;
+        if (cardHdate) cardHdate.textContent = hdate ? new Date(hdate + 'T00:00:00').toLocaleDateString('es-GT') : 'N/D';
+        if (detailsCard) detailsCard.style.display = 'block';
+
+        // Auto-calcular bonificación proporcional
+        const daysInMonth = parseInt(monthDaysInput.value) || 30;
+        const daysWorked = parseInt(daysWorkedInput.value) || 1;
+        bonusPropInput.value = ((250 / daysInMonth) * daysWorked).toFixed(2);
+
+        recalculateLiquidation();
+      } else {
+        baseSalaryInput.value = '0.00';
+        if (detailsCard) detailsCard.style.display = 'none';
+        bonusPropInput.value = '0.00';
+        recalculateLiquidation();
+      }
+    });
+  }
+
+  // Evento Cambio de Fecha de Salida
+  if (exitDateInput) {
+    exitDateInput.addEventListener('change', () => {
+      if (exitDateInput.value) {
+        const exitD = new Date(exitDateInput.value + 'T00:00:00');
+        const daysInM = new Date(exitD.getFullYear(), exitD.getMonth() + 1, 0).getDate();
+        const exitDay = exitD.getDate();
+
+        monthDaysInput.value = daysInM;
+        daysWorkedInput.value = exitDay;
+        daysWorkedInput.max = daysInM;
+
+        bonusPropInput.value = ((250 / daysInM) * exitDay).toFixed(2);
+        recalculateLiquidation();
+      }
+    });
+  }
+
+  // Eventos de entrada interactiva para recálculo instantáneo
+  [daysWorkedInput, bonusPropInput, deductionsInput].forEach(inp => {
+    if (inp) {
+      inp.addEventListener('input', recalculateLiquidation);
+    }
+  });
+
+  // Submit del Formulario de Liquidación
+  const form = document.getElementById('form-liquidate-employee');
+  if (form) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const empId = empSelect.value;
+      const emp = state.administracion_employees.find(x => x.id === empId);
+      if (!emp) {
+        alert("Por favor seleccione un colaborador válido a liquidar.");
+        return;
+      }
+
+      const exitDateVal = exitDateInput.value;
+      const reasonVal = document.getElementById('liq-reason').value;
+      const daysWorked = parseInt(daysWorkedInput.value) || 0;
+      const daysInMonth = parseInt(monthDaysInput.value) || 30;
+      const baseSalary = parseFloat(baseSalaryInput.value) || 0;
+      const bonusProp = parseFloat(bonusPropInput.value) || 0;
+      const deductions = parseFloat(deductionsInput.value) || 0;
+      const notes = document.getElementById('liq-notes').value.trim();
+      const autoDeactivate = document.getElementById('liq-deactivate-chk').checked;
+
+      if (daysWorked <= 0 || daysWorked > daysInMonth) {
+        alert(`Los días trabajados deben ser entre 1 y ${daysInMonth}.`);
+        return;
+      }
+
+      const dailySalary = daysInMonth > 0 ? (baseSalary / daysInMonth) : 0;
+      const workedDaysAmount = dailySalary * daysWorked;
+      const netAmount = Math.max(0, workedDaysAmount + bonusProp - deductions);
+
+      const exitD = new Date(exitDateVal + 'T00:00:00');
+      const monthName = `${monthNames[exitD.getMonth()]} ${exitD.getFullYear()}`;
+
+      if (!confirm(`¿Confirma procesar la liquidación laboral de ${emp.name} por Q${netAmount.toFixed(2)} correspondientes a ${daysWorked} días trabajados en ${monthName}?`)) {
+        return;
+      }
+
+      // 1. Crear registro de liquidación
+      const newLiq = {
+        id: 'LIQ-' + Date.now(),
+        employeeId: emp.id,
+        employeeCode: emp.employee_code || 'EMP-S/C',
+        employeeName: emp.name,
+        employeePosition: emp.position || 'Colaborador',
+        employeeDepartment: emp.department || 'General',
+        hireDate: emp.hireDate || '',
+        exitDate: exitDateVal,
+        reason: reasonVal,
+        monthName: monthName,
+        baseSalary: baseSalary,
+        daysInMonth: daysInMonth,
+        daysWorked: daysWorked,
+        dailySalary: dailySalary,
+        workedDaysAmount: workedDaysAmount,
+        proportionalBonus: bonusProp,
+        deductions: deductions,
+        netAmount: netAmount,
+        notes: notes,
+        autoDeactivate: autoDeactivate,
+        createdAt: new Date().toISOString(),
+        status: 'Liquidado'
+      };
+
+      state.administracion_liquidaciones.unshift(newLiq);
+
+      // 2. Dar de baja al empleado en la nómina y empleados si se seleccionó la opción
+      if (autoDeactivate) {
+        emp.status = 'Inactivo';
+        emp.exitDate = exitDateVal;
+        emp.exitReason = reasonVal;
+        emp.exitNotes = notes;
+        emp.liquidatedAt = newLiq.createdAt;
+
+        // Sincronizar en Firestore catálogo individual
+        try {
+          const indRef = doc(db, 'multimedica', emp.id);
+          setDoc(indRef, { ...emp, _collectionType: 'administracion_employees' }, { merge: true }).catch(console.warn);
+        } catch (err) {}
+      }
+
+      // 3. Registrar egreso en Caja y Bancos
+      state.administracion_caja.unshift({
+        id: 'CAJA-LIQ-' + Date.now(),
+        date: new Date().toISOString(),
+        type: 'Egreso',
+        category: 'Liquidación Laboral',
+        concept: `Liquidación laboral (${reasonVal}) - ${emp.name} (${daysWorked} días en ${monthName})`,
+        amount: netAmount,
+        method: 'Efectivo / Cheque',
+        refId: newLiq.id,
+        status: 'Pagado'
+      });
+
+      // 4. Asiento contable de partida doble
+      state.administracion_contabilidad.unshift({
+        id: 'CONT-LIQ-' + Date.now(),
+        date: new Date().toISOString(),
+        concept: `Partida de liquidación laboral (${reasonVal}): ${emp.name} - ${daysWorked} días (${monthName})`,
+        type: 'Diario',
+        totalDebits: netAmount,
+        totalCredits: netAmount,
+        entries: [
+          { account: 'Gastos de Administración (Sueldos)', debit: netAmount, credit: 0 },
+          { account: 'Caja y Bancos', debit: 0, credit: netAmount }
+        ]
+      });
+
+      await saveAppState(state);
+      alert(`✅ Liquidación laboral de ${emp.name} procesada exitosamente por un total de Q${netAmount.toFixed(2)}.`);
+
+      // Abrir automáticamente vista de impresión del Finiquito Oficial
+      showLiquidationPrintPreview(newLiq, state);
+
+      // Re-renderizar
+      renderRrhhLiquidaciones(container, state);
+    });
+  }
+
+  // Bind Botones Imprimir Finiquito del Historial
+  container.querySelectorAll('.btn-print-liq').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const liqId = btn.getAttribute('data-id');
+      const liq = state.administracion_liquidaciones.find(x => x.id === liqId);
+      if (liq) {
+        showLiquidationPrintPreview(liq, state);
+      }
+    });
+  });
+
+  // Bind Botones Eliminar / Anular Finiquito
+  container.querySelectorAll('.btn-delete-liq').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const liqId = btn.getAttribute('data-id');
+      const liq = state.administracion_liquidaciones.find(x => x.id === liqId);
+      if (liq) {
+        if (confirm(`¿Confirma anular y eliminar permanentemente la liquidación de ${liq.employeeName}? Esta acción anulará el asiento contable, el registro de caja y restaurará el estado activo del colaborador si fue dado de baja.`)) {
+          // 1. Eliminar liquidación
+          state.administracion_liquidaciones = state.administracion_liquidaciones.filter(x => x.id !== liqId);
+
+          // 2. Eliminar de caja
+          state.administracion_caja = (state.administracion_caja || []).filter(c => c.refId !== liqId);
+
+          // 3. Eliminar de contabilidad
+          state.administracion_contabilidad = (state.administracion_contabilidad || []).filter(entry => 
+            !(entry.concept && entry.concept.includes(liq.id)) &&
+            !(entry.concept && entry.concept.includes(`liquidación laboral`) && entry.concept.includes(liq.employeeName))
+          );
+
+          // 4. Restaurar estado de empleado si fue desactivado
+          if (liq.autoDeactivate && liq.employeeId) {
+            const emp = state.administracion_employees.find(e => e.id === liq.employeeId);
+            if (emp) {
+              emp.status = 'Activo';
+              delete emp.exitDate;
+              delete emp.exitReason;
+              delete emp.exitNotes;
+              delete emp.liquidatedAt;
+            }
+          }
+
+          await saveAppState(state);
+          alert(`Liquidación de ${liq.employeeName} anulada correctamente.`);
+          renderRrhhLiquidaciones(container, state);
+        }
+      }
+    });
+  });
+}
+
+// ==========================================
+// 🖨️ VISTA PREVIA E IMPRESIÓN DE FINIQUITO OFICIAL
+// ==========================================
+export function showLiquidationPrintPreview(liq, state) {
+  const modal = document.getElementById('prescription-print-modal');
+  const modalTitle = modal ? modal.querySelector('.modal-header h2') : null;
+  const previewContainer = document.getElementById('prescription-preview-content');
+  const printActionBtn = document.getElementById('btn-print-action');
+
+  if (!modal || !previewContainer || !printActionBtn) return;
+
+  if (modalTitle) {
+    modalTitle.textContent = `Finiquito y Liquidación Laboral: ${liq.employeeName}`;
+  }
+  printActionBtn.innerHTML = '<span>🖨️</span> Imprimir Finiquito Oficial';
+
+  const clinic = state.clinicInfo || {
+    name: 'HOSPITAL PRIVADO MULTIMÉDICA SAYAXCHÉ',
+    address: 'Barrio El Centro, Sayaxché, Petén, Guatemala',
+    phone: '(502) 7928-0000 / 5555-1234',
+    email: 'contacto@multimedicasayaxche.com'
+  };
+
+  const printDate = new Date().toLocaleString('es-GT', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+
+  const exitDateFormatted = liq.exitDate ? new Date(liq.exitDate + 'T00:00:00').toLocaleDateString('es-GT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/D';
+  const hireDateFormatted = liq.hireDate ? new Date(liq.hireDate + 'T00:00:00').toLocaleDateString('es-GT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/D';
+
+  previewContainer.innerHTML = `
+    <div class="prescription-preview-box" style="background: #fff; color: #000; padding: 28px; font-family: Arial, sans-serif; max-width: 750px; margin: 0 auto; box-shadow: 0 0 10px rgba(0,0,0,0.15);">
+      
+      <!-- Encabezado Oficial con Logo -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 15px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          ${clinic.logoData 
+            ? `<img src="${clinic.logoData}" style="max-height: 70px; max-width: 150px; object-fit: contain;">`
+            : `<img src="${logoUrl}" style="max-height: 70px; max-width: 150px; object-fit: contain;">`}
+          <div>
+            <h2 style="margin: 0; font-size: 1.1rem; color: #0f172a; text-transform: uppercase;">${clinic.name || 'HOSPITAL PRIVADO MULTIMÉDICA SAYAXCHÉ'}</h2>
+            <div style="font-size: 0.78rem; font-weight: bold; color: #0284c7;">DEPARTAMENTO DE RECURSOS HUMANOS Y ADMINISTRACIÓN</div>
+            <div style="font-size: 0.72rem; color: #64748b;">${clinic.address} | Tel: ${clinic.phone}</div>
+          </div>
+        </div>
+        <div style="text-align: right; font-size: 0.72rem; color: #475569;">
+          <strong>No. Comprobante:</strong><br>
+          <span style="font-family: monospace; font-size: 0.85rem; font-weight: bold; color: #0f172a;">${liq.id || 'LIQ-' + Date.now()}</span><br>
+          <span>Emisión: ${printDate}</span>
+        </div>
+      </div>
+
+      <!-- Título del Documento -->
+      <div style="text-align: center; margin-bottom: 15px; padding: 6px; background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px;">
+        <h3 style="margin: 0; font-size: 1.05rem; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px;">
+          RECIBO DE FINIQUITO Y LIQUIDACIÓN LABORAL
+        </h3>
+        <div style="font-size: 0.8rem; color: #475569; margin-top: 2px;">
+          Liquidación de Días Trabajados del Mes Corriente (${liq.monthName || 'Mes Actual'})
+        </div>
+      </div>
+
+      <!-- Datos del Colaborador -->
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 0.78rem;">
+        <tbody>
+          <tr>
+            <td style="padding: 4px 8px; border: 1px solid #cbd5e1; background: #f8fafc; width: 22%; font-weight: bold;">Colaborador:</td>
+            <td style="padding: 4px 8px; border: 1px solid #cbd5e1; width: 44%; font-weight: bold; color: #0f172a;">${liq.employeeName}</td>
+            <td style="padding: 4px 8px; border: 1px solid #cbd5e1; background: #f8fafc; width: 16%; font-weight: bold;">Código:</td>
+            <td style="padding: 4px 8px; border: 1px solid #cbd5e1; width: 18%; font-family: monospace; font-weight: bold;">${liq.employeeCode || 'EMP-S/C'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 8px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold;">Puesto / Cargo:</td>
+            <td style="padding: 4px 8px; border: 1px solid #cbd5e1;">${liq.employeePosition || 'Colaborador'}</td>
+            <td style="padding: 4px 8px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold;">Departamento:</td>
+            <td style="padding: 4px 8px; border: 1px solid #cbd5e1;">${liq.employeeDepartment || 'General'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 8px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold;">Fecha de Ingreso:</td>
+            <td style="padding: 4px 8px; border: 1px solid #cbd5e1;">${hireDateFormatted}</td>
+            <td style="padding: 4px 8px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold;">Fecha de Salida:</td>
+            <td style="padding: 4px 8px; border: 1px solid #cbd5e1; font-weight: bold; color: #b91c1c;">${exitDateFormatted}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 8px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold;">Motivo de Salida:</td>
+            <td colspan="3" style="padding: 4px 8px; border: 1px solid #cbd5e1; font-weight: 600; color: #0f172a;">
+              ${liq.reason || 'Liquidación por Días Trabajados'} ${liq.notes ? ` &bull; <span style="font-weight: normal; color: #475569;">(${liq.notes})</span>` : ''}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Desglose de Cálculo de Liquidación -->
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 0.8rem;">
+        <thead>
+          <tr style="background: #0f172a; color: #fff; text-transform: uppercase; font-size: 0.72rem;">
+            <th style="padding: 6px 10px; text-align: left; border: 1px solid #0f172a;">Concepto / Detalle del Cálculo</th>
+            <th style="padding: 6px 10px; text-align: center; border: 1px solid #0f172a; width: 120px;">Días / Base</th>
+            <th style="padding: 6px 10px; text-align: right; border: 1px solid #0f172a; width: 140px;">Monto (Q)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding: 6px 10px; border: 1px solid #cbd5e1;">
+              <strong>Sueldo Base Mensual Ordinario</strong>
+              <div style="font-size: 0.7rem; color: #64748b;">Salario diario calculado: Q${parseFloat(liq.dailySalary || 0).toFixed(2)} / día (base ${liq.daysInMonth || 30} días)</div>
+            </td>
+            <td style="padding: 6px 10px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace;">${liq.daysInMonth || 30} días</td>
+            <td style="padding: 6px 10px; border: 1px solid #cbd5e1; text-align: right; font-family: monospace;">Q${parseFloat(liq.baseSalary || 0).toFixed(2)}</td>
+          </tr>
+          <tr style="background: #f8fafc;">
+            <td style="padding: 6px 10px; border: 1px solid #cbd5e1;">
+              <strong>Días efectivamente laborados en el mes corriente</strong>
+              <div style="font-size: 0.7rem; color: #64748b;">Período laborado en ${liq.monthName || 'mes actual'}: ${liq.daysWorked} días</div>
+            </td>
+            <td style="padding: 6px 10px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-weight: bold; color: #0284c7;">${liq.daysWorked} días</td>
+            <td style="padding: 6px 10px; border: 1px solid #cbd5e1; text-align: right; font-family: monospace; font-weight: bold; color: #0f172a;">Q${parseFloat(liq.workedDaysAmount || 0).toFixed(2)}</td>
+          </tr>
+          ${parseFloat(liq.proportionalBonus || 0) > 0 ? `
+            <tr>
+              <td style="padding: 6px 10px; border: 1px solid #cbd5e1;">
+                <strong>Bonificación Incentivo Proporcional (Decreto 37-2001)</strong>
+                <div style="font-size: 0.7rem; color: #64748b;">Proporcional a ${liq.daysWorked} días trabajados</div>
+              </td>
+              <td style="padding: 6px 10px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace;">${liq.daysWorked} días</td>
+              <td style="padding: 6px 10px; border: 1px solid #cbd5e1; text-align: right; font-family: monospace; color: #16a34a;">Q${parseFloat(liq.proportionalBonus).toFixed(2)}</td>
+            </tr>
+          ` : ''}
+          ${parseFloat(liq.deductions || 0) > 0 ? `
+            <tr>
+              <td style="padding: 6px 10px; border: 1px solid #cbd5e1; color: #b91c1c;">
+                <strong>(-) Deducciones / Descuentos Autorizados</strong>
+                <div style="font-size: 0.7rem; color: #b91c1c;">Anticipos u otros descuentos aplicables</div>
+              </td>
+              <td style="padding: 6px 10px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; color: #b91c1c;">-</td>
+              <td style="padding: 6px 10px; border: 1px solid #cbd5e1; text-align: right; font-family: monospace; color: #b91c1c;">- Q${parseFloat(liq.deductions).toFixed(2)}</td>
+            </tr>
+          ` : ''}
+          <tr style="background: #f0fdf4; border-top: 2px solid #0f172a; font-weight: bold; font-size: 0.88rem;">
+            <td colspan="2" style="padding: 8px 10px; border: 1px solid #0f172a; text-align: right; text-transform: uppercase; color: #15803d;">
+              TOTAL LÍQUIDO A PAGAR (FINIQUITO):
+            </td>
+            <td style="padding: 8px 10px; border: 1px solid #0f172a; text-align: right; font-family: monospace; font-size: 0.95rem; color: #15803d;">
+              Q${parseFloat(liq.netAmount || 0).toFixed(2)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Cláusula de Finiquito y Descargo Laboral -->
+      <div style="margin-top: 14px; padding: 10px 12px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.72rem; color: #334155; line-height: 1.35; text-align: justify;">
+        <strong>DECLARACIÓN Y FINIQUITO:</strong>
+        Por medio del presente documento, yo <strong>${liq.employeeName}</strong>, con <strong>Código ${liq.employeeCode || 'EMP-S/C'}</strong>, declaro que he recibido a mi entera satisfacción de parte de <strong>${clinic.name || 'HOSPITAL PRIVADO MULTIMÉDICA SAYAXCHÉ'}</strong> la suma de <strong>Q${parseFloat(liq.netAmount || 0).toFixed(2)}</strong>, correspondiente a la liquidación de los días efectivamente trabajados en el presente mes (${liq.monthName || ''}) con motivo de mi egreso por <strong>${liq.reason || 'Baja Laboral'}</strong>. Declaro libre y expresamente que no se me adeuda cantidad alguna por concepto de salarios ordinarios del período laborado, extendiendo a la institución el más amplio, total y formal <strong>FINIQUITO LABORAL</strong> respecto a los conceptos aquí detallados.
+      </div>
+
+      <!-- Firmas de Responsabilidad -->
+      <div style="margin-top: 50px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; text-align: center; font-size: 0.74rem; color: #1e293b; page-break-inside: avoid;">
+        <div>
+          <div style="border-top: 1.5px solid #0f172a; width: 80%; margin: 0 auto 5px auto;"></div>
+          <strong>${liq.employeeName}</strong><br>
+          <span>Firma del Trabajador (Conforme)</span><br>
+          <span style="font-size: 0.7rem; color: #64748b;">DPI / CUI: ___________________________</span>
+        </div>
+        <div>
+          <div style="border-top: 1.5px solid #0f172a; width: 80%; margin: 0 auto 5px auto;"></div>
+          <strong>Recursos Humanos / Administración</strong><br>
+          <span>Hospital Privado Multimédica Sayaxché</span><br>
+          <span style="font-size: 0.7rem; color: #64748b;">Vo.Bo. y Sello Institucional</span>
+        </div>
+      </div>
+
+    </div>
+  `;
+
+  printActionBtn.onclick = () => window.print();
+  modal.style.display = 'flex';
 }
 
 export function renderBancosConciliacion(container, state) {
