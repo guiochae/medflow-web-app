@@ -15,13 +15,13 @@ export const SHIFT_TYPES = {
   'M/T': { code: 'M/T', name: 'Mañana + Tarde', hours: 16, schedule: '07:00 - 23:00', bg: '#d97706', color: '#ffffff', lightBg: 'rgba(217, 119, 6, 0.15)', desc: 'Turno Doble Diurno' },
   '18H': { code: '18H', name: 'Especial 18 Horas', hours: 18, schedule: 'Jornada Especial 18h', bg: '#ca8a04', color: '#ffffff', lightBg: 'rgba(202, 138, 4, 0.2)', desc: 'Turno Especial 18 Horas' },
   '24H': { code: '24H', name: 'Especial 24 Horas', hours: 24, schedule: 'Jornada Continua 24h', bg: '#ea580c', color: '#ffffff', lightBg: 'rgba(234, 88, 12, 0.2)', desc: 'Turno Especial 24 Horas' },
-  'D': { code: 'D', name: 'Día / Administrativo', hours: 8, schedule: '08:00 - 17:00', bg: '#6366f1', color: '#ffffff', lightBg: 'rgba(99, 102, 241, 0.15)', desc: 'Jornada Diurna Fija (8 Horas / Jefa)' },
+  'D': { code: 'D', name: 'Día / Administrativo', hours: 8, schedule: '08:00 - 17:00', bg: '#6366f1', color: '#ffffff', lightBg: 'rgba(99, 102, 241, 0.15)', desc: 'Jornada Diurna Fija (8 Horas / Administrativo)' },
   'P': { code: 'P', name: 'Permiso / Licencia', hours: 0, schedule: 'Permiso Oficial Autorizado', bg: '#db2777', color: '#ffffff', lightBg: 'rgba(219, 39, 119, 0.15)', desc: 'Permiso / Licencia' }
 };
 
-// Plantilla Maestra Oficial de Enfermería (Extraída del Roster Hospitalario de Sayaxché Petén)
+// Plantilla Maestra Oficial de Enfermería para el ROL DE TURNOS (Personal Asistencial Rotativo de Sayaxché Petén)
+// NOTA: Vanessa Morales está EXCLUIDA del rol rotativo por ser la Jefa del Departamento de Enfermería.
 export const DEFAULT_NURSING_ROSTER_SAMPLE = [
-  { name: 'VANESSA MORALES', role: 'ENFERMERA PROFESIONAL', isJefa: true, isFixed8h: true, shifts: ['D','D','M','L','D','D','D','D','D','M','L','D','D','D','D','D','M','L','D','D','D','D','D','M','L','D','D','D','D','D','L'] },
   { name: 'E. ALBERTO LUCAS', role: 'ENFERMERO', isJefa: false, isFixed8h: false, shifts: ['L','L','18H','24H','L','L','N','L','L','18H','24H','L','L','N','L','L','18H','24H','L','L','N','L','L','18H','24H','L','L','N','L','L','18H'] },
   { name: 'A.E. SONIA AX', role: 'AUXILIAR DE ENFERMERIA', isJefa: false, isFixed8h: false, shifts: ['L','M','N','T','N','L','M','N','T','L','L','M','N','T','N','L','M','T','M/T','L','L','N','L','M','N','T','N','L','L','N','L'] },
   { name: 'A.E. AURA CHOC', role: 'AUXILIAR DE ENFERMERIA', isJefa: false, isFixed8h: false, shifts: ['L','N','L','T','M/T','L','M','N','T','L','L','18H','M','L','L','L','L','M','T','M/T','L','L','N','L','L','M','N','T','N','L','L'] },
@@ -77,7 +77,7 @@ export function renderRrhhEnfermeria(container, state) {
           <span>👩‍⚕️</span> Gestión Departamento de Enfermería
         </h2>
         <p style="font-size: 0.8rem; color: var(--text-muted); margin: 2px 0 0 0;">
-          Rol mensual de turnos, matriz de idoneidad y equidad, flujo de cambio de turnos y permisos de jornada.
+          Rol mensual de turnos asistenciales, matriz de idoneidad y equidad, flujo de cambio de turnos y permisos de jornada.
         </p>
       </div>
 
@@ -154,27 +154,33 @@ function renderEnfermeriaRosterView(container, state) {
       for (let d = 1; d <= totalDays; d++) {
         rosterObj.schedule[sample.name][d] = (currentRosterMonth === '2026-10' && sample.shifts[d - 1]) 
           ? sample.shifts[d - 1] 
-          : (sample.isFixed8h ? 'D' : 'L');
+          : 'L';
       }
     });
 
     state.administracion_enfermeria_roles.push(rosterObj);
   }
 
-  const nursingStaff = getNursingEmployeesList(state);
+  // Asegurar que Vanessa Morales (Jefa de Depto) NO esté en el horario del rol
+  if (rosterObj.schedule && rosterObj.schedule['VANESSA MORALES']) {
+    delete rosterObj.schedule['VANESSA MORALES'];
+  }
 
-  nursingStaff.forEach(emp => {
+  // Obtener exclusivamente al personal asistencial rotativo (excluye a la Jefa de Depto)
+  const rosterStaff = getNursingRosterStaff(state);
+
+  rosterStaff.forEach(emp => {
     if (!rosterObj.schedule[emp.name]) {
       rosterObj.schedule[emp.name] = {};
       for (let d = 1; d <= totalDays; d++) {
-        rosterObj.schedule[emp.name][d] = isEmployeeJefa(emp) ? 'D' : 'L';
+        rosterObj.schedule[emp.name][d] = 'L';
       }
     }
   });
 
-  const fitnessIssues = evaluateRosterFitness(rosterObj.schedule, totalDays, nursingStaff);
+  const fitnessIssues = evaluateRosterFitness(rosterObj.schedule, totalDays, rosterStaff);
 
-  const dailyCoverage = { M: {}, T: {}, N: {}, '18H': {}, '24H': {}, 'M/T': {}, D: {} };
+  const dailyCoverage = { M: {}, T: {}, N: {}, '18H': {}, '24H': {}, 'M/T': {} };
   for (let d = 1; d <= totalDays; d++) {
     dailyCoverage.M[d] = 0;
     dailyCoverage.T[d] = 0;
@@ -182,9 +188,8 @@ function renderEnfermeriaRosterView(container, state) {
     dailyCoverage['18H'][d] = 0;
     dailyCoverage['24H'][d] = 0;
     dailyCoverage['M/T'][d] = 0;
-    dailyCoverage.D[d] = 0;
 
-    nursingStaff.forEach(emp => {
+    rosterStaff.forEach(emp => {
       const shift = rosterObj.schedule[emp.name]?.[d] || 'L';
       if (shift === 'M') dailyCoverage.M[d]++;
       else if (shift === 'T') dailyCoverage.T[d]++;
@@ -192,7 +197,6 @@ function renderEnfermeriaRosterView(container, state) {
       else if (shift === '18H') dailyCoverage['18H'][d]++;
       else if (shift === '24H') dailyCoverage['24H'][d]++;
       else if (shift === 'M/T') dailyCoverage['M/T'][d]++;
-      else if (shift === 'D') dailyCoverage.D[d]++;
     });
   }
 
@@ -217,7 +221,6 @@ function renderEnfermeriaRosterView(container, state) {
         <span style="background: #64748b; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">L: Libre</span>
         <span style="background: #ca8a04; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">18H</span>
         <span style="background: #ea580c; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">24H</span>
-        <span style="background: #6366f1; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">D: 8h</span>
         <span style="background: #db2777; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">P: Permiso</span>
       </div>
 
@@ -232,6 +235,15 @@ function renderEnfermeriaRosterView(container, state) {
           🖨️ Imprimir Rol Oficial
         </button>
       </div>
+    </div>
+
+    <!-- Banner Informativo de Jefatura -->
+    <div style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 6px; padding: 8px 14px; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: #c7d2fe;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span>👑</span>
+        <span><strong>Jefatura del Departamento:</strong> Vanessa Morales (Horario Administrativo Diurno 8h / Supervisión General - Fuera del Rol Asistencial).</span>
+      </div>
+      <span style="font-size: 0.72rem; color: #a5b4fc;">Rol Rotativo: ${rosterStaff.length} Enfermeros/as Operativos</span>
     </div>
 
     ${isInPlanningWindow && isNextMonth ? `
@@ -316,14 +328,13 @@ function renderEnfermeriaRosterView(container, state) {
           </tr>
         </thead>
         <tbody>
-          ${nursingStaff.map((emp) => {
+          ${rosterStaff.map((emp) => {
             const empSchedule = rosterObj.schedule[emp.name] || {};
-            const isJefa = isEmployeeJefa(emp);
 
             let countM = 0, countT = 0, countN = 0, countL = 0, countEsp = 0, totalHours = 0;
 
             for (let d = 1; d <= totalDays; d++) {
-              const shift = empSchedule[d] || (isJefa ? 'D' : 'L');
+              const shift = empSchedule[d] || 'L';
               if (shift === 'M') { countM++; totalHours += 8; }
               else if (shift === 'T') { countT++; totalHours += 8; }
               else if (shift === 'N') { countN++; totalHours += 12; }
@@ -336,13 +347,13 @@ function renderEnfermeriaRosterView(container, state) {
             }
 
             return `
-              <tr style="border-bottom: 1px solid rgba(255,255,255,0.06); ${isJefa ? 'background: rgba(99, 102, 241, 0.08); font-weight: bold;' : ''}" data-emp-name="${emp.name}">
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.06);" data-emp-name="${emp.name}">
                 
-                <td style="padding: 6px 10px; text-align: left; position: sticky; left: 0; background: ${isJefa ? '#1e1b4b' : '#0f172a'}; z-index: 4; border-right: 2px solid #334155; font-weight: bold; color: ${isJefa ? '#a5b4fc' : '#f8fafc'}; overflow: hidden; text-overflow: ellipsis;">
-                  ${isJefa ? '👑 ' : ''}${emp.name}
+                <td style="padding: 6px 10px; text-align: left; position: sticky; left: 0; background: #0f172a; z-index: 4; border-right: 2px solid #334155; font-weight: bold; color: #f8fafc; overflow: hidden; text-overflow: ellipsis;">
+                  ${emp.name}
                 </td>
 
-                <td style="padding: 6px 8px; text-align: left; position: sticky; left: 160px; background: ${isJefa ? '#1e1b4b' : '#0f172a'}; z-index: 4; border-right: 2px solid #334155; font-size: 0.68rem; color: ${isJefa ? '#c7d2fe' : 'var(--text-muted)'};">
+                <td style="padding: 6px 8px; text-align: left; position: sticky; left: 160px; background: #0f172a; z-index: 4; border-right: 2px solid #334155; font-size: 0.68rem; color: var(--text-muted);">
                   ${emp.position || emp.role || 'Enfermero/a'}
                 </td>
 
@@ -351,7 +362,7 @@ function renderEnfermeriaRosterView(container, state) {
                   const dateObj = new Date(yearNum, monthNum, d);
                   const dayOfWeek = dateObj.getDay();
                   const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
-                  const shiftCode = empSchedule[d] || (isJefa ? 'D' : 'L');
+                  const shiftCode = empSchedule[d] || 'L';
                   const shiftDef = SHIFT_TYPES[shiftCode] || SHIFT_TYPES['L'];
 
                   const prevShift = empSchedule[d - 1];
@@ -386,7 +397,7 @@ function renderEnfermeriaRosterView(container, state) {
             </td>
             ${Array.from({ length: totalDays }, (_, i) => {
               const d = i + 1;
-              const count = (dailyCoverage.M[d] || 0) + (dailyCoverage['M/T'][d] || 0) + (dailyCoverage.D[d] || 0);
+              const count = (dailyCoverage.M[d] || 0) + (dailyCoverage['M/T'][d] || 0);
               const isLow = count < 2;
               return `<td style="padding: 4px 1px; ${isLow ? 'color: #f87171; font-weight: 900;' : ''}">${count}</td>`;
             }).join('')}
@@ -436,7 +447,7 @@ function renderEnfermeriaRosterView(container, state) {
     });
   }
 
-  const cycleOrder = ['M', 'T', 'N', 'L', 'M/T', '18H', '24H', 'D', 'P'];
+  const cycleOrder = ['M', 'T', 'N', 'L', 'M/T', '18H', '24H', 'P'];
   container.querySelectorAll('.roster-cell').forEach(cell => {
     cell.addEventListener('click', () => {
       const empName = cell.getAttribute('data-emp');
@@ -456,7 +467,7 @@ function renderEnfermeriaRosterView(container, state) {
   if (btnAutofill) {
     btnAutofill.addEventListener('click', () => {
       if (confirm(`¿Desea autogenerar una distribución equitativa de turnos para ${currentMonthTitle}? Esto respetará los descansos reglamentarios post-guardia nocturna.`)) {
-        autogenerateEquitableRoster(rosterObj, totalDays, nursingStaff);
+        autogenerateEquitableRoster(rosterObj, totalDays, rosterStaff);
         saveAppState(state);
         alert(`✨ Rol optimizado y distribuido equitativamente para ${currentMonthTitle}.`);
         renderEnfermeriaRosterView(container, state);
@@ -486,7 +497,7 @@ function renderEnfermeriaRosterView(container, state) {
   const btnPrint = container.querySelector('#btn-roster-print');
   if (btnPrint) {
     btnPrint.addEventListener('click', () => {
-      printOfficialRosterDocument(rosterObj, totalDays, yearNum, monthNum, monthNames, dayLetters, nursingStaff, state);
+      printOfficialRosterDocument(rosterObj, totalDays, yearNum, monthNum, monthNames, dayLetters, rosterStaff, state);
     });
   }
 }
@@ -532,7 +543,7 @@ function renderEnfermeriaShiftChangesView(container, state) {
           👑 Jefa Depto. Enfermería
         </div>
         <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">
-          Usuario activo: <strong>${currentUser?.name || 'Enfermería'}</strong>
+          Operado por: <strong>Vanessa Morales</strong> (${currentUser?.name || 'Enfermería'})
         </div>
       </div>
 
@@ -614,7 +625,7 @@ function renderEnfermeriaShiftChangesView(container, state) {
                   </div>
                   ${change.reason ? `<div style="margin-top: 4px; color: var(--text-muted); font-size: 0.75rem;">💬 <em>"${change.reason}"</em></div>` : ''}
                   <div style="margin-top: 4px; font-size: 0.7rem; color: var(--text-muted);">
-                    Solicitado por: <strong>${change.requestedBy || 'Jefa de Servicio'}</strong> &bull; ${new Date(change.createdAt).toLocaleDateString('es-GT')}
+                    Solicitado por: <strong>${change.requestedBy || 'Vanessa Morales (Jefa de Servicio)'}</strong> &bull; ${new Date(change.createdAt).toLocaleDateString('es-GT')}
                     ${change.authorizedBy ? `<br>Autorizado por: <strong style="color: #4ade80;">${change.authorizedBy}</strong>` : ''}
                   </div>
                 </div>
@@ -726,6 +737,9 @@ function renderEnfermeriaPermitsView(container, state) {
         <h3 style="font-size: 1rem; color: var(--accent-primary); margin-bottom: 1rem; display: flex; align-items: center; gap: 8px;">
           <span>📝</span> Solicitar Permiso / Licencia
         </h3>
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: -6px; margin-bottom: 12px;">
+          Aplica para personal de jornada fija (8 horas) y Jefa de Departamento de Enfermería.
+        </p>
         
         <form id="form-nursing-permit" style="display: flex; flex-direction: column; gap: 12px;">
           <div class="form-group">
@@ -871,7 +885,7 @@ function renderEnfermeriaPermitsView(container, state) {
         notes: notes,
         status: 'Pendiente',
         createdAt: new Date().toISOString(),
-        createdBy: currentUser?.name || 'Jefa de Enfermería'
+        createdBy: currentUser?.name || 'Vanessa Morales (Jefa de Enfermería)'
       };
 
       state.administracion_enfermeria_permisos.unshift(newPermit);
@@ -934,7 +948,7 @@ function renderEnfermeriaStaffDirectoryView(container, state) {
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 10px;">
         <div>
           <h3 style="font-size: 1rem; color: var(--accent-primary); margin: 0;">👥 Plantilla Oficial de Personal de Enfermería</h3>
-          <span style="font-size: 0.78rem; color: var(--text-muted);">${staff.length} Colaboradores Activos en el Departamento</span>
+          <span style="font-size: 0.78rem; color: var(--text-muted);">${staff.length} Integrantes Registrados en el Departamento</span>
         </div>
       </div>
 
@@ -942,19 +956,19 @@ function renderEnfermeriaStaffDirectoryView(container, state) {
         ${staff.map(emp => {
           const isJefa = isEmployeeJefa(emp);
           return `
-            <div style="background: rgba(255,255,255,0.02); border: 1px solid ${isJefa ? 'rgba(99, 102, 241, 0.4)' : 'var(--border-color)'}; border-radius: 8px; padding: 12px; display: flex; gap: 12px; align-items: center;">
+            <div style="background: rgba(255,255,255,0.02); border: 1px solid ${isJefa ? 'rgba(99, 102, 241, 0.5)' : 'var(--border-color)'}; border-radius: 8px; padding: 12px; display: flex; gap: 12px; align-items: center; ${isJefa ? 'background: rgba(99, 102, 241, 0.06);' : ''}">
               <div style="width: 44px; height: 44px; border-radius: 50%; background: ${isJefa ? '#4338ca' : '#0369a1'}; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0; font-weight: bold;">
                 ${isJefa ? '👑' : '👩‍⚕️'}
               </div>
               <div style="flex: 1; overflow: hidden;">
                 <div style="font-weight: bold; font-size: 0.88rem; color: #fff; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">
-                  ${emp.name}
+                  ${isJefa ? '👑 ' : ''}${emp.name}
                 </div>
                 <div style="font-size: 0.75rem; color: ${isJefa ? '#a5b4fc' : 'var(--accent-primary)'}; font-weight: 600;">
                   ${emp.position || emp.role || 'Enfermería'}
                 </div>
                 <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">
-                  Código: <strong style="color: #38bdf8; font-family: monospace;">${emp.employee_code || 'EMP-S/C'}</strong> &bull; ${emp.whatsapp_number || emp.phone || 'Sin tel.'}
+                  ${isJefa ? '<span style="color: #818cf8; font-weight: bold;">Jornada Diurna Fija (8h) &bull; Fuera del Rol Asistencial</span>' : `Código: <strong style="color: #38bdf8; font-family: monospace;">${emp.employee_code || 'EMP-S/C'}</strong> &bull; ${emp.shift || 'Rotativo'}`}
                 </div>
               </div>
             </div>
@@ -967,6 +981,7 @@ function renderEnfermeriaStaffDirectoryView(container, state) {
 
 function openNewShiftChangeModal(state, onSavedCallback) {
   const staff = getNursingEmployeesList(state);
+  // Regla 4: La Jefa del Departamento no puede realizar cambios de turno
   const eligibleTurnPersonnel = staff.filter(e => !isEmployeeJefa(e));
 
   const existingVouchers = (state.administracion_enfermeria_cambios || []).map(c => parseInt(c.voucherNumber || '0', 10)).filter(n => !isNaN(n));
@@ -1056,7 +1071,7 @@ function openNewShiftChangeModal(state, onSavedCallback) {
         </div>
 
         <div style="background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.15); border-radius: 6px; padding: 10px; font-size: 0.72rem; color: var(--text-muted);">
-          ℹ️ Esta solicitud generará la Boleta Oficial con las 4 firmas requeridas: <strong>Persona Responsable</strong>, <strong>Persona Reemplazante</strong>, <strong>Jefa de Servicio</strong> y <strong>Autorización AD</strong>.
+          ℹ️ Esta solicitud generará la Boleta Oficial con las 4 firmas requeridas: <strong>Persona Responsable</strong>, <strong>Persona Reemplazante</strong>, <strong>Jefa de Servicio (Vanessa Morales)</strong> y <strong>Autorización AD</strong>.
         </div>
 
         <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;">
@@ -1108,7 +1123,7 @@ function openNewShiftChangeModal(state, onSavedCallback) {
       replacementEmpName: replEmp,
       reason: reasonVal,
       status: 'Pendiente',
-      requestedBy: state.currentUser?.name || 'Vanessa Morales (Jefa de Servicio)',
+      requestedBy: 'Vanessa Morales (Jefa de Departamento)',
       createdAt: new Date().toISOString()
     };
 
@@ -1291,7 +1306,7 @@ export function printShiftChangeVoucher(change, state) {
   printWindow.document.close();
 }
 
-export function printOfficialRosterDocument(rosterObj, totalDays, yearNum, monthNum, monthNames, dayLetters, nursingStaff, state) {
+export function printOfficialRosterDocument(rosterObj, totalDays, yearNum, monthNum, monthNames, dayLetters, rosterStaff, state) {
   const printWindow = window.open('', '_blank', 'width=1100,height=750');
   if (!printWindow) {
     alert("Por favor habilite las ventanas emergentes para imprimir el rol oficial.");
@@ -1362,7 +1377,7 @@ export function printOfficialRosterDocument(rosterObj, totalDays, yearNum, month
         }
         .sign-box {
           text-align: center;
-          width: 250px;
+          width: 260px;
           border-top: 1px solid #000;
           padding-top: 4px;
           font-size: 9px;
@@ -1399,7 +1414,7 @@ export function printOfficialRosterDocument(rosterObj, totalDays, yearNum, month
           </tr>
         </thead>
         <tbody>
-          ${nursingStaff.map(emp => {
+          ${rosterStaff.map(emp => {
             const sched = rosterObj.schedule[emp.name] || {};
             let cM=0, cT=0, cN=0, cL=0, cEsp=0, h=0;
             for (let d=1; d<=totalDays; d++) {
@@ -1411,7 +1426,6 @@ export function printOfficialRosterDocument(rosterObj, totalDays, yearNum, month
               else if (s==='M/T') { cM++; cT++; h+=16; }
               else if (s==='18H') { cEsp++; h+=18; }
               else if (s==='24H') { cEsp++; h+=24; }
-              else if (s==='D') { h+=8; }
             }
             return `
               <tr>
@@ -1433,7 +1447,7 @@ export function printOfficialRosterDocument(rosterObj, totalDays, yearNum, month
       <div class="signatures">
         <div class="sign-box">
           VANESSA MORALES<br>
-          ENFERMERA PROFESIONAL / JEFA DE SERVICIO
+          JEFA DEL DEPARTAMENTO DE ENFERMERÍA
         </div>
         <div class="sign-box">
           DIRECCIÓN MÉDICA / ADMINISTRACIÓN<br>
@@ -1535,19 +1549,10 @@ function autogenerateEquitableRoster(rosterObj, totalDays, staff) {
   const rotationCycle = ['M', 'T', 'N', 'L', 'M', 'T', 'L'];
 
   staff.forEach((emp, empIdx) => {
-    const isJefa = isEmployeeJefa(emp);
     rosterObj.schedule[emp.name] = {};
-
-    if (isJefa) {
-      for (let d = 1; d <= totalDays; d++) {
-        const dayOfWeek = (d % 7);
-        rosterObj.schedule[emp.name][d] = (dayOfWeek === 0 || d % 7 === 4) ? 'L' : 'D';
-      }
-    } else {
-      for (let d = 1; d <= totalDays; d++) {
-        const cycleIdx = (d + empIdx * 2) % rotationCycle.length;
-        rosterObj.schedule[emp.name][d] = rotationCycle[cycleIdx];
-      }
+    for (let d = 1; d <= totalDays; d++) {
+      const cycleIdx = (d + empIdx * 2) % rotationCycle.length;
+      rosterObj.schedule[emp.name][d] = rotationCycle[cycleIdx];
     }
   });
 }
@@ -1598,25 +1603,58 @@ export function getNursingEmployeesList(state) {
   return nursing.length > 0 ? nursing : emps;
 }
 
+export function getNursingRosterStaff(state) {
+  // Personal asistencial rotativo que integra el Rol de Turnos (Excluye expresamente a la Jefa del Departamento)
+  return getNursingEmployeesList(state).filter(emp => !isEmployeeJefa(emp));
+}
+
 export function ensureNursingEmployeesSeeded(state) {
   state.administracion_employees = state.administracion_employees || [];
   
+  // 1. Asegurar a Vanessa Morales como Jefa del Departamento de Enfermería
+  const jefaExists = state.administracion_employees.some(e => e.name && e.name.trim().toLowerCase().includes('vanessa morales'));
+  if (!jefaExists) {
+    state.administracion_employees.unshift({
+      id: 'emp-enf-jefa-1',
+      employee_code: 'EMP-010',
+      name: 'VANESSA MORALES',
+      position: 'JEFA DE DEPARTAMENTO DE ENFERMERIA',
+      department: 'Enfermería',
+      shift: 'Administrativo / Diurno (8 Horas)',
+      salary: 6500.00,
+      phone: '+502 5555-0100',
+      whatsapp_number: '+502 5555-0100',
+      status: 'Activo',
+      isJefa: true,
+      isFixed8h: true,
+      hireDate: '2023-01-15'
+    });
+  } else {
+    const jefaEmp = state.administracion_employees.find(e => e.name && e.name.trim().toLowerCase().includes('vanessa morales'));
+    if (jefaEmp) {
+      jefaEmp.isJefa = true;
+      jefaEmp.isFixed8h = true;
+      jefaEmp.position = 'JEFA DE DEPARTAMENTO DE ENFERMERIA';
+    }
+  }
+
+  // 2. Asegurar al personal de turno rotativo
   DEFAULT_NURSING_ROSTER_SAMPLE.forEach((sample, idx) => {
     const exists = state.administracion_employees.some(e => e.name && e.name.trim().toLowerCase() === sample.name.toLowerCase());
     if (!exists) {
       state.administracion_employees.push({
         id: `emp-enf-${idx + 1}`,
-        employee_code: `EMP-0${String(10 + idx + 1)}`,
+        employee_code: `EMP-0${String(11 + idx)}`,
         name: sample.name,
         position: sample.role,
         department: 'Enfermería',
-        shift: sample.isFixed8h ? 'Matutino (8 Horas)' : 'Rotativo Asistencial',
-        salary: sample.isJefa ? 6500.00 : 4200.00,
-        phone: '+502 5555-010' + idx,
-        whatsapp_number: '+502 5555-010' + idx,
+        shift: 'Rotativo Asistencial',
+        salary: 4200.00,
+        phone: '+502 5555-010' + (idx + 1),
+        whatsapp_number: '+502 5555-010' + (idx + 1),
         status: 'Activo',
-        isJefa: sample.isJefa,
-        isFixed8h: sample.isFixed8h,
+        isJefa: false,
+        isFixed8h: false,
         hireDate: '2024-01-15'
       });
     }
