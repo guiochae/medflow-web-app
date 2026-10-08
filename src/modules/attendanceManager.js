@@ -1,4 +1,6 @@
 import { saveAppState } from '../main.js';
+import { db, firestoreState, saveStateToLocalCache } from '../firebase.js';
+import { doc, getDoc, getDocs, collection } from 'firebase/firestore';
 
 // =============================================================
 // 🕒 SUBMÓDULO: CONTROL Y GESTIÓN DE ASISTENCIAS CON AUDITORÍA
@@ -102,6 +104,9 @@ export function renderRrhhAsistencia(container, state) {
           🔍 Filtros de Búsqueda y Auditoría
         </h3>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="btn btn-secondary btn-small" id="btn-refresh-cloud-asistencias" style="padding: 6px 12px; font-weight: 600; color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); display: inline-flex; align-items: center; gap: 5px; background: rgba(56, 189, 248, 0.08);" title="Forzar sincronización y consultar marcajes en tiempo real desde la nube">
+            <span>🔄</span> Sincronizar Nube
+          </button>
           <a href="?view=kiosko" target="_blank" class="btn btn-secondary btn-small" style="padding: 6px 12px; font-weight: 600; color: #00f2fe; text-decoration: none; border: 1px solid rgba(0, 242, 254, 0.4); display: inline-flex; align-items: center; gap: 5px; background: rgba(0,242,254,0.08);" title="Abrir la terminal perimetral aislada en pantalla completa">
             <span>🖥️</span> Abrir Terminal Kiosko
           </a>
@@ -694,4 +699,73 @@ export function renderRrhhAsistencia(container, state) {
       }
     });
   });
+
+  // Bind Sincronizar Nube
+  const btnRefreshCloud = container.querySelector('#btn-refresh-cloud-asistencias');
+  if (btnRefreshCloud) {
+    btnRefreshCloud.addEventListener('click', async () => {
+      btnRefreshCloud.disabled = true;
+      btnRefreshCloud.innerHTML = '<span>⏳</span> Sincronizando...';
+      try {
+        const fetchedAttendances = [];
+        const seen = new Set();
+
+        // 1. Leer catálogo consolidado desde Firestore
+        try {
+          const catSnap = await getDoc(doc(db, 'multimedica', 'catalog_administracion_asistencias'));
+          if (catSnap.exists()) {
+            const catData = catSnap.data();
+            (catData.items || []).forEach(item => {
+              if (item && item.id && !seen.has(item.id)) {
+                seen.add(item.id);
+                fetchedAttendances.push(item);
+              }
+            });
+          }
+        } catch (e) {
+          console.warn("Aviso leyendo catálogo en refresco:", e);
+        }
+
+        // 2. Leer documentos individuales recientes de la colección
+        try {
+          const querySnap = await getDocs(collection(db, 'multimedica'));
+          querySnap.forEach(d => {
+            const data = d.data();
+            if (data && data._collectionType === 'administracion_asistencias') {
+              const item = { id: d.id, ...data };
+              delete item._collectionType;
+              if (!seen.has(item.id)) {
+                seen.add(item.id);
+                fetchedAttendances.push(item);
+              }
+            }
+          });
+        } catch (e) {
+          console.warn("Aviso leyendo docs individuales:", e);
+        }
+
+        // 3. Fusionar con registros en memoria local
+        (state.administracion_asistencias || []).forEach(item => {
+          if (item && item.id && !seen.has(item.id)) {
+            seen.add(item.id);
+            fetchedAttendances.push(item);
+          }
+        });
+
+        fetchedAttendances.sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date));
+
+        state.administracion_asistencias = fetchedAttendances;
+        if (firestoreState) {
+          firestoreState.administracion_asistencias = fetchedAttendances;
+        }
+        saveStateToLocalCache();
+
+        renderRrhhAsistencia(container, state);
+      } catch (err) {
+        alert("Error al sincronizar con la nube: " + (err.message || err));
+        btnRefreshCloud.disabled = false;
+        btnRefreshCloud.innerHTML = '<span>🔄</span> Sincronizar Nube';
+      }
+    });
+  }
 }

@@ -582,7 +582,19 @@ export function initRealtimeFirestore(onFirstLoad) {
       firestoreState.administracion_nominas = nominas;
       firestoreState.administracion_bancos = bancos;
       firestoreState.administracion_activos_fijos = activosFijos;
-      firestoreState.administracion_asistencias = asistencias;
+
+      // Deduplicar asistencias por id y ordenar cronológicamente descendente
+      const uniqueAsistencias = [];
+      const seenAttIds = new Set();
+      asistencias.forEach(att => {
+        if (att && att.id && !seenAttIds.has(att.id)) {
+          seenAttIds.add(att.id);
+          uniqueAsistencias.push(att);
+        }
+      });
+      uniqueAsistencias.sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date));
+
+      firestoreState.administracion_asistencias = uniqueAsistencias;
       firestoreState.administracion_asistencias_audit = asistenciasAudit;
       firestoreState.administracion_enfermeria_roles = enfermeriaRoles;
       firestoreState.administracion_enfermeria_cambios = enfermeriaCambios;
@@ -833,7 +845,19 @@ export function initRealtimeFirestore(onFirstLoad) {
           firestoreState.administracion_nominas = nominas;
           firestoreState.administracion_bancos = bancos;
           firestoreState.administracion_activos_fijos = activosFijos;
-          firestoreState.administracion_asistencias = asistencias;
+
+          // Deduplicar asistencias en fallback
+          const uniqueAsistenciasFallback = [];
+          const seenAttIdsFallback = new Set();
+          asistencias.forEach(att => {
+            if (att && att.id && !seenAttIdsFallback.has(att.id)) {
+              seenAttIdsFallback.add(att.id);
+              uniqueAsistenciasFallback.push(att);
+            }
+          });
+          uniqueAsistenciasFallback.sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date));
+
+          firestoreState.administracion_asistencias = uniqueAsistenciasFallback;
           firestoreState.administracion_asistencias_audit = asistenciasAudit;
           firestoreState.external_doctors = doctors;
           firestoreState.accounts_payable = payables;

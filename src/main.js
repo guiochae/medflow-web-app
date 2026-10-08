@@ -619,6 +619,14 @@ export async function saveAppState(state) {
 
     // Sincronizar Asistencias y Marcajes de Personal
     if (state.administracion_asistencias && Array.isArray(state.administracion_asistencias)) {
+      state.administracion_asistencias.forEach(a => {
+        if (a && a.id) {
+          const prevA = lastSyncedState && lastSyncedState.administracion_asistencias && lastSyncedState.administracion_asistencias.find(x => x.id === a.id);
+          if (!prevA || JSON.stringify(prevA) !== JSON.stringify(a)) {
+            addWriteToBatch('administracion_asistencias', a.id, a);
+          }
+        }
+      });
       const prevAsis = lastSyncedState && lastSyncedState.administracion_asistencias;
       if (!prevAsis || JSON.stringify(prevAsis) !== JSON.stringify(state.administracion_asistencias)) {
         const docRef = doc(db, 'multimedica', 'catalog_administracion_asistencias');

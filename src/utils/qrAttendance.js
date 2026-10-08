@@ -2,7 +2,7 @@
 import QRCode from 'qrcode';
 import { saveAppState } from '../main.js';
 import { db, firestoreState, saveStateToLocalCache } from '../firebase.js';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, getDocs, collection } from 'firebase/firestore';
 
 const QR_SECRET = 'LUGAMED_ATTENDANCE_SECRET_2026_TOTP';
 const TOKEN_WINDOW_SECONDS = 30; // Rotación cada 30 segundos
@@ -176,11 +176,15 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
     }
   }
 
-  // 3. Buscar por coincidencia exacta, estándar o numérica
+  // 3. Buscar por coincidencia exacta, estándar, numérica, DPI o teléfono
   let employee = (state.administracion_employees || []).find(e => {
     if (!e) return false;
     const eCode = e.employee_code ? String(e.employee_code).trim().toUpperCase() : '';
     const eId = e.id ? String(e.id).trim().toUpperCase() : '';
+    const eDpi = e.dpi ? String(e.dpi).replace(/\s+/g, '').trim() : '';
+    const ePhone = e.phone ? String(e.phone).replace(/\D+/g, '') : '';
+    const cleanRawInput = rawInput.replace(/\s+/g, '');
+    const numOnly = rawInput.replace(/\D+/g, '');
 
     if (eCode === standardCode || eCode === rawInputUpper || eId === rawInputUpper) return true;
 
@@ -188,10 +192,14 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
       const eNumMatch = eCode.match(/^EMP[-_\s]*0*(\d+)$/i) || eCode.match(/^0*(\d+)$/);
       if (eNumMatch && eNumMatch[1] && parseInt(eNumMatch[1], 10) === codeNum) return true;
     }
+
+    if (cleanRawInput && eDpi && (eDpi === cleanRawInput || eDpi.endsWith(cleanRawInput))) return true;
+    if (numOnly.length >= 7 && ePhone && (ePhone === numOnly || ePhone.endsWith(numOnly))) return true;
+
     return false;
   });
 
-  // Búsqueda alternativa por nombre exacto si el código no coincide
+  // Búsqueda alternativa por coincidencia de nombre si el código no coincide
   if (!employee) {
     const rawInputLower = rawInput.toLowerCase();
     employee = (state.administracion_employees || []).find(e => 
@@ -209,7 +217,7 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
   if (employee.status && employee.status !== 'Activo') {
     return { 
       success: false, 
-      error: `El colaborador ${employee.name} (${employee.employee_code || cleanCode}) se encuentra en estado "${employee.status}". No puede marcar asistencia.` 
+      error: `El colaborador ${employee.name} (${employee.employee_code || standardCode}) se encuentra en estado "${employee.status}". No puede marcar asistencia.` 
     };
   }
 
@@ -279,9 +287,9 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
   }
 
   const newAttendance = {
-    id: 'att-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+    id: 'att-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
     employee_id: employee.id,
-    employee_code: employee.employee_code,
+    employee_code: employee.employee_code || standardCode,
     employee_name: employee.name,
     department: employee.department || employee.specialty || 'General',
     shift: employee.shift || 'Matutino',
@@ -300,6 +308,7 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
     updated_at: nowIso
   };
 
+  // Agregar al inicio de la lista local
   state.administracion_asistencias.unshift(newAttendance);
 
   // Sincronizar en memoria global y caché local inmediatamente
@@ -308,15 +317,36 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
   }
   saveStateToLocalCache();
 
-  // Persistir en Firestore de forma directa y asíncrona (non-blocking) para respuesta en 0 ms
+  // 4. Guardar de forma atómica y esperada en Firestore
   try {
-    const docRef = doc(db, 'multimedica', 'catalog_administracion_asistencias');
-    setDoc(docRef, { _collectionType: 'catalog_administracion_asistencias', items: state.administracion_asistencias }, { merge: true }).catch(console.warn);
-
+    // 4.1 Guardar documento individual independiente (nunca sobreescribe a otros)
     const indRef = doc(db, 'multimedica', newAttendance.id);
-    setDoc(indRef, { ...newAttendance, _collectionType: 'administracion_asistencias' }, { merge: true }).catch(console.warn);
+    await setDoc(indRef, { ...newAttendance, _collectionType: 'administracion_asistencias' }, { merge: true });
+
+    // 4.2 Actualización no destructiva del catálogo consolidado
+    try {
+      let mergedItems = [...state.administracion_asistencias];
+      const catSnap = await getDoc(doc(db, 'multimedica', 'catalog_administracion_asistencias'));
+      if (catSnap.exists()) {
+        const catData = catSnap.data();
+        const existingItems = catData.items || [];
+        const seen = new Set();
+        mergedItems = [newAttendance, ...existingItems, ...state.administracion_asistencias].filter(item => {
+          if (!item || !item.id || seen.has(item.id)) return false;
+          seen.add(item.id);
+          return true;
+        });
+        mergedItems.sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date));
+        state.administracion_asistencias = mergedItems;
+        if (firestoreState) firestoreState.administracion_asistencias = mergedItems;
+      }
+      const docRef = doc(db, 'multimedica', 'catalog_administracion_asistencias');
+      await setDoc(docRef, { _collectionType: 'catalog_administracion_asistencias', items: mergedItems.slice(0, 1000) }, { merge: true });
+    } catch (catErr) {
+      console.warn("Aviso actualizando catálogo central:", catErr);
+    }
   } catch (err) {
-    console.warn("Aviso guardando marcaje en Firestore:", err);
+    console.error("Error guardando marcaje en Firestore:", err);
   }
 
   // Notificar sincronización general en segundo plano
@@ -331,3 +361,4 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
     employee: employee
   };
 }
+
