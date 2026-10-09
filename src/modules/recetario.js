@@ -201,6 +201,8 @@ function formatStockFriendly(stock, factor, presentacion = 'Caja', unidadDispens
 
 // Lista temporal de medicamentos agregados a la receta en curso
 let currentPrescriptionMedicines = [];
+let activeEditingRecipeId = null; // ID de la receta que se está editando (null si es nueva receta)
+let activeEditingMedIndex = null; // Índice del medicamento dentro de la receta que se está modificando en el formulario
 
 function getBMICategory(bmi) {
   const val = parseFloat(bmi);
@@ -415,6 +417,14 @@ function selectPatient(patientId) {
   const currentUser = state.currentUser;
   let patient = state.patients.find(p => p.id === patientId);
 
+  // Si cambia de paciente, limpiar modo edición de receta
+  const currentActiveId = getActivePatientId();
+  if (currentActiveId !== patientId) {
+    activeEditingRecipeId = null;
+    activeEditingMedIndex = null;
+    currentPrescriptionMedicines = [];
+  }
+
   // Validar acceso si el usuario es médico (incluyendo Medico 1, Medico 2, Medico 3, etc.)
   const roleNormSel = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const isDoctorSel = roleNormSel.startsWith('medico');
@@ -430,7 +440,7 @@ function selectPatient(patientId) {
   });
 
   setActivePatientId(patientId);
-  renderPatientList(document.getElementById('recipe-patient-search').value);
+  renderPatientList(document.getElementById('recipe-patient-search')?.value || '');
 
   if (!patient) {
     showPlaceholder();
@@ -449,6 +459,42 @@ function selectPatient(patientId) {
 
   // Renderizar generador de recetas
   renderRecipeBuilder(patient, doctors);
+}
+
+// Iniciar edición de una receta previamente emitida
+export function startEditingRecipe(patient, recipe) {
+  if (!patient || !recipe) return;
+
+  const state = getAppState();
+  const activeId = getActivePatientId();
+  if (activeId !== patient.id) {
+    setActivePatientId(patient.id);
+  }
+
+  activeEditingRecipeId = recipe.id;
+  activeEditingMedIndex = null;
+  currentPrescriptionMedicines = JSON.parse(JSON.stringify(recipe.medicines || []));
+
+  // Ocultar modal de vista preliminar si estaba abierto
+  const previewModal = document.getElementById('prescription-print-modal');
+  if (previewModal) previewModal.style.display = 'none';
+
+  const doctors = state.users.filter(u => {
+    const r = String(u.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return r === 'medico' || r === 'medico 1' || r === 'medico 2' || r === 'medico 3';
+  });
+
+  renderPatientList(document.getElementById('recipe-patient-search')?.value || '');
+  renderRecipeHistory(patient);
+  renderRecipeBuilder(patient, doctors);
+
+  // Desplazar suavemente hacia el generador
+  setTimeout(() => {
+    const builderArea = document.getElementById('recipe-builder-area');
+    if (builderArea) {
+      builderArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, 100);
 }
 
 // Mostrar aviso cuando no hay paciente seleccionado
@@ -532,7 +578,14 @@ function renderRecipeHistory(patient) {
 
   patient.prescriptions.forEach(r => {
     const li = document.createElement('li');
-    li.className = 'history-card';
+    const isCurrentlyEditing = activeEditingRecipeId === r.id;
+    li.className = `history-card ${isCurrentlyEditing ? 'selected' : ''}`;
+    if (isCurrentlyEditing) {
+      li.style.borderColor = '#f59e0b';
+      li.style.borderLeft = '4px solid #f59e0b';
+      li.style.background = 'rgba(245, 158, 11, 0.08)';
+    }
+
     let dateFormatted = r.date || 'Reciente';
     try {
       if (r.date && !isNaN(new Date(r.date).getTime())) {
@@ -545,11 +598,14 @@ function renderRecipeHistory(patient) {
 
     li.innerHTML = `
       <div class="history-card-header" style="position: relative; display: flex; justify-content: space-between; align-items: center;">
-        <span>${dateFormatted}</span>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span>${medsCount} med(s)</span>
+        <span style="font-weight: 600;">${dateFormatted} ${r.updated_at ? '<small style="color: #f59e0b; font-size: 0.7rem;">(Modificada)</small>' : ''}</span>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="font-size: 0.75rem; color: var(--text-muted);">${medsCount} med(s)</span>
+          <button type="button" class="btn-edit-recipe-card" data-id="${r.id}" style="background: rgba(0, 242, 254, 0.12); border: 1px solid rgba(0, 242, 254, 0.4); border-radius: 4px; color: #00f2fe; cursor: pointer; padding: 2px 7px; font-size: 0.78rem; font-weight: 600; display: inline-flex; align-items: center; gap: 3px;" title="Modificar o editar medicamentos de esta receta">
+            <span>✏️</span> Editar
+          </button>
           ${isAdminUser() ? `
-            <button class="btn-delete-recipe" data-id="${r.id}" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 2px; font-size: 0.95rem; line-height: 1;" title="Eliminar Receta">🗑️</button>
+            <button type="button" class="btn-delete-recipe" data-id="${r.id}" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 2px; font-size: 0.95rem; line-height: 1;" title="Eliminar Receta">🗑️</button>
           ` : ''}
         </div>
       </div>
@@ -558,6 +614,14 @@ function renderRecipeHistory(patient) {
         <strong>Medicamentos:</strong> ${medsList}
       </div>
     `;
+
+    const editBtn = li.querySelector('.btn-edit-recipe-card');
+    if (editBtn) {
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        startEditingRecipe(patient, r);
+      });
+    }
 
     const delBtn = li.querySelector('.btn-delete-recipe');
     if (delBtn) {
@@ -568,6 +632,11 @@ function renderRecipeHistory(patient) {
           const stateObj = getAppState();
           const pObj = stateObj.patients.find(p => p.id === patient.id);
           if (pObj) {
+            if (activeEditingRecipeId === r.id) {
+              activeEditingRecipeId = null;
+              activeEditingMedIndex = null;
+              currentPrescriptionMedicines = [];
+            }
             // Eliminar la receta
             pObj.prescriptions = (pObj.prescriptions || []).filter(item => item.id !== r.id);
             // Eliminar cobro asociado de farmacia (si existe en el historial de facturación)
@@ -578,6 +647,7 @@ function renderRecipeHistory(patient) {
             patient.prescriptions = pObj.prescriptions;
             patient.billingHistory = pObj.billingHistory;
             renderRecipeHistory(patient);
+            renderRecipeBuilder(patient, stateObj.users.filter(u => String(u.role || '').toLowerCase().startsWith('medico')));
           }
         }
       });
@@ -608,51 +678,112 @@ function renderRecipeBuilder(patient, doctors) {
     return;
   }
 
-  // Limpiar lista temporal
-  currentPrescriptionMedicines = [];
-  let activeSelectedRecipeMed = null;
-
-  // Verificar si hay medicamentos y médico precargados desde el asistente de consulta
-  const draftMeds = sessionStorage.getItem('medflow_prescription_draft');
-  const draftDoctor = sessionStorage.getItem('medflow_doctor_draft');
-  const draftInds = sessionStorage.getItem('medflow_prescription_indications_draft') || "";
-  
-  if (draftMeds) {
-    try {
-      currentPrescriptionMedicines = JSON.parse(draftMeds);
-      sessionStorage.removeItem('medflow_prescription_draft');
-    } catch (e) {
-      console.error("Error parsing draft medicines:", e);
+  // Verificar si estamos en modo edición de receta existente
+  let editingRecipe = null;
+  if (activeEditingRecipeId) {
+    editingRecipe = (patient.prescriptions || []).find(r => r.id === activeEditingRecipeId);
+    if (!editingRecipe) {
+      activeEditingRecipeId = null;
+      activeEditingMedIndex = null;
+      currentPrescriptionMedicines = [];
     }
   }
 
-  if (draftDoctor) {
-    sessionStorage.removeItem('medflow_doctor_draft');
+  // Si no está en edición, verificar borradores desde asistente de consulta
+  if (!editingRecipe) {
+    const draftMeds = sessionStorage.getItem('medflow_prescription_draft');
+    const draftDoctor = sessionStorage.getItem('medflow_doctor_draft');
+    
+    if (draftMeds) {
+      try {
+        currentPrescriptionMedicines = JSON.parse(draftMeds);
+        sessionStorage.removeItem('medflow_prescription_draft');
+      } catch (e) {
+        console.error("Error parsing draft medicines:", e);
+      }
+    }
+
+    if (draftDoctor) {
+      sessionStorage.removeItem('medflow_doctor_draft');
+    }
+  } else {
+    // En modo edición, si la lista en memoria está vacía, cargar los medicamentos de la receta
+    if (!currentPrescriptionMedicines || currentPrescriptionMedicines.length === 0) {
+      currentPrescriptionMedicines = JSON.parse(JSON.stringify(editingRecipe.medicines || []));
+    }
   }
 
+  let activeSelectedRecipeMed = null;
+  const draftInds = sessionStorage.getItem('medflow_prescription_indications_draft') || "";
   if (sessionStorage.getItem('medflow_prescription_indications_draft')) {
     sessionStorage.removeItem('medflow_prescription_indications_draft');
   }
 
+  const initialIndications = editingRecipe ? (editingRecipe.indications || '') : draftInds;
   const vitalsHeaderHtml = getPatientVitalsHeaderHtml(patient);
 
   container.innerHTML = `
     ${vitalsHeaderHtml}
-    <div class="glass-card" style="padding: 1.5rem;">
-      <h2 style="font-family: var(--font-heading); margin-bottom: 1.5rem; color: var(--accent-primary); border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Emitir Nueva Receta</h2>
+    
+    ${editingRecipe ? `
+      <!-- Banner de Alerta de Modo Edición -->
+      <div style="
+        background: rgba(245, 158, 11, 0.1); 
+        border: 1px solid rgba(245, 158, 11, 0.4); 
+        border-left: 4px solid #f59e0b; 
+        border-radius: var(--radius-sm); 
+        padding: 12px 16px; 
+        margin-bottom: 1.25rem; 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+        flex-wrap: wrap; 
+        gap: 10px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+      ">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 1.8rem; line-height: 1;">✏️</span>
+          <div>
+            <div style="color: #f59e0b; font-weight: 800; font-size: 1.05rem; display: flex; align-items: center; gap: 6px;">
+              <span>MODO EDICIÓN DE RECETA</span>
+              <span style="background: #f59e0b; color: #000; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 800;">No. ${editingRecipe.id.replace('r-', '')}</span>
+            </div>
+            <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 3px;">
+              Emitida originalmente el ${new Date(editingRecipe.date).toLocaleDateString('es-GT')} por <strong>${editingRecipe.doctorName || 'Médico Tratante'}</strong>. Puede quitar, modificar o agregar medicamentos.
+            </div>
+          </div>
+        </div>
+        <button type="button" class="btn btn-secondary btn-small" id="btn-cancel-edit-mode" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.08); font-weight: 600;">
+          ✕ Salir de Edición (Nueva Receta)
+        </button>
+      </div>
+    ` : ''}
+
+    <div class="glass-card" style="padding: 1.5rem; ${editingRecipe ? 'border-top: 3px solid #f59e0b;' : ''}">
+      <h2 style="font-family: var(--font-heading); margin-bottom: 1.5rem; color: ${editingRecipe ? '#f59e0b' : 'var(--accent-primary)'}; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+        <span>${editingRecipe ? `✏️ Modificar Receta Médica No. ${editingRecipe.id.replace('r-', '')}` : 'Emitir Nueva Receta'}</span>
+        ${editingRecipe ? `<span style="font-size: 0.8rem; background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 3px 10px; border-radius: 12px; font-weight: 700; border: 1px solid rgba(245, 158, 11, 0.3);">Receta Existente</span>` : ''}
+      </h2>
       
       <div class="recipe-layout-grid" style="display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 20px; align-items: start;">
         <!-- Columna Izquierda: Formulario e Historial Recetas -->
         <div>
-          <!-- Doctor que receta (automático del paciente) -->
+          <!-- Doctor que receta (automático del paciente o de la receta) -->
           <div class="form-group" style="max-width: 400px; margin-bottom: 1.5rem;">
             <label>Médico que Prescribe (Tratante)</label>
-            <input type="text" value="${patient.assignedDoctorName || 'Dr. Carlos Mendoza'}" readonly style="background: rgba(255,255,255,0.05); cursor: not-allowed; font-weight: bold; color: var(--accent-primary);">
+            <input type="text" value="${editingRecipe ? (editingRecipe.doctorName || patient.assignedDoctorName) : (patient.assignedDoctorName || 'Dr. Carlos Mendoza')}" readonly style="background: rgba(255,255,255,0.05); cursor: not-allowed; font-weight: bold; color: ${editingRecipe ? '#f59e0b' : 'var(--accent-primary)'};">
             <input type="hidden" id="r-doctor" value="${patient.assignedDoctorId || 'u-1'}">
           </div>
-          <!-- Formulario para agregar medicina a la receta -->
-          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); padding: 1.25rem; border-radius: var(--radius-sm); margin-bottom: 1.5rem;">
-            <h4 style="margin-bottom: 1rem; color: var(--accent-secondary);">Agregar Medicamento</h4>
+
+          <!-- Formulario para agregar/modificar medicina a la receta -->
+          <div id="recipe-med-form-card" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); padding: 1.25rem; border-radius: var(--radius-sm); margin-bottom: 1.5rem; transition: border-color 0.2s;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <h4 id="recipe-med-form-title" style="margin: 0; color: var(--accent-secondary); display: flex; align-items: center; gap: 6px;">
+                <span>+</span> Agregar Medicamento
+              </h4>
+              <span id="recipe-med-form-mode-badge" style="display: none; font-size: 0.75rem; background: rgba(245, 158, 11, 0.2); color: #f59e0b; padding: 2px 8px; border-radius: 10px; font-weight: 700;">Editando fila</span>
+            </div>
+
             <form id="add-medicine-form">
               <!-- Medicamento e Info de Empaque -->
               <div class="form-row">
@@ -708,7 +839,7 @@ function renderRecipeBuilder(patient, doctors) {
                 </div>
                 <div class="form-group">
                   <label for="m-quantity" id="lbl-m-quantity">Cantidad (Cajas)</label>
-                  <input type="number" id="m-quantity" required placeholder="Ej. 1" min="1">
+                  <input type="number" id="m-quantity" required placeholder="Ej. 1" min="1" step="any">
                 </div>
                 <div class="form-group" style="display: flex; flex-direction: column; justify-content: flex-end;">
                   <div style="font-size: 0.75rem; color: var(--accent-primary); margin-bottom: 4px;">Costo Estimado:</div>
@@ -747,9 +878,12 @@ function renderRecipeBuilder(patient, doctors) {
                 </div>
               </div>
 
-              <div style="display: flex; align-items: center; gap: 1.25rem; margin-top: 1.25rem; flex-wrap: wrap;">
-                <button type="submit" class="btn btn-secondary btn-small">
+              <div id="med-form-actions-row" style="display: flex; align-items: center; gap: 1rem; margin-top: 1.25rem; flex-wrap: wrap;">
+                <button type="submit" id="btn-submit-med" class="btn btn-secondary btn-small">
                   <span>+</span> Agregar a la Receta
+                </button>
+                <button type="button" id="btn-cancel-med-edit" class="btn btn-secondary btn-small" style="display: none; color: #f87171; border-color: rgba(248, 113, 113, 0.4);">
+                  ✕ Cancelar Modificación
                 </button>
                 <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.88rem; color: var(--accent-primary); font-weight: 500; user-select: none; margin: 0;">
                   <input type="checkbox" id="m-breakdown-schedule" style="width: 17px; height: 17px; accent-color: var(--accent-primary); cursor: pointer;">
@@ -760,21 +894,29 @@ function renderRecipeBuilder(patient, doctors) {
           </div>
 
           <!-- Medicamentos Recetados (Lista Actual) -->
-          <h3 style="margin-bottom: 1rem; color: var(--text-primary);">Medicamentos en la Receta</h3>
-          <div style="overflow-x: auto;">
-            <table>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+            <h3 style="margin: 0; color: var(--text-primary); font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
+              <span>📋</span> Medicamentos en la Receta
+            </h3>
+            <span id="recipe-meds-count-badge" style="font-size: 0.8rem; color: var(--accent-primary); font-weight: 600;">
+              ${currentPrescriptionMedicines.length} medicamento(s)
+            </span>
+          </div>
+
+          <div style="overflow-x: auto; background: rgba(0,0,0,0.15); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            <table style="width: 100%; border-collapse: collapse;">
               <thead>
-                <tr>
-                  <th>Medicamento</th>
-                  <th>Cantidad</th>
-                  <th>Dosis y Frecuencia</th>
-                  <th>Duración / Indicaciones</th>
-                  <th>Acción</th>
+                <tr style="border-bottom: 1px solid var(--border-color); text-align: left; font-size: 0.82rem; color: var(--text-muted);">
+                  <th style="padding: 10px 12px;">Medicamento</th>
+                  <th style="padding: 10px 12px;">Cantidad</th>
+                  <th style="padding: 10px 12px;">Dosis y Frecuencia</th>
+                  <th style="padding: 10px 12px;">Duración / Indicaciones</th>
+                  <th style="padding: 10px 12px; text-align: center; width: 140px;">Acciones</th>
                 </tr>
               </thead>
               <tbody id="recipe-medicines-table-body">
                 <tr>
-                  <td colspan="5" style="text-align: center; color: var(--text-muted); font-style: italic;">
+                  <td colspan="5" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 2rem 0;">
                     No se han agregado medicamentos a esta receta todavía.
                   </td>
                 </tr>
@@ -785,14 +927,21 @@ function renderRecipeBuilder(patient, doctors) {
           <!-- Indicaciones Generales / Recomendaciones -->
           <div class="form-group" style="margin-top: 1.5rem;">
             <label for="r-indications">Indicaciones y Recomendaciones Generales</label>
-            <textarea id="r-indications" rows="3" placeholder="Ej. Reposo absoluto, tomar abundante agua, evitar ejercicio..." style="width: 100%; min-height: 80px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); padding: 10px; font-family: inherit; font-size: 0.9rem;">${draftInds}</textarea>
+            <textarea id="r-indications" rows="3" placeholder="Ej. Reposo absoluto, tomar abundante agua, evitar ejercicio..." style="width: 100%; min-height: 80px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); padding: 10px; font-family: inherit; font-size: 0.9rem;">${initialIndications}</textarea>
           </div>
 
-          <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
-            <button type="button" class="btn btn-secondary" id="btn-clear-recipe">Limpiar Receta</button>
-            <button type="button" class="btn btn-success" id="btn-approve-recipe">
-              <span>✓</span> Aprobar y Previsualizar Receta
-            </button>
+          <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem; flex-wrap: wrap;">
+            ${editingRecipe ? `
+              <button type="button" class="btn btn-secondary" id="btn-cancel-edit-recipe">✕ Cancelar Edición</button>
+              <button type="button" class="btn btn-warning" id="btn-approve-recipe" style="font-weight: 700; background: linear-gradient(135deg, #d97706, #f59e0b); color: #000; border: none; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3); display: inline-flex; align-items: center; gap: 6px;">
+                <span>💾</span> Guardar Cambios en Receta
+              </button>
+            ` : `
+              <button type="button" class="btn btn-secondary" id="btn-clear-recipe">Limpiar Receta</button>
+              <button type="button" class="btn btn-success" id="btn-approve-recipe">
+                <span>✓</span> Aprobar y Previsualizar Receta
+              </button>
+            `}
           </div>
         </div>
 
@@ -827,7 +976,6 @@ function renderRecipeBuilder(patient, doctors) {
     const matches = searchMedications(val);
 
     if (matches.length === 0) {
-      // Permitir ingresar de todas formas (medicamentos raros)
       autocompleteList.innerHTML = `
         <div style="padding: 10px; color: var(--text-muted); font-size: 0.85rem; font-style: italic;">
           Medicamento no encontrado en base de datos básica. Presione Enter para conservar lo escrito.
@@ -868,7 +1016,6 @@ function renderRecipeBuilder(patient, doctors) {
         item.style.backgroundColor = 'transparent';
       });
 
-      // Seleccionar medicamento del autocompletado
       item.addEventListener('click', () => {
         medNameInput.value = match.name;
         if (presentationSelect && match.presentation) {
@@ -886,14 +1033,12 @@ function renderRecipeBuilder(patient, doctors) {
     autocompleteList.style.display = 'block';
   });
 
-  // Cerrar el autocompletado al hacer clic en otra parte
   document.addEventListener('click', (e) => {
     if (e.target !== medNameInput && e.target !== autocompleteList) {
       autocompleteList.style.display = 'none';
     }
   });
 
-  // Funciones de actualización reactiva del empaque y costo
   const updateRecipePackagingInfo = () => {
     const packInfoEl = document.getElementById('m-pack-info');
     const prescTypeSelect = document.getElementById('m-presc-type');
@@ -923,7 +1068,6 @@ function renderRecipeBuilder(patient, doctors) {
       <div>📏 Dosis/${m.presentation || 'Caja'}: <strong>${m.dosis_total_presentacion} ${m.unidad_medida_dosis}</strong></div>
     `;
 
-    // Rebuild options based on fractionability
     let typeOptions = `
       <option value="presentacion">Presentación Completa (${m.presentation || 'Caja'}) - Q${m.precio_presentacion.toFixed(2)}</option>
       <option value="unidad">Unidad Individual (${m.unidad_dispensable || 'Tableta'}) - Q${m.precio_unitario.toFixed(2)} c/u</option>
@@ -935,7 +1079,6 @@ function renderRecipeBuilder(patient, doctors) {
     }
     prescTypeSelect.innerHTML = typeOptions;
     
-    // Trigger price/label update
     updateRecipeQuantityLabelAndPrice();
   };
 
@@ -981,7 +1124,6 @@ function renderRecipeBuilder(patient, doctors) {
   if (typeSelect) typeSelect.addEventListener('change', updateRecipeQuantityLabelAndPrice);
   if (qtyInput) qtyInput.addEventListener('input', updateRecipeQuantityLabelAndPrice);
 
-  // Si vacía el buscador manualmente, limpiar selección
   medNameInput.addEventListener('input', (e) => {
     if (e.target.value.trim() === '') {
       activeSelectedRecipeMed = null;
@@ -1016,7 +1158,6 @@ function renderRecipeBuilder(patient, doctors) {
     return rawDosage;
   }
 
-  // Bind botones de pastillas rápidas de horarios
   const scheduleInput = document.getElementById('m-schedule');
   document.querySelectorAll('.btn-schedule-pill').forEach(pill => {
     pill.addEventListener('click', (e) => {
@@ -1033,10 +1174,48 @@ function renderRecipeBuilder(patient, doctors) {
     });
   });
 
-  // Bind Agregar Medicamento Form
+  // Función para resetear el formulario de medicamentos
+  const resetMedicineForm = () => {
+    medNameInput.value = '';
+    document.getElementById('m-quantity').value = '';
+    document.getElementById('m-dosage').value = '';
+    document.getElementById('m-duration').value = '';
+    if (scheduleInput) scheduleInput.value = '';
+    const breakdownCheck = document.getElementById('m-breakdown-schedule');
+    if (breakdownCheck) breakdownCheck.checked = false;
+    autocompleteList.style.display = 'none';
+
+    activeSelectedRecipeMed = null;
+    activeEditingMedIndex = null;
+    updateRecipePackagingInfo();
+
+    const formTitle = document.getElementById('recipe-med-form-title');
+    if (formTitle) formTitle.innerHTML = '<span>+</span> Agregar Medicamento';
+    const formBadge = document.getElementById('recipe-med-form-mode-badge');
+    if (formBadge) formBadge.style.display = 'none';
+    const formCard = document.getElementById('recipe-med-form-card');
+    if (formCard) formCard.style.borderColor = 'var(--border-color)';
+    
+    const submitBtn = document.getElementById('btn-submit-med');
+    if (submitBtn) {
+      submitBtn.className = 'btn btn-secondary btn-small';
+      submitBtn.innerHTML = '<span>+</span> Agregar a la Receta';
+    }
+    const cancelMedBtn = document.getElementById('btn-cancel-med-edit');
+    if (cancelMedBtn) cancelMedBtn.style.display = 'none';
+  };
+
+  const btnCancelMedEdit = document.getElementById('btn-cancel-med-edit');
+  if (btnCancelMedEdit) {
+    btnCancelMedEdit.addEventListener('click', resetMedicineForm);
+  }
+
+  // Bind Agregar/Modificar Medicamento Form
   document.getElementById('add-medicine-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    const name = medNameInput.value;
+    const name = medNameInput.value.trim();
+    if (!name) return;
+
     const presentation = presentationSelect.value;
     const quantity = parseFloat(document.getElementById('m-quantity').value) || 1;
     const rawDosage = document.getElementById('m-dosage').value;
@@ -1097,180 +1276,275 @@ function renderRecipeBuilder(patient, doctors) {
       price: finalCost / (qtyToRecord || 1)
     };
 
-    currentPrescriptionMedicines.push(newMed);
+    if (activeEditingMedIndex !== null && activeEditingMedIndex >= 0 && activeEditingMedIndex < currentPrescriptionMedicines.length) {
+      currentPrescriptionMedicines[activeEditingMedIndex] = newMed;
+    } else {
+      currentPrescriptionMedicines.push(newMed);
+    }
 
-    // Reset fields
-    medNameInput.value = '';
-    document.getElementById('m-quantity').value = '';
-    document.getElementById('m-dosage').value = '';
-    document.getElementById('m-duration').value = '';
-    if (scheduleInput) scheduleInput.value = '';
-    if (breakdownCheck) breakdownCheck.checked = false;
-    autocompleteList.style.display = 'none';
-
-    activeSelectedRecipeMed = null;
-    updateRecipePackagingInfo();
-
+    resetMedicineForm();
     renderCurrentMedicinesTable();
     renderInventoryAlerts('');
   });
 
-
   // Bind Limpiar Receta
-  document.getElementById('btn-clear-recipe').addEventListener('click', () => {
+  const btnClear = document.getElementById('btn-clear-recipe');
+  if (btnClear) {
+    btnClear.addEventListener('click', () => {
+      currentPrescriptionMedicines = [];
+      resetMedicineForm();
+      renderCurrentMedicinesTable();
+    });
+  }
+
+  // Bind Cancelar Edición de Receta
+  const handleCancelEditRecipe = () => {
+    activeEditingRecipeId = null;
+    activeEditingMedIndex = null;
     currentPrescriptionMedicines = [];
-    renderCurrentMedicinesTable();
-  });
+    renderRecipeHistory(patient);
+    renderRecipeBuilder(patient, doctors);
+  };
 
-  // Bind Aprobar Receta
-  document.getElementById('btn-approve-recipe').addEventListener('click', () => {
-    const docSelect = document.getElementById('r-doctor');
-    const doctorId = docSelect.value;
-    
-    if (!doctorId) {
-      alert("Debe seleccionar un médico que prescriba la receta.");
-      return;
-    }
+  const btnCancelEditMode = document.getElementById('btn-cancel-edit-mode');
+  if (btnCancelEditMode) btnCancelEditMode.addEventListener('click', handleCancelEditRecipe);
 
-    if (currentPrescriptionMedicines.length === 0) {
-      alert("Debe agregar al menos un medicamento a la receta.");
-      return;
-    }
+  const btnCancelEditBottom = document.getElementById('btn-cancel-edit-recipe');
+  if (btnCancelEditBottom) btnCancelEditBottom.addEventListener('click', handleCancelEditRecipe);
 
-    const stateObj = getAppState();
-    const doctorObj = stateObj.users.find(u => u.id === doctorId) || 
-                      stateObj.users.find(u => u.name === doctorId || (u.name && u.name.toLowerCase().includes(String(doctorId).toLowerCase())));
-    
-    const doctorName = doctorObj ? doctorObj.name : 'Dr. Randy Rosado';
-    const doctorLicense = doctorObj ? (doctorObj.license || 'N/A') : 'N/A';
-    const doctorPhone = doctorObj ? (doctorObj.phone || 'N/A') : 'N/A';
-    
-    const indicationsVal = document.getElementById('r-indications') ? document.getElementById('r-indications').value : "";
-
-    const todayStr = new Date().toISOString().substring(0, 10);
-    const patientObj = stateObj.patients.find(p => p.id === patient.id);
-    patientObj.billingHistory = patientObj.billingHistory || [];
-    
-    // Buscar si ya existe una factura pendiente de hoy para consolidar
-    let bill = patientObj.billingHistory.find(b => 
-      b.status === 'Pendiente' && 
-      b.date.substring(0, 10) === todayStr
-    );
-
-    const details = [];
-    let total = 0;
-    
-    currentPrescriptionMedicines.forEach(m => {
-      const catalogItem = stateObj.medications && stateObj.medications.find(med => med.name === m.name);
+  // Bind Aprobar o Guardar Cambios en Receta
+  const btnApprove = document.getElementById('btn-approve-recipe');
+  if (btnApprove) {
+    btnApprove.addEventListener('click', async () => {
+      const docSelect = document.getElementById('r-doctor');
+      const doctorId = docSelect ? docSelect.value : '';
       
-      const price = m.costo_calculado !== undefined 
-        ? parseFloat(m.costo_calculado)
-        : (catalogItem ? parseFloat(catalogItem.price) : 50.00);
+      if (!doctorId && !patient.assignedDoctorName) {
+        alert("Debe seleccionar un médico que prescriba la receta.");
+        return;
+      }
+
+      if (currentPrescriptionMedicines.length === 0) {
+        alert("Debe haber al menos un medicamento en la receta.");
+        return;
+      }
+
+      const stateObj = getAppState();
+      const doctorObj = stateObj.users.find(u => u.id === doctorId) || 
+                        stateObj.users.find(u => u.name === doctorId || (u.name && u.name.toLowerCase().includes(String(doctorId).toLowerCase())));
       
-      // Validar si el medicamento ya fue cobrado en el cobro del día para evitar duplicidad
-      const alreadyBilled = bill && bill.details.some(d => d.description.includes(m.name));
+      const doctorName = doctorObj ? doctorObj.name : (patient.assignedDoctorName || 'Dr. Médico Tratante');
+      const doctorLicense = doctorObj ? (doctorObj.license || 'N/A') : 'N/A';
+      const doctorPhone = doctorObj ? (doctorObj.phone || 'N/A') : 'N/A';
       
-      if (!alreadyBilled) {
-        const descSuffix = m.tipoPrescripcion === 'unidad' 
-          ? `(${m.cantidad_o_dosis} uds)`
-          : (m.tipoPrescripcion === 'dosis' ? `(${m.cantidad_o_dosis} dosis)` : `(${m.qty || 1} cajas)`);
+      const indicationsVal = document.getElementById('r-indications') ? document.getElementById('r-indications').value : "";
+      const patientObj = stateObj.patients.find(p => p.id === patient.id);
+      if (!patientObj) return;
+
+      patientObj.billingHistory = patientObj.billingHistory || [];
+      patientObj.prescriptions = patientObj.prescriptions || [];
+
+      // ===================================================================
+      // 1. MODO EDICIÓN: ACTUALIZAR RECETA EXISTENTE
+      // ===================================================================
+      if (activeEditingRecipeId) {
+        const recipeToUpdate = patientObj.prescriptions.find(r => r.id === activeEditingRecipeId);
+        if (recipeToUpdate) {
+          recipeToUpdate.medicines = [...currentPrescriptionMedicines];
+          recipeToUpdate.indications = indicationsVal;
+          recipeToUpdate.updated_at = new Date().toISOString();
+          recipeToUpdate.doctorName = doctorName;
+          recipeToUpdate.doctorLicense = doctorLicense;
+          recipeToUpdate.doctorPhone = doctorPhone;
+          recipeToUpdate.last_modified_by = stateObj.currentUser ? stateObj.currentUser.name : 'Médico';
+
+          // Actualizar cobro de farmacia/caja asociado en el historial de facturación si está pendiente
+          if (recipeToUpdate.billId) {
+            const bill = patientObj.billingHistory.find(b => b.id === recipeToUpdate.billId);
+            if (bill && bill.status === 'Pendiente') {
+              const newDetails = [];
+              let newTotal = 0;
+              currentPrescriptionMedicines.forEach(m => {
+                const catalogItem = stateObj.medications && stateObj.medications.find(med => med.name === m.name);
+                const price = m.costo_calculado !== undefined 
+                  ? parseFloat(m.costo_calculado)
+                  : (catalogItem ? parseFloat(catalogItem.price) : 50.00);
+                
+                const descSuffix = m.tipoPrescripcion === 'unidad' 
+                  ? `(${m.cantidad_o_dosis} uds)`
+                  : (m.tipoPrescripcion === 'dosis' ? `(${m.cantidad_o_dosis} dosis)` : `(${m.qty || 1} cajas)`);
+                
+                newDetails.push({
+                  description: `Medicamento Recetado: ${m.name} ${descSuffix}`,
+                  amount: price
+                });
+                newTotal += price;
+              });
+
+              // Preservar otros cobros en la misma factura (ej. honorarios de consulta o procedimientos)
+              const nonMedDetails = bill.details.filter(d => !d.description.startsWith('Medicamento Recetado:'));
+              bill.details = [...nonMedDetails, ...newDetails];
+              bill.total = bill.details.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+            }
+          }
+
+          // Registrar en Demanda Real medicamentos no catalogados
+          stateObj.demandaReal = stateObj.demandaReal || [];
+          currentPrescriptionMedicines.forEach(m => {
+            const inCatalog = stateObj.medications && stateObj.medications.some(med => med.name.toLowerCase().trim() === m.name.toLowerCase().trim());
+            if (!inCatalog) {
+              stateObj.demandaReal.push({
+                id: 'dr-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+                date: new Date().toISOString(),
+                patientName: patientObj.name,
+                patientId: patientObj.id,
+                doctorName: doctorName,
+                medicineName: m.name,
+                quantity: parseInt(m.quantity) || 1
+              });
+            }
+          });
+
+          await saveAppState(stateObj);
+
+          // Salir del modo edición
+          activeEditingRecipeId = null;
+          activeEditingMedIndex = null;
+          currentPrescriptionMedicines = [];
+
+          // Actualizar vistas
+          renderRecipeHistory(patientObj);
+          renderRecipeBuilder(patientObj, doctors);
+
+          // Abrir modal de vista preliminar e impresión con la receta actualizada
+          showPrescriptionPreviewModal(patientObj, recipeToUpdate);
+          alert("✅ Receta modificada y actualizada exitosamente.");
+          return;
+        }
+      }
+
+      // ===================================================================
+      // 2. MODO NORMAL: EMITIR NUEVA RECETA
+      // ===================================================================
+      const todayStr = new Date().toISOString().substring(0, 10);
+      let bill = patientObj.billingHistory.find(b => 
+        b.status === 'Pendiente' && 
+        b.date.substring(0, 10) === todayStr
+      );
+
+      const details = [];
+      let total = 0;
+      
+      currentPrescriptionMedicines.forEach(m => {
+        const catalogItem = stateObj.medications && stateObj.medications.find(med => med.name === m.name);
         
-        details.push({
-          description: `Medicamento Recetado: ${m.name} ${descSuffix}`,
-          amount: price
-        });
-        total += price;
-      }
-    });
+        const price = m.costo_calculado !== undefined 
+          ? parseFloat(m.costo_calculado)
+          : (catalogItem ? parseFloat(catalogItem.price) : 50.00);
+        
+        const alreadyBilled = bill && bill.details.some(d => d.description.includes(m.name));
+        
+        if (!alreadyBilled) {
+          const descSuffix = m.tipoPrescripcion === 'unidad' 
+            ? `(${m.cantidad_o_dosis} uds)`
+            : (m.tipoPrescripcion === 'dosis' ? `(${m.cantidad_o_dosis} dosis)` : `(${m.qty || 1} cajas)`);
+          
+          details.push({
+            description: `Medicamento Recetado: ${m.name} ${descSuffix}`,
+            amount: price
+          });
+          total += price;
+        }
+      });
 
-    let billId = '';
+      let billId = '';
 
-    if (bill) {
-      // Consolidar en la factura de hoy
-      bill.details = [...bill.details, ...details];
-      bill.total = parseFloat(bill.total) + total;
-      billId = bill.id;
-    } else {
-      // Crear nueva factura pendiente de hoy
-      billId = 'FAC-REC-' + Date.now();
-      const newBill = {
-        id: billId,
-        date: new Date().toISOString(),
-        concept: `Receta Médica - Dr. ${doctorName}`,
-        details,
-        diagnosis: 'Pre-consulta / Recetario',
-        total,
-        status: 'Pendiente'
-      };
-      patientObj.billingHistory.unshift(newBill);
-    }
-
-    const newRecipe = {
-      id: 'r-' + Date.now(),
-      date: new Date().toISOString(),
-      doctorName: doctorName,
-      doctorLicense: doctorLicense,
-      doctorPhone: doctorPhone,
-      medicines: [...currentPrescriptionMedicines],
-      indications: indicationsVal,
-      billId: billId,
-      dispenseStatus: 'Pendiente'
-    };
-
-    patientObj.prescriptions = patientObj.prescriptions || [];
-    patientObj.prescriptions.unshift(newRecipe);
-
-    // Registrar en Demanda Real medicamentos que no estén en el catálogo de farmacia
-    stateObj.demandaReal = stateObj.demandaReal || [];
-    currentPrescriptionMedicines.forEach(m => {
-      const inCatalog = stateObj.medications && stateObj.medications.some(med => med.name.toLowerCase().trim() === m.name.toLowerCase().trim());
-      if (!inCatalog) {
-        stateObj.demandaReal.push({
-          id: 'dr-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+      if (bill) {
+        bill.details = [...bill.details, ...details];
+        bill.total = parseFloat(bill.total) + total;
+        billId = bill.id;
+      } else {
+        billId = 'FAC-REC-' + Date.now();
+        const newBill = {
+          id: billId,
           date: new Date().toISOString(),
-          patientName: patientObj.name,
-          patientId: patientObj.id,
-          doctorName: doctorName,
-          medicineName: m.name,
-          quantity: parseInt(m.quantity) || 1
-        });
+          concept: `Receta Médica - Dr. ${doctorName}`,
+          details,
+          diagnosis: 'Pre-consulta / Recetario',
+          total,
+          status: 'Pendiente'
+        };
+        patientObj.billingHistory.unshift(newBill);
       }
+
+      const newRecipe = {
+        id: 'r-' + Date.now(),
+        date: new Date().toISOString(),
+        doctorName: doctorName,
+        doctorLicense: doctorLicense,
+        doctorPhone: doctorPhone,
+        medicines: [...currentPrescriptionMedicines],
+        indications: indicationsVal,
+        billId: billId,
+        dispenseStatus: 'Pendiente'
+      };
+
+      patientObj.prescriptions.unshift(newRecipe);
+
+      stateObj.demandaReal = stateObj.demandaReal || [];
+      currentPrescriptionMedicines.forEach(m => {
+        const inCatalog = stateObj.medications && stateObj.medications.some(med => med.name.toLowerCase().trim() === m.name.toLowerCase().trim());
+        if (!inCatalog) {
+          stateObj.demandaReal.push({
+            id: 'dr-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+            date: new Date().toISOString(),
+            patientName: patientObj.name,
+            patientId: patientObj.id,
+            doctorName: doctorName,
+            medicineName: m.name,
+            quantity: parseInt(m.quantity) || 1
+          });
+        }
+      });
+
+      await saveAppState(stateObj);
+
+      showPrescriptionPreviewModal(patientObj, newRecipe);
+
+      currentPrescriptionMedicines = [];
+      if (docSelect) docSelect.value = '';
+      if (document.getElementById('r-indications')) {
+        document.getElementById('r-indications').value = '';
+      }
+      renderCurrentMedicinesTable();
+      renderRecipeHistory(patientObj);
     });
+  }
 
-    saveAppState(stateObj);
-
-    // Abrir Modal de Vista Preliminar e Impresión
-    showPrescriptionPreviewModal(patientObj, newRecipe);
-
-    // Limpiar generador
-    currentPrescriptionMedicines = [];
-    docSelect.value = '';
-    if (document.getElementById('r-indications')) {
-      document.getElementById('r-indications').value = '';
-    }
-    renderCurrentMedicinesTable();
-    renderRecipeHistory(patientObj);
-  });
-
-  // Inicializar la tabla de medicamentos con lo que esté cargado (por ejemplo, borradores)
+  // Inicializar la tabla de medicamentos con lo que esté cargado
   renderCurrentMedicinesTable();
 
   // Inicializar alertas de inventario y caducidad
   renderInventoryAlerts('');
 }
 
-// Renderizar tabla de medicamentos en curso
+// Renderizar tabla de medicamentos en curso con botones de Editar y Quitar
 function renderCurrentMedicinesTable() {
   const tbody = document.getElementById('recipe-medicines-table-body');
+  const countBadge = document.getElementById('recipe-meds-count-badge');
   if (!tbody) return;
+
+  if (countBadge) {
+    countBadge.textContent = `${currentPrescriptionMedicines.length} medicamento(s)`;
+  }
 
   tbody.innerHTML = '';
 
   if (currentPrescriptionMedicines.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="5" style="text-align: center; color: var(--text-muted); font-style: italic;">
-          No se han agregado medicamentos a esta receta todavía.
+        <td colspan="5" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 2rem 0;">
+          No hay medicamentos agregados a esta receta. Agregue medicamentos utilizando el formulario superior.
         </td>
       </tr>
     `;
@@ -1278,26 +1552,108 @@ function renderCurrentMedicinesTable() {
   }
 
   currentPrescriptionMedicines.forEach((med, idx) => {
+    const isBeingEdited = activeEditingMedIndex === idx;
     const row = document.createElement('tr');
+    if (isBeingEdited) {
+      row.style.background = 'rgba(245, 158, 11, 0.12)';
+      row.style.borderLeft = '3px solid #f59e0b';
+    }
+
     row.innerHTML = `
-      <td>
-        <strong style="color: var(--text-primary); font-size: 0.95rem;">${med.name}</strong> (${med.presentation})
+      <td style="padding: 10px 12px;">
+        <strong style="color: var(--text-primary); font-size: 0.95rem;">${med.name}</strong> 
+        <span style="font-size: 0.8rem; color: var(--text-muted);">(${med.presentation})</span>
         ${med.schedule ? `
           <div style="font-size: 0.8rem; font-weight: 700; color: var(--accent-primary); margin-top: 3px; display: flex; align-items: center; gap: 4px;">
             <span>⏰ Horario:</span> <strong>${med.schedule}</strong>
           </div>
         ` : ''}
       </td>
-      <td style="font-weight: 600;">${med.quantity}</td>
-      <td>${med.dosage}</td>
-      <td>${med.duration}</td>
-      <td>
-        <button class="btn btn-danger btn-small btn-remove-med" data-idx="${idx}">&times;</button>
+      <td style="padding: 10px 12px; font-weight: 600; color: #38bdf8;">${med.quantity}</td>
+      <td style="padding: 10px 12px;">${med.dosage}</td>
+      <td style="padding: 10px 12px; font-size: 0.85rem; color: var(--text-muted);">${med.duration}</td>
+      <td style="padding: 10px 12px; text-align: center; white-space: nowrap;">
+        <button type="button" class="btn btn-secondary btn-small btn-edit-med-row" data-idx="${idx}" title="Modificar este medicamento" style="padding: 3px 8px; font-size: 0.78rem; margin-right: 4px; color: #00f2fe; border: 1px solid rgba(0, 242, 254, 0.4); background: rgba(0,242,254,0.08); cursor: pointer;">
+          <span>✏️</span> Editar
+        </button>
+        <button type="button" class="btn btn-danger btn-small btn-remove-med-row" data-idx="${idx}" title="Quitar de la receta" style="padding: 3px 8px; font-size: 0.78rem; cursor: pointer;">
+          <span>&times;</span> Quitar
+        </button>
       </td>
     `;
 
-    row.querySelector('.btn-remove-med').addEventListener('click', () => {
+    // Botón para editar este medicamento específico en el formulario superior
+    row.querySelector('.btn-edit-med-row').addEventListener('click', () => {
+      activeEditingMedIndex = idx;
+      const mToEdit = currentPrescriptionMedicines[idx];
+
+      const medNameInput = document.getElementById('m-name');
+      const presentationSelect = document.getElementById('m-presentation');
+      const qtyInput = document.getElementById('m-quantity');
+      const dosageInput = document.getElementById('m-dosage');
+      const durationInput = document.getElementById('m-duration');
+      const scheduleInput = document.getElementById('m-schedule');
+      const breakdownCheck = document.getElementById('m-breakdown-schedule');
+      const prescTypeSelect = document.getElementById('m-presc-type');
+
+      if (medNameInput) medNameInput.value = mToEdit.name;
+      if (presentationSelect) {
+        const cleanPres = (mToEdit.presentation || 'Tabletas').replace(/Unidad \(|\)|Dosis fracc\. \(|\)/g, '');
+        presentationSelect.value = cleanPres;
+      }
+      if (prescTypeSelect) prescTypeSelect.value = mToEdit.tipoPrescripcion || 'presentacion';
+      if (qtyInput) qtyInput.value = mToEdit.cantidad_o_dosis !== undefined ? mToEdit.cantidad_o_dosis : (parseFloat(mToEdit.quantity) || 1);
+      if (dosageInput) dosageInput.value = mToEdit.dosage || '';
+      if (durationInput) durationInput.value = mToEdit.duration || '';
+      if (scheduleInput) scheduleInput.value = mToEdit.schedule || '';
+      if (breakdownCheck) breakdownCheck.checked = !!mToEdit.breakdownSchedule;
+
+      // Actualizar formulario UI
+      const formTitle = document.getElementById('recipe-med-form-title');
+      if (formTitle) formTitle.innerHTML = '<span style="color: #f59e0b;">✏️ Modificar Medicamento:</span> ' + mToEdit.name;
+      const formBadge = document.getElementById('recipe-med-form-mode-badge');
+      if (formBadge) formBadge.style.display = 'inline-block';
+      const formCard = document.getElementById('recipe-med-form-card');
+      if (formCard) formCard.style.borderColor = '#f59e0b';
+
+      const submitBtn = document.getElementById('btn-submit-med');
+      if (submitBtn) {
+        submitBtn.className = 'btn btn-warning btn-small';
+        submitBtn.innerHTML = '<span>💾</span> Actualizar Medicamento';
+      }
+      const cancelMedBtn = document.getElementById('btn-cancel-med-edit');
+      if (cancelMedBtn) cancelMedBtn.style.display = 'inline-block';
+
+      renderCurrentMedicinesTable();
+
+      if (medNameInput) {
+        medNameInput.focus();
+        const formEl = document.getElementById('recipe-med-form-card');
+        if (formEl) formEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+
+    // Botón para quitar este medicamento de la receta
+    row.querySelector('.btn-remove-med-row').addEventListener('click', () => {
       currentPrescriptionMedicines.splice(idx, 1);
+      if (activeEditingMedIndex === idx) {
+        activeEditingMedIndex = null;
+        const formTitle = document.getElementById('recipe-med-form-title');
+        if (formTitle) formTitle.innerHTML = '<span>+</span> Agregar Medicamento';
+        const formBadge = document.getElementById('recipe-med-form-mode-badge');
+        if (formBadge) formBadge.style.display = 'none';
+        const formCard = document.getElementById('recipe-med-form-card');
+        if (formCard) formCard.style.borderColor = 'var(--border-color)';
+        const submitBtn = document.getElementById('btn-submit-med');
+        if (submitBtn) {
+          submitBtn.className = 'btn btn-secondary btn-small';
+          submitBtn.innerHTML = '<span>+</span> Agregar a la Receta';
+        }
+        const cancelMedBtn = document.getElementById('btn-cancel-med-edit');
+        if (cancelMedBtn) cancelMedBtn.style.display = 'none';
+      } else if (activeEditingMedIndex > idx) {
+        activeEditingMedIndex--;
+      }
       renderCurrentMedicinesTable();
     });
 
@@ -1310,11 +1666,25 @@ function showPrescriptionPreviewModal(patient, recipe) {
   const modal = document.getElementById('prescription-print-modal');
   const previewContainer = document.getElementById('prescription-preview-content');
   const printActionBtn = document.getElementById('btn-print-action');
+  const editFromPreviewBtn = document.getElementById('btn-edit-recipe-from-preview');
   
   if (!modal || !previewContainer || !printActionBtn) return;
 
   const state = getAppState();
-  const clinic = state.clinicInfo;
+  const clinic = state.clinicInfo || { name: 'Hospital Privado Multimédica Sayaxché', address: 'Sayaxché, Petén', phone: '+502 5555-5555', email: 'info@multimedica.gt' };
+
+  // Configurar botón "Modificar Receta" en el pie del modal
+  if (editFromPreviewBtn) {
+    if (recipe && recipe.id && recipe.id.startsWith('r-')) {
+      editFromPreviewBtn.style.display = 'inline-flex';
+      editFromPreviewBtn.onclick = () => {
+        modal.style.display = 'none';
+        startEditingRecipe(patient, recipe);
+      };
+    } else {
+      editFromPreviewBtn.style.display = 'none';
+    }
+  }
 
   // Formatear fecha
   const dateFormatted = new Date(recipe.date).toLocaleDateString('es-GT', {
@@ -1324,8 +1694,8 @@ function showPrescriptionPreviewModal(patient, recipe) {
   });
 
   // Calcular edad
-  const dob = new Date(patient.birthdate);
-  const age = Math.abs(new Date(Date.now() - dob.getTime()).getUTCFullYear() - 1970);
+  const dob = new Date(patient.birthdate || patient.birthDate);
+  const age = isNaN(dob.getTime()) ? 'N/D' : Math.abs(new Date(Date.now() - dob.getTime()).getUTCFullYear() - 1970);
 
   // Renders the prescription in print-optimized markup with native multi-page table structure
   previewContainer.innerHTML = `
@@ -1364,10 +1734,10 @@ function showPrescriptionPreviewModal(patient, recipe) {
                 <div class="prescription-preview-patient-info">
                   <div>
                     <strong>Paciente:</strong> ${patient.name}<br>
-                    <strong>Edad:</strong> ${age} años | <strong>Género:</strong> ${patient.gender}
+                    <strong>Edad:</strong> ${age} años | <strong>Género:</strong> ${patient.gender || 'No especificado'}
                   </div>
                   <div style="text-align: right;">
-                    <strong>Fecha:</strong> ${dateFormatted}<br>
+                    <strong>Fecha:</strong> ${dateFormatted} ${recipe.updated_at ? '<small style="color: #666;">(Modificada)</small>' : ''}<br>
                     <strong>No. Receta:</strong> ${recipe.id.replace('r-', '')}
                   </div>
                 </div>
@@ -1384,7 +1754,7 @@ function showPrescriptionPreviewModal(patient, recipe) {
                     </tr>
                   </thead>
                   <tbody>
-                    ${recipe.medicines.map(m => `
+                    ${(recipe.medicines || []).map(m => `
                       <tr>
                         <td style="text-align: left; padding: 12px 8px; vertical-align: top;">
                           <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 3px; flex-wrap: wrap;">
@@ -1424,8 +1794,8 @@ function showPrescriptionPreviewModal(patient, recipe) {
               <!-- Firma del Médico y Control de Hojas (se repite automáticamente al final de cada página física) -->
               <div class="prescription-preview-footer" style="margin-top: 1.5rem; display: flex; flex-direction: column; align-items: center; text-align: center;">
                 <div class="prescription-preview-signature-line"></div>
-                <div class="prescription-preview-doctor-sign">${recipe.doctorName}</div>
-                <div class="prescription-preview-license">Colegiado Activo No. ${recipe.doctorLicense}</div>
+                <div class="prescription-preview-doctor-sign">${recipe.doctorName || 'Médico Tratante'}</div>
+                <div class="prescription-preview-license">Colegiado Activo No. ${recipe.doctorLicense || 'N/A'}</div>
                 <div class="prescription-preview-license" style="margin-top: 2px;">Teléfono: ${recipe.doctorPhone || 'N/A'}</div>
                 <div class="prescription-page-counter-print"></div>
               </div>
@@ -1444,3 +1814,4 @@ function showPrescriptionPreviewModal(patient, recipe) {
 
   modal.style.display = 'flex';
 }
+
