@@ -362,8 +362,32 @@ let activeConsultationState = {
   procedures: []   // { id, name, cost, notes }
 };
 
+// ID de la consulta en modo edición (si está activa)
+let activeEditingConsultationId = null;
+
 // Bandera para redirección diferida a recetario tras grabar consulta
 let shouldRedirectToPrescriptionOnSave = false;
+
+// Iniciar modo edición para una consulta específica
+export function startEditingConsultation(patient, consultation) {
+  if (!patient || !consultation) return;
+  activeEditingConsultationId = consultation.id;
+  setActivePatientId(patient.id);
+  const state = getAppState();
+  const doctors = (state.users || []).filter(u => {
+    const role = String(u.role || '').toLowerCase();
+    const name = String(u.name || '').toLowerCase();
+    const id = String(u.id || '').toLowerCase();
+    return role.includes('medico') || role.includes('médico') || name.includes('dr.') || name.includes('dra.') || name.includes('lic.') || id.startsWith('u-med');
+  });
+  renderConsultationHistory(patient);
+  renderConsultationForm(patient, doctors);
+
+  const formEl = document.getElementById('consultation-form-area');
+  if (formEl) {
+    formEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
 
 export function renderConsulta(container) {
   const state = getAppState();
@@ -582,6 +606,14 @@ function selectPatient(patientId) {
   const currentUser = state.currentUser;
   let patient = (state.patients || []).find(p => p.id === patientId);
 
+  // Si se cambia a un paciente distinto y se estaba editando una consulta de otro, resetear
+  if (activeEditingConsultationId && patient) {
+    const hasConsult = (patient.consultations || []).some(c => c.id === activeEditingConsultationId);
+    if (!hasConsult) {
+      activeEditingConsultationId = null;
+    }
+  }
+
   // Validar acceso amigable para médicos
   const roleNormSel = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const isDoctorSel = roleNormSel.includes('medico') || roleNormSel.includes('médico') || roleNormSel.includes('doctor');
@@ -596,6 +628,7 @@ function selectPatient(patientId) {
   renderPatientList(searchEl ? searchEl.value : '');
 
   if (!patient) {
+    activeEditingConsultationId = null;
     showPlaceholder();
     return;
   }
@@ -653,7 +686,14 @@ function renderConsultationHistory(patient) {
 
   patient.consultations.forEach(c => {
     const li = document.createElement('li');
-    li.className = 'history-card';
+    const isCurrentlyEditing = activeEditingConsultationId === c.id;
+    li.className = `history-card ${isCurrentlyEditing ? 'selected' : ''}`;
+    if (isCurrentlyEditing) {
+      li.style.borderColor = '#f59e0b';
+      li.style.borderLeft = '4px solid #f59e0b';
+      li.style.background = 'rgba(245, 158, 11, 0.08)';
+    }
+
     let dateFormatted = c.date || 'Reciente';
     try {
       if (c.date && !isNaN(new Date(c.date).getTime())) {
@@ -665,9 +705,12 @@ function renderConsultationHistory(patient) {
 
     li.innerHTML = `
       <div class="history-card-header" style="position: relative; display: flex; justify-content: space-between; align-items: center;">
-        <span>${dateFormatted}</span>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span>${c.specialty || 'General'}</span>
+        <span style="font-weight: 600;">${dateFormatted} ${c.updated_at ? '<small style="color: #f59e0b; font-size: 0.7rem;">(Modificada)</small>' : ''}</span>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="font-size: 0.75rem; color: var(--text-muted);">${c.specialty || 'General'}</span>
+          <button type="button" class="btn-edit-consult-card" data-id="${c.id}" style="background: rgba(0, 242, 254, 0.12); border: 1px solid rgba(0, 242, 254, 0.4); border-radius: 4px; color: #00f2fe; cursor: pointer; padding: 2px 7px; font-size: 0.78rem; font-weight: 600; display: inline-flex; align-items: center; gap: 3px;" title="Modificar o editar datos de esta consulta médica">
+            <span>✏️</span> Editar
+          </button>
           ${isCurrentUserAdmin() ? `
             <button class="btn-delete-consultation" data-id="${c.id}" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 2px; font-size: 0.95rem; line-height: 1;" title="Eliminar Consulta">🗑️</button>
           ` : ''}
@@ -684,6 +727,14 @@ function renderConsultationHistory(patient) {
       </div>
     `;
 
+    const editBtn = li.querySelector('.btn-edit-consult-card');
+    if (editBtn) {
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        startEditingConsultation(patient, c);
+      });
+    }
+
     const delBtn = li.querySelector('.btn-delete-consultation');
     if (delBtn) {
       delBtn.addEventListener('click', async (e) => {
@@ -693,11 +744,15 @@ function renderConsultationHistory(patient) {
           const stateObj = getAppState();
           const pObj = stateObj.patients.find(p => p.id === patient.id);
           if (pObj) {
+            if (activeEditingConsultationId === c.id) {
+              activeEditingConsultationId = null;
+            }
             pObj.consultations = (pObj.consultations || []).filter(item => item.id !== c.id);
             await saveAppState(stateObj);
             alert("🗑️ Consulta eliminada correctamente.");
             patient.consultations = pObj.consultations;
             renderConsultationHistory(patient);
+            renderConsultationForm(patient, stateObj.users.filter(u => String(u.role || '').toLowerCase().startsWith('medico')));
           }
         }
       });
@@ -930,11 +985,33 @@ ${(() => {
       </div>
     </div>
 
-    <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-      <button class="btn btn-secondary" id="btn-close-past-modal" style="padding: 8px 16px;">Cancelar</button>
-      <button class="btn btn-primary" id="btn-save-past-consultation" style="padding: 8px 16px;">💾 Guardar Cambios</button>
+    <div style="display: flex; gap: 10px; justify-content: space-between; align-items: center; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color); flex-wrap: wrap;">
+      <button class="btn btn-outline-info" id="btn-edit-full-consultation" style="padding: 8px 16px; border-color: #00f2fe; color: #00f2fe; background: rgba(0,242,254,0.08); font-weight: 600; cursor: pointer;">
+        <span>✏️</span> Abrir en Formulario para Edición Completa
+      </button>
+      <div style="display: flex; gap: 10px;">
+        <button class="btn btn-secondary" id="btn-close-past-modal" style="padding: 8px 16px;">Cerrar</button>
+        <button class="btn btn-primary" id="btn-save-past-consultation" style="padding: 8px 16px;">💾 Guardar Cambios Rápidos</button>
+      </div>
     </div>
   `;
+
+  // Listener para abrir el formulario completo de edición
+  const editFullBtn = body.querySelector('#btn-edit-full-consultation');
+  if (editFullBtn) {
+    editFullBtn.addEventListener('click', () => {
+      modal.style.display = 'none';
+      const consultNav = document.querySelector('.nav-item[data-target="consulta"]');
+      if (consultNav) {
+        consultNav.click();
+      }
+      setTimeout(() => {
+        startEditingConsultation(patient, consultation);
+        const formEl = document.getElementById('consultation-form-area');
+        if (formEl) formEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
+    });
+  }
 
   // Registrar listener de FUR para edición obstétrica
   const pastFur = body.querySelector('#edit-past-gyo-fur');
@@ -1029,24 +1106,221 @@ ${(() => {
   modal.style.display = 'flex';
 }
 
+// Renderizar resumen interactivo de elementos de la consulta activa (CIE-10, Labs, Imagenología, Tratamientos)
+function renderActiveConsultationItemsSummary() {
+  const dxBox = document.getElementById('active-dx-chips-container');
+  const labBox = document.getElementById('active-labs-chips-container');
+  const imgBox = document.getElementById('active-imaging-chips-container');
+  const txBox = document.getElementById('active-treatments-chips-container');
+
+  if (dxBox) {
+    const list = activeConsultationState.diagnoses || [];
+    if (list.length === 0) {
+      dxBox.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted); font-style: italic;">Ningún diagnóstico CIE-10 agregado aún</span>';
+    } else {
+      dxBox.innerHTML = list.map((dx, idx) => `
+        <span style="display: inline-flex; align-items: center; gap: 6px; background: rgba(0, 242, 254, 0.12); border: 1px solid rgba(0, 242, 254, 0.4); padding: 3px 8px; border-radius: 14px; font-size: 0.8rem; color: var(--accent-primary);">
+          <strong>${dx.code}</strong> - ${dx.description}
+          <button type="button" class="btn-remove-active-dx" data-idx="${idx}" style="background: none; border: none; color: #ef4444; font-weight: bold; cursor: pointer; padding: 0 2px; font-size: 0.85rem;" title="Quitar diagnóstico">✕</button>
+        </span>
+      `).join('');
+      dxBox.querySelectorAll('.btn-remove-active-dx').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.getAttribute('data-idx'));
+          activeConsultationState.diagnoses.splice(idx, 1);
+          renderActiveConsultationItemsSummary();
+          updateAssistantActionButtons();
+        });
+      });
+    }
+  }
+
+  if (labBox) {
+    const list = activeConsultationState.labs || [];
+    if (list.length === 0) {
+      labBox.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted); font-style: italic;">Sin órdenes de laboratorio</span>';
+    } else {
+      labBox.innerHTML = list.map((lab, idx) => {
+        const name = typeof lab === 'object' ? lab.name : lab;
+        return `
+          <span style="display: inline-flex; align-items: center; gap: 6px; background: rgba(0, 242, 254, 0.1); border: 1px solid rgba(0, 242, 254, 0.3); padding: 3px 8px; border-radius: 14px; font-size: 0.8rem; color: var(--accent-primary);">
+            🔬 ${name}
+            <button type="button" class="btn-remove-active-lab" data-idx="${idx}" style="background: none; border: none; color: #ef4444; font-weight: bold; cursor: pointer; padding: 0 2px; font-size: 0.85rem;" title="Quitar laboratorio">✕</button>
+          </span>
+        `;
+      }).join('');
+      labBox.querySelectorAll('.btn-remove-active-lab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.getAttribute('data-idx'));
+          activeConsultationState.labs.splice(idx, 1);
+          renderActiveConsultationItemsSummary();
+          updateAssistantActionButtons();
+        });
+      });
+    }
+  }
+
+  if (imgBox) {
+    const list = activeConsultationState.imaging || [];
+    if (list.length === 0) {
+      imgBox.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted); font-style: italic;">Sin órdenes de imagenología</span>';
+    } else {
+      imgBox.innerHTML = list.map((img, idx) => {
+        const name = typeof img === 'object' ? img.name : img;
+        return `
+          <span style="display: inline-flex; align-items: center; gap: 6px; background: rgba(157, 78, 221, 0.1); border: 1px solid rgba(157, 78, 221, 0.3); padding: 3px 8px; border-radius: 14px; font-size: 0.8rem; color: var(--accent-secondary);">
+            🖼️ ${name}
+            <button type="button" class="btn-remove-active-img" data-idx="${idx}" style="background: none; border: none; color: #ef4444; font-weight: bold; cursor: pointer; padding: 0 2px; font-size: 0.85rem;" title="Quitar imagenología">✕</button>
+          </span>
+        `;
+      }).join('');
+      imgBox.querySelectorAll('.btn-remove-active-img').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.getAttribute('data-idx'));
+          activeConsultationState.imaging.splice(idx, 1);
+          renderActiveConsultationItemsSummary();
+          updateAssistantActionButtons();
+        });
+      });
+    }
+  }
+
+  if (txBox) {
+    const list = activeConsultationState.treatments || [];
+    if (list.length === 0) {
+      txBox.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted); font-style: italic;">Sin medicamentos prescritos</span>';
+    } else {
+      txBox.innerHTML = list.map((tx, idx) => {
+        const txName = typeof tx === 'object' ? tx.name : tx;
+        const txDose = (typeof tx === 'object' && tx.dosage) ? ` (${tx.dosage})` : '';
+        return `
+          <span style="display: inline-flex; align-items: center; gap: 6px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); padding: 3px 8px; border-radius: 14px; font-size: 0.8rem; color: var(--accent-success);">
+            💊 ${txName}${txDose}
+            <button type="button" class="btn-remove-active-tx" data-idx="${idx}" style="background: none; border: none; color: #ef4444; font-weight: bold; cursor: pointer; padding: 0 2px; font-size: 0.85rem;" title="Quitar medicamento">✕</button>
+          </span>
+        `;
+      }).join('');
+      txBox.querySelectorAll('.btn-remove-active-tx').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.getAttribute('data-idx'));
+          activeConsultationState.treatments.splice(idx, 1);
+          renderActiveConsultationItemsSummary();
+          updateAssistantActionButtons();
+        });
+      });
+    }
+  }
+}
+
 // Renderizar el formulario principal de consulta para el paciente seleccionado
 function renderConsultationForm(patient, doctors) {
   const container = document.getElementById('consultation-form-area');
   if (!container) return;
 
-  // Reset del estado temporal
-  activeConsultationState = {
-    diagnoses: [],
-    labs: [],
-    imaging: [],
-    treatments: [],
-    procedures: []
-  };
+  const editingConsultation = activeEditingConsultationId 
+    ? (patient.consultations || []).find(c => c.id === activeEditingConsultationId) 
+    : null;
+
+  // Inicializar o precargar el estado temporal de la consulta
+  if (editingConsultation) {
+    let rawDx = [];
+    if (Array.isArray(editingConsultation.diagnoses) && editingConsultation.diagnoses.length > 0) {
+      rawDx = editingConsultation.diagnoses.map(d => ({ code: d.code || 'Z00.0', description: d.description || d.name || '' }));
+    } else if (Array.isArray(editingConsultation.diagnosisCodes) && editingConsultation.diagnosisCodes.length > 0) {
+      rawDx = editingConsultation.diagnosisCodes.map((code, idx) => ({
+        code,
+        description: (editingConsultation.diagnosisNames && editingConsultation.diagnosisNames[idx]) ? editingConsultation.diagnosisNames[idx] : code
+      }));
+    } else if (editingConsultation.diagnosis) {
+      rawDx = [{ code: 'Z00.0', description: editingConsultation.diagnosis }];
+    }
+
+    let rawLabs = [];
+    if (editingConsultation.acceptedStudies && Array.isArray(editingConsultation.acceptedStudies.labs)) {
+      rawLabs = [...editingConsultation.acceptedStudies.labs];
+    }
+
+    let rawImaging = [];
+    if (editingConsultation.acceptedStudies && Array.isArray(editingConsultation.acceptedStudies.imaging)) {
+      rawImaging = [...editingConsultation.acceptedStudies.imaging];
+    }
+
+    let rawTreatments = [];
+    if (Array.isArray(editingConsultation.acceptedTreatments)) {
+      rawTreatments = [...editingConsultation.acceptedTreatments];
+    } else if (Array.isArray(editingConsultation.acceptedMedications)) {
+      rawTreatments = editingConsultation.acceptedMedications.map(m => typeof m === 'string' ? { name: m, dosage: '' } : m);
+    } else if (editingConsultation.treatment && typeof editingConsultation.treatment === 'string') {
+      rawTreatments = [{ name: editingConsultation.treatment, dosage: '' }];
+    }
+
+    let rawProcedures = [];
+    if (Array.isArray(editingConsultation.procedures)) {
+      rawProcedures = editingConsultation.procedures.map(p => ({
+        id: p.id || ('proc-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4)),
+        name: p.name || '',
+        cost: parseFloat(p.cost) || 0,
+        notes: p.notes || ''
+      }));
+    }
+
+    activeConsultationState = {
+      diagnoses: rawDx,
+      labs: rawLabs,
+      imaging: rawImaging,
+      treatments: rawTreatments,
+      procedures: rawProcedures
+    };
+  } else {
+    // Reset del estado temporal para nueva consulta
+    activeConsultationState = {
+      diagnoses: [],
+      labs: [],
+      imaging: [],
+      treatments: [],
+      procedures: []
+    };
+  }
 
   shouldRedirectToPrescriptionOnSave = false;
 
-  const currentDate = new Date().toISOString().split('T')[0];
-  const currentTime = new Date().toTimeString().split(' ')[0].substring(0, 5);
+  let initialDoctor = patient.assignedDoctorName || 'Dr. Carlos Mendoza';
+  let initialSpecialty = 'Medicina General';
+  let initialDate = new Date().toISOString().split('T')[0];
+  let initialTime = new Date().toTimeString().split(' ')[0].substring(0, 5);
+  let initialReason = '';
+  let initialSymptoms = '';
+  let initialClinicalDiagnosis = '';
+  let initialFee = '200.00';
+  let initialReferralDoctor = '';
+  let initialReferralNotes = '';
+  let initialGyo = null;
+
+  if (editingConsultation) {
+    if (editingConsultation.doctor) initialDoctor = editingConsultation.doctor;
+    if (editingConsultation.specialty) initialSpecialty = editingConsultation.specialty;
+    if (editingConsultation.date) {
+      try {
+        const dObj = new Date(editingConsultation.date);
+        if (!isNaN(dObj.getTime())) {
+          initialDate = dObj.toISOString().split('T')[0];
+          initialTime = dObj.toTimeString().split(' ')[0].substring(0, 5);
+        }
+      } catch (e) {}
+    }
+    if (editingConsultation.time) initialTime = editingConsultation.time;
+    if (editingConsultation.reason) initialReason = editingConsultation.reason;
+    if (editingConsultation.symptoms) initialSymptoms = editingConsultation.symptoms;
+    if (editingConsultation.clinicalDiagnosis) initialClinicalDiagnosis = editingConsultation.clinicalDiagnosis;
+    if (editingConsultation.fee !== undefined && editingConsultation.fee !== null) initialFee = parseFloat(editingConsultation.fee).toFixed(2);
+    if (editingConsultation.referral) {
+      initialReferralDoctor = editingConsultation.referral.doctorId || '';
+      initialReferralNotes = editingConsultation.referral.notes || '';
+    }
+    if (editingConsultation.gyoData) {
+      initialGyo = editingConsultation.gyoData;
+    }
+  }
 
   // Obtener signos vitales recientes si existen
   const latestVitals = patient.vitalSigns && patient.vitalSigns.length > 0 ? patient.vitalSigns[0] : null;
@@ -1066,11 +1340,42 @@ function renderConsultationForm(patient, doctors) {
 
   const vitalsHeaderHtml = getPatientVitalsHeaderHtml(patient);
 
+  let editModeBannerHtml = '';
+  if (editingConsultation) {
+    let dateFormatted = initialDate;
+    try {
+      dateFormatted = new Date(editingConsultation.date || initialDate).toLocaleDateString('es-GT');
+    } catch(e) {}
+    editModeBannerHtml = `
+      <div style="background: rgba(245, 158, 11, 0.12); border: 1.5px solid #f59e0b; border-radius: var(--radius-sm); padding: 12px 16px; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        <div>
+          <strong style="color: #f59e0b; font-size: 1rem; display: flex; align-items: center; gap: 6px;">
+            <span>✏️</span> MODO EDICIÓN DE CONSULTA MÉDICA
+          </strong>
+          <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 2px;">
+            Modificando consulta del <strong>${dateFormatted}</strong> | Médico: <strong>${initialDoctor}</strong> (ID: ${editingConsultation.id})
+          </div>
+        </div>
+        <button type="button" id="btn-cancel-consultation-edit" class="btn btn-secondary btn-small" style="background: rgba(255,255,255,0.08); border-color: #f59e0b; color: #f59e0b; font-weight: bold; cursor: pointer;">
+          ✕ Salir de Edición (Nueva Consulta)
+        </button>
+      </div>
+    `;
+  }
+
+  const isGyO = initialSpecialty === 'Ginecología y Obstetricia' || !!initialGyo;
+  const gyoDil = initialGyo && initialGyo.tactoVaginal ? (initialGyo.tactoVaginal.dilatacion || 0) : 0;
+  const gyoBorr = initialGyo && initialGyo.tactoVaginal ? (initialGyo.tactoVaginal.borramiento || 0) : 0;
+  const gyoAlt = initialGyo && initialGyo.tactoVaginal ? (initialGyo.tactoVaginal.altitud || '0') : '0';
+
   container.innerHTML = `
     ${vitalsHeaderHtml}
+    ${editModeBannerHtml}
     <div class="glass-card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h2 style="font-family: var(--font-heading); color: var(--accent-primary); margin: 0;">Nueva Consulta Clínica</h2>
+        <h2 style="font-family: var(--font-heading); color: var(--accent-primary); margin: 0;">
+          ${editingConsultation ? '✏️ Modificar Consulta Médica' : 'Nueva Consulta Clínica'}
+        </h2>
         <span style="font-size: 0.85rem; padding: 4px 10px; background: rgba(255,255,255,0.05); border-radius: 12px; color: var(--text-muted);">Exp: ${patient.id}</span>
       </div>
 
@@ -1078,17 +1383,17 @@ function renderConsultationForm(patient, doctors) {
         <div class="form-row">
           <div class="form-group">
             <label for="c-doctor">Médico Evaluador Tratante</label>
-            <input type="text" id="c-doctor" value="${patient.assignedDoctorName || 'Dr. Carlos Mendoza'}" readonly style="background: rgba(255,255,255,0.05); cursor: not-allowed; font-weight: bold; color: var(--accent-primary);">
+            <input type="text" id="c-doctor" value="${initialDoctor}" readonly style="background: rgba(255,255,255,0.05); cursor: not-allowed; font-weight: bold; color: var(--accent-primary);">
           </div>
           <div class="form-group">
             <label for="c-specialty">Especialidad de Consulta</label>
             <select id="c-specialty" required>
-              <option value="Medicina General">Medicina General</option>
-              <option value="Cardiología">Cardiología</option>
-              <option value="Pediatría">Pediatría</option>
-              <option value="Ginecología y Obstetricia">Ginecología y Obstetricia</option>
-              <option value="Traumatología">Traumatología</option>
-              <option value="Medicina Interna">Medicina Interna</option>
+              <option value="Medicina General" ${initialSpecialty === 'Medicina General' ? 'selected' : ''}>Medicina General</option>
+              <option value="Cardiología" ${initialSpecialty === 'Cardiología' ? 'selected' : ''}>Cardiología</option>
+              <option value="Pediatría" ${initialSpecialty === 'Pediatría' ? 'selected' : ''}>Pediatría</option>
+              <option value="Ginecología y Obstetricia" ${initialSpecialty === 'Ginecología y Obstetricia' ? 'selected' : ''}>Ginecología y Obstetricia</option>
+              <option value="Traumatología" ${initialSpecialty === 'Traumatología' ? 'selected' : ''}>Traumatología</option>
+              <option value="Medicina Interna" ${initialSpecialty === 'Medicina Interna' ? 'selected' : ''}>Medicina Interna</option>
             </select>
           </div>
         </div>
@@ -1096,11 +1401,11 @@ function renderConsultationForm(patient, doctors) {
         <div class="form-row">
           <div class="form-group">
             <label for="c-date">Fecha</label>
-            <input type="date" id="c-date" value="${currentDate}" required>
+            <input type="date" id="c-date" value="${initialDate}" required>
           </div>
           <div class="form-group">
             <label for="c-time">Hora</label>
-            <input type="time" id="c-time" value="${currentTime}" required>
+            <input type="time" id="c-time" value="${initialTime}" required>
           </div>
         </div>
 
@@ -1111,7 +1416,7 @@ function renderConsultationForm(patient, doctors) {
               <span class="mic-icon">🎙️</span> <span class="dictate-status" style="font-size: 0.75rem; font-weight: bold;">Dictar</span>
             </button>
           </div>
-          <textarea id="c-reason" required placeholder="Ej. Paciente refiere dolor de garganta y fiebre de 2 días de evolución..." style="min-height: 80px;"></textarea>
+          <textarea id="c-reason" required placeholder="Ej. Paciente refiere dolor de garganta y fiebre de 2 días de evolución..." style="min-height: 80px;">${initialReason}</textarea>
         </div>
 
         <div class="form-group">
@@ -1121,47 +1426,47 @@ function renderConsultationForm(patient, doctors) {
               <span class="mic-icon">🎙️</span> <span class="dictate-status" style="font-size: 0.75rem; font-weight: bold;">Dictar</span>
             </button>
           </div>
-          <textarea id="c-symptoms" required placeholder="Ej. Faringe congestiva con placas purulentas, ganglios submandibulares inflamados..." style="min-height: 100px;"></textarea>
+          <textarea id="c-symptoms" required placeholder="Ej. Faringe congestiva con placas purulentas, ganglios submandibulares inflamados..." style="min-height: 100px;">${initialSymptoms}</textarea>
         </div>
 
         <!-- SECCIÓN ESPECIAL: GINECOLOGÍA Y OBSTETRICIA -->
-        <div id="gyo-special-section" style="display: none; background: rgba(0, 242, 254, 0.02); border: 1px solid rgba(0, 242, 254, 0.15); padding: 15px; border-radius: var(--radius-md); margin-top: 1rem; margin-bottom: 1.25rem;">
+        <div id="gyo-special-section" style="display: ${isGyO ? 'block' : 'none'}; background: rgba(0, 242, 254, 0.02); border: 1px solid rgba(0, 242, 254, 0.15); padding: 15px; border-radius: var(--radius-md); margin-top: 1rem; margin-bottom: 1.25rem;">
           <h4 style="color: var(--accent-primary); font-family: var(--font-heading); margin-top: 0; margin-bottom: 10px; border-bottom: 1px solid rgba(0, 242, 254, 0.15); padding-bottom: 4px; font-size: 0.95rem;">🔬 Información de Ginecología y Obstetricia</h4>
           
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
             <div class="form-group" style="margin-bottom: 0;">
               <label>Fecha Última Regla (FUR)</label>
-              <input type="date" id="gyo-fur" style="width:100%;">
+              <input type="date" id="gyo-fur" value="${initialGyo ? (initialGyo.fur || '') : ''}" style="width:100%;">
             </div>
             <div class="form-group" style="margin-bottom: 0;">
               <label>Edad Gestacional (EG)</label>
-              <input type="text" id="gyo-eg" readonly placeholder="Semanas y Días (se calcula desde FUR)" style="background: rgba(255,255,255,0.05); color: var(--accent-primary); font-weight: bold; cursor: not-allowed;">
+              <input type="text" id="gyo-eg" value="${initialGyo ? (initialGyo.eg || '') : ''}" readonly placeholder="Semanas y Días (se calcula desde FUR)" style="background: rgba(255,255,255,0.05); color: var(--accent-primary); font-weight: bold; cursor: not-allowed;">
             </div>
           </div>
 
           <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px;">
             <div class="form-group" style="margin-bottom: 0;">
               <label>Número de Gestas</label>
-              <input type="number" id="gyo-gestas" min="0" placeholder="Ej. 1" style="width:100%;">
+              <input type="number" id="gyo-gestas" min="0" value="${initialGyo ? (initialGyo.gestas !== undefined ? initialGyo.gestas : 0) : 0}" placeholder="Ej. 1" style="width:100%;">
             </div>
             <div class="form-group" style="margin-bottom: 0;">
               <label>Número de Partos</label>
-              <input type="number" id="gyo-partos" min="0" placeholder="Ej. 0" style="width:100%;">
+              <input type="number" id="gyo-partos" min="0" value="${initialGyo ? (initialGyo.partos !== undefined ? initialGyo.partos : 0) : 0}" placeholder="Ej. 0" style="width:100%;">
             </div>
             <div class="form-group" style="margin-bottom: 0;">
               <label>Abortos Previos</label>
-              <input type="number" id="gyo-abortos" min="0" placeholder="Ej. 0" style="width:100%;">
+              <input type="number" id="gyo-abortos" min="0" value="${initialGyo ? (initialGyo.abortos !== undefined ? initialGyo.abortos : 0) : 0}" placeholder="Ej. 0" style="width:100%;">
             </div>
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
             <div class="form-group" style="margin-bottom: 0;">
               <label>Altura Uterina (cm)</label>
-              <input type="number" id="gyo-altura-uterina" min="0" step="0.1" placeholder="Ej. 28" style="width:100%;">
+              <input type="number" id="gyo-altura-uterina" min="0" step="0.1" value="${initialGyo ? (initialGyo.alturaUterina || 0) : 0}" placeholder="Ej. 28" style="width:100%;">
             </div>
             <div class="form-group" style="margin-bottom: 0;">
               <label>Frecuencia Cardiaca Fetal (FCF - lpm)</label>
-              <input type="number" id="gyo-fcf" min="0" placeholder="Ej. 140" style="width:100%;">
+              <input type="number" id="gyo-fcf" min="0" value="${initialGyo ? (initialGyo.fcf || 0) : 0}" placeholder="Ej. 140" style="width:100%;">
             </div>
           </div>
 
@@ -1169,15 +1474,15 @@ function renderConsultationForm(patient, doctors) {
             <div class="form-group" style="margin-bottom: 0;">
               <label>Actividad Uterina</label>
               <select id="gyo-actividad-uterina" style="width:100%; padding:8px; border-radius: var(--radius-sm); border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-primary);">
-                <option value="No">No</option>
-                <option value="Si">Si</option>
+                <option value="No" ${initialGyo && initialGyo.actividadUterina === 'No' ? 'selected' : ''}>No</option>
+                <option value="Si" ${initialGyo && initialGyo.actividadUterina === 'Si' ? 'selected' : ''}>Si</option>
               </select>
             </div>
             <div class="form-group" style="margin-bottom: 0;">
               <label>Movimientos Fetales</label>
               <select id="gyo-movimientos-fetales" style="width:100%; padding:8px; border-radius: var(--radius-sm); border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-primary);">
-                <option value="Si">Si</option>
-                <option value="No">No</option>
+                <option value="Si" ${!initialGyo || initialGyo.movimientosFetales === 'Si' ? 'selected' : ''}>Si</option>
+                <option value="No" ${initialGyo && initialGyo.movimientosFetales === 'No' ? 'selected' : ''}>No</option>
               </select>
             </div>
           </div>
@@ -1187,22 +1492,22 @@ function renderConsultationForm(patient, doctors) {
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
               <div class="form-group" style="margin-bottom: 0;">
                 <label>Dilatación (cm)</label>
-                <input type="number" id="gyo-tacto-dilatacion" min="0" max="10" placeholder="Ej. 4" style="width:100%;">
+                <input type="number" id="gyo-tacto-dilatacion" min="0" max="10" value="${gyoDil}" placeholder="Ej. 4" style="width:100%;">
               </div>
               <div class="form-group" style="margin-bottom: 0;">
                 <label>Borramiento (%)</label>
-                <input type="number" id="gyo-tacto-borramiento" min="0" max="100" placeholder="Ej. 80" style="width:100%;">
+                <input type="number" id="gyo-tacto-borramiento" min="0" max="100" value="${gyoBorr}" placeholder="Ej. 80" style="width:100%;">
               </div>
               <div class="form-group" style="margin-bottom: 0;">
                 <label>Altitud de Presentación</label>
                 <select id="gyo-tacto-altitud" style="width:100%; padding:8px; border-radius: var(--radius-sm); border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-primary);">
-                  <option value="-3">-3</option>
-                  <option value="-2">-2</option>
-                  <option value="-1">-1</option>
-                  <option value="0">0</option>
-                  <option value="+1">+1</option>
-                  <option value="+2">+2</option>
-                  <option value="+3">+3</option>
+                  <option value="-3" ${gyoAlt === '-3' ? 'selected' : ''}>-3</option>
+                  <option value="-2" ${gyoAlt === '-2' ? 'selected' : ''}>-2</option>
+                  <option value="-1" ${gyoAlt === '-1' ? 'selected' : ''}>-1</option>
+                  <option value="0" ${gyoAlt === '0' ? 'selected' : ''}>0</option>
+                  <option value="+1" ${gyoAlt === '+1' ? 'selected' : ''}>+1</option>
+                  <option value="+2" ${gyoAlt === '+2' ? 'selected' : ''}>+2</option>
+                  <option value="+3" ${gyoAlt === '+3' ? 'selected' : ''}>+3</option>
                 </select>
               </div>
             </div>
@@ -1222,7 +1527,7 @@ function renderConsultationForm(patient, doctors) {
               <span class="mic-icon">🎙️</span> <span class="dictate-status" style="font-size: 0.75rem; font-weight: bold; color: var(--accent-primary);">Dictar</span>
             </button>
           </div>
-          <textarea id="c-clinical-diagnosis" required placeholder="Escriba el Diagnóstico Clínico del médico (Ej. Amigdalitis Aguda Bacteriana, Síndrome Febril, HTA no controlada...)" style="min-height: 90px; border: 1px solid var(--accent-primary); border-radius: var(--radius-sm);"></textarea>
+          <textarea id="c-clinical-diagnosis" required placeholder="Escriba el Diagnóstico Clínico del médico (Ej. Amigdalitis Aguda Bacteriana, Síndrome Febril, HTA no controlada...)" style="min-height: 90px; border: 1px solid var(--accent-primary); border-radius: var(--radius-sm);">${initialClinicalDiagnosis}</textarea>
         </div>
 
         <!-- SECCIÓN: PROCEDIMIENTOS REALIZADOS EN CONSULTA (CURACIONES, PARACENTESIS, SUTURAS, ETC.) -->
@@ -1313,13 +1618,83 @@ function renderConsultationForm(patient, doctors) {
               <label for="c-referral-doctor">Médico Receptor (Referido)</label>
               <select id="c-referral-doctor">
                 <option value="">Sin Interconsulta (Ninguno)</option>
-                ${doctors.filter(d => d.id !== patient.assignedDoctorId).map(d => `<option value="${d.id}">${d.name} (${d.specialty || 'Especialista'}) - Col. ${d.license || 'N/A'}</option>`).join('')}
+                ${doctors.filter(d => d.id !== patient.assignedDoctorId).map(d => `<option value="${d.id}" ${initialReferralDoctor === d.id ? 'selected' : ''}>${d.name} (${d.specialty || 'Especialista'}) - Col. ${d.license || 'N/A'}</option>`).join('')}
               </select>
             </div>
           </div>
           <div class="form-group" style="margin-bottom: 0;">
             <label for="c-referral-notes">Motivo o Notas de la Interconsulta</label>
-            <textarea id="c-referral-notes" placeholder="Ej. Se solicita evaluación cardiológica por soplo sistólico detectado..." style="min-height: 60px;"></textarea>
+            <textarea id="c-referral-notes" placeholder="Ej. Se solicita evaluación cardiológica por soplo sistólico detectado..." style="min-height: 60px;">${initialReferralNotes}</textarea>
+          </div>
+        </div>
+
+        <!-- Resumen Interactivo de Elementos, Diagnósticos CIE-10, Labs, Imágenes y Medicamentos -->
+        <div class="glass-card" id="active-consultation-items-summary" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); padding: 1.25rem; border-radius: var(--radius-sm); margin-top: 1.5rem; margin-bottom: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 8px;">
+            <h4 style="margin: 0; color: var(--accent-primary); display: flex; align-items: center; gap: 8px; font-size: 1rem; font-family: var(--font-heading);">
+              <span>📋</span> Elementos, Diagnósticos y Auxiliares de la Consulta
+            </h4>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">
+              Puede quitar elementos con ✕ o agregar nuevos manualmente o usando el Asistente
+            </span>
+          </div>
+
+          <!-- Diagnósticos CIE-10 Activos -->
+          <div style="margin-bottom: 12px;">
+            <div style="font-size: 0.85rem; font-weight: bold; color: var(--text-primary); margin-bottom: 6px;">
+              🏷️ Diagnósticos CIE-10 Vinculados:
+            </div>
+            <div id="active-dx-chips-container" style="display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; margin-bottom: 8px;">
+              <!-- chips de diagnósticos -->
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <input type="text" id="input-quick-add-dx-code" placeholder="Código (ej. J03.9)" style="width: 130px; font-size: 0.82rem; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+              <input type="text" id="input-quick-add-dx-desc" placeholder="Descripción del diagnóstico..." style="flex: 1; min-width: 180px; font-size: 0.82rem; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+              <button type="button" id="btn-quick-add-dx" class="btn btn-secondary btn-small" style="font-size: 0.8rem; padding: 4px 10px;">➕ Agregar Dx</button>
+            </div>
+          </div>
+
+          <!-- Exámenes de Laboratorio Activos -->
+          <div style="margin-bottom: 12px; border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 10px;">
+            <div style="font-size: 0.85rem; font-weight: bold; color: var(--accent-primary); margin-bottom: 6px;">
+              🔬 Órdenes de Laboratorio:
+            </div>
+            <div id="active-labs-chips-container" style="display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; margin-bottom: 8px;">
+              <!-- chips de laboratorios -->
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <input type="text" id="input-quick-add-lab" placeholder="Nombre de examen de laboratorio (ej. Hematología Completa, Examen de Orina...)" style="flex: 1; min-width: 200px; font-size: 0.82rem; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+              <button type="button" id="btn-quick-add-lab" class="btn btn-secondary btn-small" style="font-size: 0.8rem; padding: 4px 10px;">➕ Agregar Lab</button>
+            </div>
+          </div>
+
+          <!-- Estudios de Imagenología Activos -->
+          <div style="margin-bottom: 12px; border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 10px;">
+            <div style="font-size: 0.85rem; font-weight: bold; color: var(--accent-secondary); margin-bottom: 6px;">
+              🖼️ Órdenes de Imagenología:
+            </div>
+            <div id="active-imaging-chips-container" style="display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; margin-bottom: 8px;">
+              <!-- chips de imagenología -->
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <input type="text" id="input-quick-add-img" placeholder="Nombre de estudio de imagenología (ej. Rayos X de Tórax, Ultrasonido Abdominal...)" style="flex: 1; min-width: 200px; font-size: 0.82rem; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+              <button type="button" id="btn-quick-add-img" class="btn btn-secondary btn-small" style="font-size: 0.8rem; padding: 4px 10px;">➕ Agregar Imagen</button>
+            </div>
+          </div>
+
+          <!-- Medicamentos y Tratamientos Activos -->
+          <div style="border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 10px;">
+            <div style="font-size: 0.85rem; font-weight: bold; color: var(--accent-success); margin-bottom: 6px;">
+              💊 Medicamentos / Tratamiento Prescrito:
+            </div>
+            <div id="active-treatments-chips-container" style="display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; margin-bottom: 8px;">
+              <!-- chips de tratamientos -->
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <input type="text" id="input-quick-add-tx-name" placeholder="Medicamento / Presentación (ej. Amoxicilina 500mg)..." style="flex: 1; min-width: 160px; font-size: 0.82rem; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+              <input type="text" id="input-quick-add-tx-dose" placeholder="Dosis / Indicación (ej. 1 tableta c/8h x 7 días)..." style="flex: 1; min-width: 160px; font-size: 0.82rem; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+              <button type="button" id="btn-quick-add-tx" class="btn btn-secondary btn-small" style="font-size: 0.8rem; padding: 4px 10px;">➕ Agregar Tx</button>
+            </div>
           </div>
         </div>
 
@@ -1342,10 +1717,10 @@ function renderConsultationForm(patient, doctors) {
         <div class="form-row" style="margin-top: 1.5rem; align-items: flex-end; flex-wrap: wrap; gap: 15px;">
           <div class="form-group" style="max-width: 200px; margin-bottom: 0;">
             <label for="c-fee">Cobro Consulta (Q)</label>
-            <input type="number" id="c-fee" value="200.00" step="1" min="0" required>
+            <input type="number" id="c-fee" value="${initialFee}" step="1" min="0" required>
           </div>
           <div id="total-consult-factura-badge" style="background: rgba(16, 185, 129, 0.1); border: 1.5px solid var(--accent-success); padding: 8px 14px; border-radius: 6px; font-size: 0.88rem; color: var(--accent-success); font-weight: bold; display: flex; align-items: center; gap: 8px; margin-bottom: 0;">
-            <span>🧾 Total Factura (Consulta + Procedimientos):</span> <strong id="lbl-total-factura-amount">Q200.00</strong>
+            <span>🧾 Total Factura (Consulta + Procedimientos):</span> <strong id="lbl-total-factura-amount">Q${initialFee}</strong>
           </div>
           <div id="assistant-action-buttons-container" style="display: flex; gap: 10px; align-items: center; margin-bottom: 0; padding-bottom: 0; margin-left: auto;">
             <!-- Botones de acciones del asistente se renderizan aquí -->
@@ -1353,12 +1728,104 @@ function renderConsultationForm(patient, doctors) {
         </div>
 
         <div style="display: flex; gap: 1rem; justify-content: flex-end; align-items: center; margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem; flex-wrap: wrap;">
-          <button type="button" class="btn btn-secondary" id="btn-reset-consult">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Grabar Consulta</button>
+          <button type="button" class="btn btn-secondary" id="btn-reset-consult">
+            ${editingConsultation ? 'Cancelar Edición' : 'Cancelar'}
+          </button>
+          <button type="submit" class="btn btn-primary" style="${editingConsultation ? 'background: #f59e0b; border-color: #f59e0b;' : ''}">
+            ${editingConsultation ? '💾 Guardar Cambios en Consulta' : 'Grabar Consulta'}
+          </button>
         </div>
       </form>
     </div>
   `;
+
+  // Inicializar Resumen Interactivo de Elementos
+  renderActiveConsultationItemsSummary();
+
+  // Binds para Agregar Rápido de Diagnósticos, Labs, Imágenes y Tratamientos
+  const btnQuickDx = document.getElementById('btn-quick-add-dx');
+  const inQuickDxCode = document.getElementById('input-quick-add-dx-code');
+  const inQuickDxDesc = document.getElementById('input-quick-add-dx-desc');
+  if (btnQuickDx && inQuickDxCode && inQuickDxDesc) {
+    btnQuickDx.addEventListener('click', () => {
+      const code = inQuickDxCode.value.trim().toUpperCase() || 'Z00.0';
+      const desc = inQuickDxDesc.value.trim();
+      if (!desc) {
+        alert("Por favor ingrese la descripción o nombre del diagnóstico.");
+        inQuickDxDesc.focus();
+        return;
+      }
+      activeConsultationState.diagnoses.push({ code, description: desc });
+      inQuickDxCode.value = '';
+      inQuickDxDesc.value = '';
+      renderActiveConsultationItemsSummary();
+      updateAssistantActionButtons();
+    });
+  }
+
+  const btnQuickLab = document.getElementById('btn-quick-add-lab');
+  const inQuickLab = document.getElementById('input-quick-add-lab');
+  if (btnQuickLab && inQuickLab) {
+    btnQuickLab.addEventListener('click', () => {
+      const labName = inQuickLab.value.trim();
+      if (!labName) {
+        alert("Por favor ingrese el nombre del examen de laboratorio.");
+        inQuickLab.focus();
+        return;
+      }
+      activeConsultationState.labs.push(labName);
+      inQuickLab.value = '';
+      renderActiveConsultationItemsSummary();
+      updateAssistantActionButtons();
+    });
+  }
+
+  const btnQuickImg = document.getElementById('btn-quick-add-img');
+  const inQuickImg = document.getElementById('input-quick-add-img');
+  if (btnQuickImg && inQuickImg) {
+    btnQuickImg.addEventListener('click', () => {
+      const imgName = inQuickImg.value.trim();
+      if (!imgName) {
+        alert("Por favor ingrese el nombre del estudio de imagenología.");
+        inQuickImg.focus();
+        return;
+      }
+      activeConsultationState.imaging.push(imgName);
+      inQuickImg.value = '';
+      renderActiveConsultationItemsSummary();
+      updateAssistantActionButtons();
+    });
+  }
+
+  const btnQuickTx = document.getElementById('btn-quick-add-tx');
+  const inQuickTxName = document.getElementById('input-quick-add-tx-name');
+  const inQuickTxDose = document.getElementById('input-quick-add-tx-dose');
+  if (btnQuickTx && inQuickTxName && inQuickTxDose) {
+    btnQuickTx.addEventListener('click', () => {
+      const txName = inQuickTxName.value.trim();
+      const txDose = inQuickTxDose.value.trim();
+      if (!txName) {
+        alert("Por favor ingrese el nombre del medicamento o tratamiento.");
+        inQuickTxName.focus();
+        return;
+      }
+      activeConsultationState.treatments.push({ name: txName, dosage: txDose });
+      inQuickTxName.value = '';
+      inQuickTxDose.value = '';
+      renderActiveConsultationItemsSummary();
+      updateAssistantActionButtons();
+    });
+  }
+
+  // Cancelar modo edición
+  const btnCancelEdit = document.getElementById('btn-cancel-consultation-edit');
+  if (btnCancelEdit) {
+    btnCancelEdit.addEventListener('click', () => {
+      activeEditingConsultationId = null;
+      renderConsultationHistory(patient);
+      renderConsultationForm(patient, doctors);
+    });
+  }
 
   // Bind en tiempo real para activar el Asistente Clínico Inteligente
   const reasonInput = document.getElementById('c-reason');
@@ -2020,15 +2487,24 @@ function renderConsultationForm(patient, doctors) {
   // Inicializar dictado por micrófono
   initializeVoiceDictation();
 
-  // Botón Cancelar
-  document.getElementById('btn-reset-consult').addEventListener('click', () => {
-    showPlaceholder();
-    // Deseleccionar paciente visualmente
-    setActivePatientId("");
-    renderPatientList();
-  });
+  // Botón Cancelar o Salir de Edición
+  const resetBtn = document.getElementById('btn-reset-consult');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      if (activeEditingConsultationId) {
+        activeEditingConsultationId = null;
+        renderConsultationHistory(patient);
+        renderConsultationForm(patient, doctors);
+      } else {
+        showPlaceholder();
+        // Deseleccionar paciente visualmente
+        setActivePatientId("");
+        renderPatientList();
+      }
+    });
+  }
 
-  // Guardar Consulta
+  // Guardar o Actualizar Consulta
   const consultForm = document.getElementById('consult-record-form');
   if (consultForm) {
     consultForm.addEventListener('submit', async (e) => {
@@ -2120,6 +2596,136 @@ function renderConsultationForm(patient, doctors) {
           };
         }
 
+        // CASO 1: MODO EDICIÓN (Actualizar consulta existente)
+        if (activeEditingConsultationId) {
+          const existingConsultation = patientObj.consultations.find(c => c.id === activeEditingConsultationId);
+          if (!existingConsultation) {
+            alert("Error: No se encontró la consulta que se intenta editar.");
+            return;
+          }
+
+          existingConsultation.doctor = doctor || patientObj.assignedDoctorName || 'Médico Tratante';
+          existingConsultation.specialty = specialty || 'Medicina General';
+          existingConsultation.date = `${date}T${time}:00Z`;
+          existingConsultation.time = time;
+          existingConsultation.reason = reason || 'Consulta Médica';
+          existingConsultation.symptoms = symptoms || '';
+          existingConsultation.clinicalDiagnosis = clinicalDiagnosis || '';
+          existingConsultation.referral = referralObj;
+          existingConsultation.diagnoses = [...(activeConsultationState.diagnoses || [])];
+          existingConsultation.diagnosisCodes = (activeConsultationState.diagnoses || []).map(d => d.code);
+          existingConsultation.diagnosisNames = (activeConsultationState.diagnoses || []).map(d => d.description);
+          existingConsultation.acceptedStudies = {
+            labs: [...(activeConsultationState.labs || [])],
+            imaging: [...(activeConsultationState.imaging || [])]
+          };
+          existingConsultation.acceptedTreatments = [...(activeConsultationState.treatments || [])];
+          existingConsultation.procedures = (activeConsultationState.procedures || []).map(p => ({
+            id: p.id || ('proc-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4)),
+            name: p.name || '',
+            cost: parseFloat(p.cost) || 0,
+            notes: p.notes || ''
+          }));
+          existingConsultation.fee = fee;
+          existingConsultation.gyoData = gyoData;
+          existingConsultation.updated_at = new Date().toISOString();
+
+          // Sincronizar detalle de cobro en facturación si existe factura pendiente asociada
+          const billDateStr = date;
+          let bill = (patientObj.billingHistory || []).find(b =>
+            b.status === 'Pendiente' &&
+            (b.id === existingConsultation.billId || (b.date && b.date.substring(0, 10) === billDateStr))
+          );
+
+          if (bill) {
+            const newDetails = [{ description: `Honorarios de consulta médica (${specialty})`, amount: fee }];
+            let newTotal = fee;
+
+            if (existingConsultation.procedures && existingConsultation.procedures.length > 0) {
+              existingConsultation.procedures.forEach(proc => {
+                const pCost = parseFloat(proc.cost) || 0;
+                const pDesc = `Procedimiento en Consulta: ${proc.name}${proc.notes ? ` (${proc.notes})` : ''}`;
+                newDetails.push({ description: pDesc, amount: pCost });
+                newTotal += pCost;
+              });
+            }
+
+            if (existingConsultation.acceptedStudies && existingConsultation.acceptedStudies.labs) {
+              existingConsultation.acceptedStudies.labs.forEach(labName => {
+                const rawName = typeof labName === 'object' ? labName.name : labName;
+                const found = stateObj.laboratoryTests && stateObj.laboratoryTests.find(l => l.name === rawName);
+                const price = found ? parseFloat(found.price) : 125.00;
+                newDetails.push({ description: `Examen de Laboratorio: ${rawName}`, amount: price });
+                newTotal += price;
+              });
+            }
+
+            if (existingConsultation.acceptedStudies && existingConsultation.acceptedStudies.imaging) {
+              existingConsultation.acceptedStudies.imaging.forEach(imgName => {
+                const rawName = typeof imgName === 'object' ? imgName.name : imgName;
+                const found = stateObj.imagingStudies && stateObj.imagingStudies.find(i => i.name === rawName);
+                const price = found ? parseFloat(found.price) : 300.00;
+                newDetails.push({ description: `Estudio de Imagenología: ${rawName}`, amount: price });
+                newTotal += price;
+              });
+            }
+
+            if (existingConsultation.acceptedTreatments) {
+              existingConsultation.acceptedTreatments.forEach(med => {
+                const medName = typeof med === 'object' ? med.name : med;
+                const found = stateObj.medications && stateObj.medications.find(m => m.name === medName);
+                const price = found ? parseFloat(found.price) : 50.00;
+                newDetails.push({ description: `Medicamento Prescrito: ${medName}`, amount: price });
+                newTotal += price;
+              });
+            }
+
+            const otherDetails = (bill.details || []).filter(d => {
+              const desc = String(d.description || '').toLowerCase();
+              return !desc.includes('honorarios de consulta') && 
+                     !desc.includes('procedimiento en consulta') && 
+                     !desc.includes('examen de laboratorio') && 
+                     !desc.includes('estudio de imagenología') && 
+                     !desc.includes('medicamento prescrito');
+            });
+            const otherTotal = otherDetails.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
+
+            bill.details = [...newDetails, ...otherDetails];
+            bill.total = newTotal + otherTotal;
+            const finalDiag = clinicalDiagnosis || ((activeConsultationState.diagnoses || []).map(d => `${d.code} - ${d.description}`).join(', ') || 'Consulta General');
+            bill.diagnosis = finalDiag;
+          }
+
+          // Sincronizar receta médica si existe
+          if (activeConsultationState.treatments && activeConsultationState.treatments.length > 0) {
+            let existingRecipe = (patientObj.prescriptions || []).find(p => p.consultationId === existingConsultation.id || (p.date && p.date.substring(0, 10) === date && p.doctorName === doctor));
+            const doctorObj = (stateObj.users || []).find(u => u.name === doctor || u.id === doctor);
+            
+            if (existingRecipe) {
+              existingRecipe.doctorName = doctorObj ? doctorObj.name : doctor;
+              existingRecipe.doctorLicense = doctorObj ? (doctorObj.license || 'N/A') : 'N/A';
+              existingRecipe.doctorPhone = doctorObj ? (doctorObj.phone || 'N/A') : 'N/A';
+              existingRecipe.medicines = activeConsultationState.treatments.map(t => ({
+                name: typeof t === 'object' ? t.name : t,
+                presentation: (typeof t === 'object' && t.presentation) ? t.presentation : 'Tabletas',
+                quantity: (typeof t === 'object' && t.quantity) ? t.quantity : '1',
+                dosage: (typeof t === 'object' && t.dosage) ? t.dosage : 'Tomar según indicaciones',
+                duration: (typeof t === 'object' && t.duration) ? t.duration : 'N/A'
+              }));
+            }
+          }
+
+          await saveAppState(stateObj);
+          alert("✅ Consulta médica actualizada exitosamente.");
+
+          activeEditingConsultationId = null;
+          patient.consultations = patientObj.consultations;
+          renderConsultationHistory(patientObj);
+          renderConsultationForm(patientObj, doctors);
+          return;
+        }
+
+        // CASO 2: NUEVA CONSULTA
         const newConsultation = {
           id: 'c-' + Date.now(),
           date: `${date}T${time}:00Z`,
@@ -2174,9 +2780,10 @@ function renderConsultationForm(patient, doctors) {
         // Agregar laboratorios aceptados al cobro
         if (newConsultation.acceptedStudies && newConsultation.acceptedStudies.labs) {
           newConsultation.acceptedStudies.labs.forEach(labName => {
-            const found = stateObj.laboratoryTests && stateObj.laboratoryTests.find(l => l.name === labName);
+            const rawName = typeof labName === 'object' ? labName.name : labName;
+            const found = stateObj.laboratoryTests && stateObj.laboratoryTests.find(l => l.name === rawName);
             const price = found ? parseFloat(found.price) : 125.00;
-            details.push({ description: `Examen de Laboratorio: ${labName}`, amount: price });
+            details.push({ description: `Examen de Laboratorio: ${rawName}`, amount: price });
             total += price;
           });
         }
@@ -2184,9 +2791,10 @@ function renderConsultationForm(patient, doctors) {
         // Agregar imagenología aceptada al cobro
         if (newConsultation.acceptedStudies && newConsultation.acceptedStudies.imaging) {
           newConsultation.acceptedStudies.imaging.forEach(imgName => {
-            const found = stateObj.imagingStudies && stateObj.imagingStudies.find(i => i.name === imgName);
+            const rawName = typeof imgName === 'object' ? imgName.name : imgName;
+            const found = stateObj.imagingStudies && stateObj.imagingStudies.find(i => i.name === rawName);
             const price = found ? parseFloat(found.price) : 300.00;
-            details.push({ description: `Estudio de Imagenología: ${imgName}`, amount: price });
+            details.push({ description: `Estudio de Imagenología: ${rawName}`, amount: price });
             total += price;
           });
         }
@@ -2194,9 +2802,10 @@ function renderConsultationForm(patient, doctors) {
         // Agregar tratamientos aceptados al cobro
         if (newConsultation.acceptedTreatments) {
           newConsultation.acceptedTreatments.forEach(med => {
-            const found = stateObj.medications && stateObj.medications.find(m => m.name === med.name);
+            const medName = typeof med === 'object' ? med.name : med;
+            const found = stateObj.medications && stateObj.medications.find(m => m.name === medName);
             const price = found ? parseFloat(found.price) : 50.00;
-            details.push({ description: `Medicamento Prescrito: ${med.name}`, amount: price });
+            details.push({ description: `Medicamento Prescrito: ${medName}`, amount: price });
             total += price;
           });
         }
@@ -2234,11 +2843,11 @@ function renderConsultationForm(patient, doctors) {
             doctorLicense: doctorObj ? (doctorObj.license || 'N/A') : 'N/A',
             doctorPhone: doctorObj ? (doctorObj.phone || 'N/A') : 'N/A',
             medicines: activeConsultationState.treatments.map(t => ({
-              name: t.name,
-              presentation: t.presentation || 'Tabletas',
-              quantity: t.quantity || '1',
-              dosage: t.dosage || 'Tomar según indicaciones',
-              duration: t.duration || 'N/A'
+              name: typeof t === 'object' ? t.name : t,
+              presentation: (typeof t === 'object' && t.presentation) ? t.presentation : 'Tabletas',
+              quantity: (typeof t === 'object' && t.quantity) ? t.quantity : '1',
+              dosage: (typeof t === 'object' && t.dosage) ? t.dosage : 'Tomar según indicaciones',
+              duration: (typeof t === 'object' && t.duration) ? t.duration : 'N/A'
             })),
             indications: `Tratamiento recetado en la consulta médica.`,
             billId: billId,
@@ -2447,6 +3056,7 @@ function toggleDiagnosis(code, description, suggestionObj) {
       }
     }
   }
+  renderActiveConsultationItemsSummary();
 }
 
 // Aceptar/Quitar estudios o tratamientos de apoyo
@@ -2473,6 +3083,7 @@ function toggleStudyOrTreatment(type, name) {
       activeConsultationState.treatments.push(name);
     }
   }
+  renderActiveConsultationItemsSummary();
 }
 
 // Generar orden médica imprimible (Laboratorio o Imagenología)
