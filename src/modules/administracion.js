@@ -1,4 +1,4 @@
-import { getAppState, saveAppState, backfillEmployeeCodes, removeFromFirestore, purgeAndSanitizePayrolls } from '../main.js';
+import { getAppState, saveAppState, saveToFirestore, backfillEmployeeCodes, removeFromFirestore, purgeAndSanitizePayrolls, reconcileAndRecoverLiquidaciones } from '../main.js';
 import { simulateOnPurchaseCreated, simulateOnPayrollGenerated } from '../utils/cloud_functions.js';
 import { notifyEmployeeWelcome } from '../utils/whatsapp.js';
 import { renderRrhhAsistencia } from './attendanceManager.js';
@@ -2437,6 +2437,7 @@ export function isDoctorOrPhysician(emp) {
 function renderRrhhNomina(container, state) {
   // Asegurar depuración automática de nóminas archivadas existentes (ej. Septiembre)
   purgeAndSanitizePayrolls(state);
+  reconcileAndRecoverLiquidaciones(state);
   state.administracion_liquidaciones = state.administracion_liquidaciones || [];
 
   if (activeNominaSubTab === 'liquidaciones') {
@@ -2757,6 +2758,7 @@ function renderRrhhNomina(container, state) {
 // 📜 SUB-SECCIÓN: FINIQUITOS Y LIQUIDACIÓN LABORAL (DÍAS TRABAJADOS)
 // ==========================================
 function renderRrhhLiquidaciones(container, state) {
+  reconcileAndRecoverLiquidaciones(state);
   state.administracion_liquidaciones = state.administracion_liquidaciones || [];
   state.administracion_employees = state.administracion_employees || [];
 
@@ -2981,9 +2983,14 @@ function renderRrhhLiquidaciones(container, state) {
           <h3 style="font-size: 1rem; color: var(--accent-primary); margin: 0; font-family: var(--font-heading);">
             📜 Historial de Finiquitos Emitidos
           </h3>
-          <span style="font-size: 0.72rem; background: rgba(0, 242, 254, 0.1); color: var(--accent-primary); padding: 2px 8px; border-radius: 10px; font-weight: bold;">
-            ${state.administracion_liquidaciones.length} Registros
-          </span>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 0.72rem; background: rgba(0, 242, 254, 0.1); color: var(--accent-primary); padding: 2px 8px; border-radius: 10px; font-weight: bold;">
+              ${state.administracion_liquidaciones.length} Registros
+            </span>
+            <button type="button" class="btn btn-secondary btn-small" id="btn-sync-finiquitos" style="padding: 2px 8px; font-size: 0.72rem; display: flex; align-items: center; gap: 4px;" title="Verificar y sincronizar finiquitos">
+              <span>🔄</span> Sincronizar
+            </button>
+          </div>
         </div>
 
         <div style="max-height: 520px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
@@ -3396,12 +3403,38 @@ function renderRrhhLiquidaciones(container, state) {
       });
 
       await saveAppState(state);
+      try {
+        await saveToFirestore('catalog_administracion_liquidaciones', 'catalog_administracion_liquidaciones', {
+          items: state.administracion_liquidaciones
+        });
+        await saveToFirestore('administracion_liquidaciones', newLiq.id, newLiq);
+        localStorage.setItem('medflow_liquidaciones', JSON.stringify(state.administracion_liquidaciones));
+      } catch (fsErr) {
+        console.warn("Direct Firestore save error for liquidacion:", fsErr);
+      }
+
       alert(`✅ Liquidación laboral de ${emp.name} procesada exitosamente por un total de Q${netAmount.toFixed(2)}.`);
 
       // Abrir automáticamente vista de impresión del Finiquito Oficial
       showLiquidationPrintPreview(newLiq, state);
 
       // Re-renderizar
+      renderRrhhLiquidaciones(container, state);
+    });
+  }
+
+  // Bind Botón Sincronizar / Verificar Finiquitos
+  const btnSync = container.querySelector('#btn-sync-finiquitos');
+  if (btnSync) {
+    btnSync.addEventListener('click', async () => {
+      reconcileAndRecoverLiquidaciones(state);
+      await saveAppState(state);
+      try {
+        await saveToFirestore('catalog_administracion_liquidaciones', 'catalog_administracion_liquidaciones', {
+          items: state.administracion_liquidaciones
+        });
+      } catch (e) {}
+      alert(`🔄 Sincronización completa: ${state.administracion_liquidaciones.length} finiquitos registrados.`);
       renderRrhhLiquidaciones(container, state);
     });
   }
@@ -3461,6 +3494,15 @@ function renderRrhhLiquidaciones(container, state) {
           }
 
           await saveAppState(state);
+          try {
+            await saveToFirestore('catalog_administracion_liquidaciones', 'catalog_administracion_liquidaciones', {
+              items: state.administracion_liquidaciones
+            });
+            await removeFromFirestore('administracion_liquidaciones', liqId);
+            localStorage.setItem('medflow_liquidaciones', JSON.stringify(state.administracion_liquidaciones));
+          } catch (fsErr) {
+            console.warn("Direct Firestore delete error for liquidacion:", fsErr);
+          }
           alert(`Liquidación de ${liq.employeeName} anulada correctamente.`);
           renderRrhhLiquidaciones(container, state);
         }

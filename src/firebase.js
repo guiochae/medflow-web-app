@@ -109,6 +109,7 @@ export const firestoreState = {
   administracion_caja: [],
   administracion_employees: [],
   administracion_nominas: [],
+  administracion_liquidaciones: [],
   administracion_bancos: [],
   administracion_activos_fijos: [],
   administracion_asistencias: [],
@@ -160,6 +161,18 @@ function loadStateFromLocalCache() {
         if (Array.isArray(parsed.administracion_caja)) firestoreState.administracion_caja = parsed.administracion_caja;
         if (Array.isArray(parsed.administracion_employees)) firestoreState.administracion_employees = parsed.administracion_employees;
         if (Array.isArray(parsed.administracion_nominas)) firestoreState.administracion_nominas = parsed.administracion_nominas;
+        if (Array.isArray(parsed.administracion_liquidaciones)) firestoreState.administracion_liquidaciones = parsed.administracion_liquidaciones;
+        if (!firestoreState.administracion_liquidaciones || firestoreState.administracion_liquidaciones.length === 0) {
+          try {
+            const rawLiq = localStorage.getItem('medflow_liquidaciones');
+            if (rawLiq) {
+              const parsedLiq = JSON.parse(rawLiq);
+              if (Array.isArray(parsedLiq) && parsedLiq.length > 0) {
+                firestoreState.administracion_liquidaciones = parsedLiq;
+              }
+            }
+          } catch (e) {}
+        }
         if (Array.isArray(parsed.administracion_bancos)) firestoreState.administracion_bancos = parsed.administracion_bancos;
         if (Array.isArray(parsed.administracion_activos_fijos)) firestoreState.administracion_activos_fijos = parsed.administracion_activos_fijos;
         if (Array.isArray(parsed.administracion_asistencias)) firestoreState.administracion_asistencias = parsed.administracion_asistencias;
@@ -210,6 +223,7 @@ export function saveStateToLocalCache() {
       administracion_caja: firestoreState.administracion_caja,
       administracion_employees: firestoreState.administracion_employees,
       administracion_nominas: firestoreState.administracion_nominas,
+      administracion_liquidaciones: firestoreState.administracion_liquidaciones,
       administracion_bancos: firestoreState.administracion_bancos,
       administracion_activos_fijos: firestoreState.administracion_activos_fijos,
       administracion_asistencias: firestoreState.administracion_asistencias,
@@ -221,6 +235,10 @@ export function saveStateToLocalCache() {
       accounts_payable: firestoreState.accounts_payable,
       clinicInfo: firestoreState.clinicInfo
     }));
+
+    if (Array.isArray(firestoreState.administracion_liquidaciones) && firestoreState.administracion_liquidaciones.length > 0) {
+      localStorage.setItem('medflow_liquidaciones', JSON.stringify(firestoreState.administracion_liquidaciones));
+    }
   } catch (e) {
     console.warn("No se pudo guardar en localStorage:", e);
   }
@@ -352,6 +370,7 @@ export function initRealtimeFirestore(onFirstLoad) {
       const caja = [];
       const employees = [];
       const nominas = [];
+      const administracionLiquidaciones = [];
       const bancos = [];
       const activosFijos = [];
       const asistencias = [];
@@ -438,6 +457,10 @@ export function initRealtimeFirestore(onFirstLoad) {
           nominas.push(...(dData.items || []));
           return;
         }
+        if (dId === 'catalog_administracion_liquidaciones') {
+          administracionLiquidaciones.push(...(dData.items || []));
+          return;
+        }
         if (dId === 'catalog_administracion_bancos') {
           bancos.push(...(dData.items || []));
           return;
@@ -513,6 +536,7 @@ export function initRealtimeFirestore(onFirstLoad) {
         else if (type === 'administracion_caja') caja.push(cleanDoc);
         else if (type === 'administracion_employees') employees.push(cleanDoc);
         else if (type === 'administracion_nominas') nominas.push(cleanDoc);
+        else if (type === 'administracion_liquidaciones') administracionLiquidaciones.push(cleanDoc);
         else if (type === 'administracion_bancos') bancos.push(cleanDoc);
         else if (type === 'administracion_activos_fijos') activosFijos.push(cleanDoc);
         else if (type === 'administracion_asistencias') asistencias.push(cleanDoc);
@@ -688,9 +712,41 @@ export function initRealtimeFirestore(onFirstLoad) {
         } catch (e) {}
       }
 
+      // Deduplicar Liquidaciones y Finiquitos Laborales
+      const uniqueLiquidaciones = [];
+      const seenLiqIds = new Set();
+      administracionLiquidaciones.forEach(l => {
+        if (l && l.id && !seenLiqIds.has(l.id)) {
+          seenLiqIds.add(l.id);
+          uniqueLiquidaciones.push(l);
+        }
+      });
+      if (uniqueLiquidaciones.length === 0) {
+        try {
+          const cached = JSON.parse(localStorage.getItem('medflow_firestore_cache') || '{}');
+          let directLiq = [];
+          try { directLiq = JSON.parse(localStorage.getItem('medflow_liquidaciones') || '[]'); } catch(e){}
+          const localLiq = (Array.isArray(cached.administracion_liquidaciones) && cached.administracion_liquidaciones.length > 0)
+            ? cached.administracion_liquidaciones
+            : (Array.isArray(directLiq) && directLiq.length > 0 ? directLiq : (firestoreState.administracion_liquidaciones || []));
+          if (localLiq.length > 0) {
+            localLiq.forEach(l => {
+              if (l && l.id && !seenLiqIds.has(l.id)) {
+                seenLiqIds.add(l.id);
+                uniqueLiquidaciones.push(l);
+              }
+            });
+            saveDocument('catalog_administracion_liquidaciones', 'catalog_administracion_liquidaciones', {
+              items: uniqueLiquidaciones
+            });
+          }
+        } catch (e) {}
+      }
+
       firestoreState.administracion_enfermeria_roles = uniqueRoles;
       firestoreState.administracion_enfermeria_cambios = uniqueCambios;
       firestoreState.administracion_enfermeria_permisos = uniquePermisos;
+      firestoreState.administracion_liquidaciones = uniqueLiquidaciones;
       firestoreState.external_doctors = doctors;
       firestoreState.accounts_payable = payables;
       if (clinic) firestoreState.clinicInfo = clinic;
@@ -725,6 +781,7 @@ export function initRealtimeFirestore(onFirstLoad) {
           const caja = [];
           const employees = [];
           const nominas = [];
+          const administracionLiquidaciones = [];
           const bancos = [];
           const activosFijos = [];
           const asistencias = [];
@@ -811,6 +868,10 @@ export function initRealtimeFirestore(onFirstLoad) {
               nominas.push(...(dData.items || []));
               return;
             }
+            if (dId === 'catalog_administracion_liquidaciones') {
+              administracionLiquidaciones.push(...(dData.items || []));
+              return;
+            }
             if (dId === 'catalog_administracion_bancos') {
               bancos.push(...(dData.items || []));
               return;
@@ -886,6 +947,7 @@ export function initRealtimeFirestore(onFirstLoad) {
             else if (type === 'administracion_caja') caja.push(cleanDoc);
             else if (type === 'administracion_employees') employees.push(cleanDoc);
             else if (type === 'administracion_nominas') nominas.push(cleanDoc);
+            else if (type === 'administracion_liquidaciones') administracionLiquidaciones.push(cleanDoc);
             else if (type === 'administracion_bancos') bancos.push(cleanDoc);
             else if (type === 'administracion_activos_fijos') activosFijos.push(cleanDoc);
             else if (type === 'administracion_asistencias') asistencias.push(cleanDoc);
@@ -997,9 +1059,20 @@ export function initRealtimeFirestore(onFirstLoad) {
             }
           });
 
+          // Deduplicar liquidaciones en fallback
+          const uniqueLiqFb = [];
+          const seenLiqFb = new Set();
+          administracionLiquidaciones.forEach(l => {
+            if (l && l.id && !seenLiqFb.has(l.id)) {
+              seenLiqFb.add(l.id);
+              uniqueLiqFb.push(l);
+            }
+          });
+
           firestoreState.administracion_enfermeria_roles = uniqueRolesFb;
           firestoreState.administracion_enfermeria_cambios = uniqueCambiosFb;
           firestoreState.administracion_enfermeria_permisos = uniquePermisosFb;
+          firestoreState.administracion_liquidaciones = uniqueLiqFb;
           firestoreState.external_doctors = doctors;
           firestoreState.accounts_payable = payables;
           if (clinic) firestoreState.clinicInfo = clinic;
@@ -1188,6 +1261,7 @@ export async function purgeAllFirestoreData() {
     firestoreState.administracion_caja = [];
     firestoreState.administracion_employees = [];
     firestoreState.administracion_nominas = [];
+    firestoreState.administracion_liquidaciones = [];
     firestoreState.administracion_bancos = [];
     firestoreState.administracion_activos_fijos = [];
     firestoreState.external_doctors = [];

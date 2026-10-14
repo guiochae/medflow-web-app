@@ -187,6 +187,7 @@ export function getAppState() {
     backfillEmployeeCodes(firestoreState);
     purgeAndSanitizePayrolls(firestoreState);
     reconcileAndRecoverConsultations(firestoreState);
+    reconcileAndRecoverLiquidaciones(firestoreState);
 
     return firestoreState;
   }
@@ -255,6 +256,7 @@ export async function saveAppState(state) {
   backfillEmployeeCodes(state);
   purgeAndSanitizePayrolls(state);
   reconcileAndRecoverConsultations(state);
+  reconcileAndRecoverLiquidaciones(state);
   updateSidebarInfo(state);
 
   // Sincronizar de inmediato el estado en memoria para reactividad local offline
@@ -284,6 +286,7 @@ export async function saveAppState(state) {
   if (state.administracion_caja) firestoreState.administracion_caja = state.administracion_caja;
   if (state.administracion_employees) firestoreState.administracion_employees = state.administracion_employees;
   if (state.administracion_nominas) firestoreState.administracion_nominas = state.administracion_nominas;
+  if (state.administracion_liquidaciones) firestoreState.administracion_liquidaciones = state.administracion_liquidaciones;
   if (state.administracion_bancos) firestoreState.administracion_bancos = state.administracion_bancos;
   if (state.administracion_activos_fijos) firestoreState.administracion_activos_fijos = state.administracion_activos_fijos;
   if (state.administracion_asistencias) firestoreState.administracion_asistencias = state.administracion_asistencias;
@@ -713,6 +716,24 @@ export async function saveAppState(state) {
           const prevP = lastSyncedState && lastSyncedState.administracion_enfermeria_permisos && lastSyncedState.administracion_enfermeria_permisos.find(x => x.id === p.id);
           if (!prevP || JSON.stringify(prevP) !== JSON.stringify(p)) {
             addWriteToBatch('administracion_enfermeria_permisos', p.id, p);
+          }
+        }
+      });
+    }
+
+    // Sincronizar Liquidaciones / Finiquitos Laborales
+    if (state.administracion_liquidaciones && Array.isArray(state.administracion_liquidaciones)) {
+      const prevLiq = lastSyncedState && lastSyncedState.administracion_liquidaciones;
+      if (!prevLiq || JSON.stringify(prevLiq) !== JSON.stringify(state.administracion_liquidaciones)) {
+        const docRef = doc(db, 'multimedica', 'catalog_administracion_liquidaciones');
+        batch.set(docRef, { _collectionType: 'catalog_administracion_liquidaciones', items: state.administracion_liquidaciones });
+        hasWrites = true;
+      }
+      state.administracion_liquidaciones.forEach(l => {
+        if (l && l.id) {
+          const prevL = lastSyncedState && lastSyncedState.administracion_liquidaciones && lastSyncedState.administracion_liquidaciones.find(x => x.id === l.id);
+          if (!prevL || JSON.stringify(prevL) !== JSON.stringify(l)) {
+            addWriteToBatch('administracion_liquidaciones', l.id, l);
           }
         }
       });
@@ -1683,6 +1704,320 @@ export function purgeAndSanitizePayrolls(state) {
   }
 
   return { modified, purgedCount: totalPurgedEmployees };
+}
+
+// Reconciliación y recuperación automática de finiquitos y liquidaciones laborales
+export function reconcileAndRecoverLiquidaciones(state) {
+  if (!state) return false;
+  state.administracion_liquidaciones = Array.isArray(state.administracion_liquidaciones) ? state.administracion_liquidaciones : [];
+  state.administracion_caja = Array.isArray(state.administracion_caja) ? state.administracion_caja : [];
+  state.administracion_contabilidad = Array.isArray(state.administracion_contabilidad) ? state.administracion_contabilidad : [];
+  state.administracion_employees = Array.isArray(state.administracion_employees) ? state.administracion_employees : [];
+
+  let recovered = false;
+
+  const normalizePersonName = (str) => {
+    return String(str || '')
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/^(a\.e\.|e\.|lic\.|dr\.|dra\.)\s+/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  // Deduplicar liquidaciones existentes por ID
+  const uniqueExisting = [];
+  const existingLiqIds = new Set();
+  const existingEmployeeNames = new Set();
+  const existingEmployeeIds = new Set();
+
+  state.administracion_liquidaciones.forEach(liq => {
+    if (liq && liq.id && !existingLiqIds.has(liq.id)) {
+      existingLiqIds.add(liq.id);
+      if (liq.employeeId) existingEmployeeIds.add(liq.employeeId);
+      if (liq.employeeName) existingEmployeeNames.add(normalizePersonName(liq.employeeName));
+      uniqueExisting.push(liq);
+    }
+  });
+  state.administracion_liquidaciones = uniqueExisting;
+
+  // 1. Rescate desde localStorage si existen en caché dedicado pero no en memoria
+  try {
+    const rawLocal = localStorage.getItem('medflow_liquidaciones');
+    if (rawLocal) {
+      const parsedLocal = JSON.parse(rawLocal);
+      if (Array.isArray(parsedLocal)) {
+        parsedLocal.forEach(l => {
+          if (l && l.id && !existingLiqIds.has(l.id)) {
+            existingLiqIds.add(l.id);
+            if (l.employeeId) existingEmployeeIds.add(l.employeeId);
+            if (l.employeeName) existingEmployeeNames.add(normalizePersonName(l.employeeName));
+            state.administracion_liquidaciones.push(l);
+            recovered = true;
+          }
+        });
+      }
+    }
+    const rawFsCache = localStorage.getItem('medflow_firestore_cache');
+    if (rawFsCache) {
+      const parsedFs = JSON.parse(rawFsCache);
+      if (Array.isArray(parsedFs.administracion_liquidaciones)) {
+        parsedFs.administracion_liquidaciones.forEach(l => {
+          if (l && l.id && !existingLiqIds.has(l.id)) {
+            existingLiqIds.add(l.id);
+            if (l.employeeId) existingEmployeeIds.add(l.employeeId);
+            if (l.employeeName) existingEmployeeNames.add(normalizePersonName(l.employeeName));
+            state.administracion_liquidaciones.push(l);
+            recovered = true;
+          }
+        });
+      }
+    }
+  } catch (e) {}
+
+  // 2. Reconciliación desde Registros de Egreso en Caja (state.administracion_caja)
+  state.administracion_caja.forEach(caja => {
+    if (!caja) return;
+    const cat = String(caja.category || '').toLowerCase();
+    const concept = String(caja.concept || '');
+    const isLiq = cat.includes('liquidaci') || concept.toLowerCase().includes('liquidaci');
+    if (!isLiq) return;
+
+    const refId = caja.refId;
+    if (refId && existingLiqIds.has(refId)) return;
+
+    let reason = 'Renuncia Voluntaria';
+    const matchReason = concept.match(/\((Renuncia Voluntaria|Despido Injustificado|Despido Justificado|Fin de Contrato|Mutuo Acuerdo)[^)]*\)/i);
+    if (matchReason) {
+      reason = matchReason[1];
+    }
+
+    let daysWorked = 15;
+    const matchDays = concept.match(/(\d+)\s*d[ií]as/i);
+    if (matchDays) {
+      daysWorked = parseInt(matchDays[1], 10);
+    }
+
+    let monthName = 'Octubre 2026';
+    const matchMonth = concept.match(/en\s+([A-Za-zñáéíóúÁÉÍÓÚ]+\s+\d{4})/i);
+    if (matchMonth) {
+      monthName = matchMonth[1];
+    }
+
+    let empName = '';
+    const matchName = concept.match(/-\s*([^(]+?)(?:\s*\(|$)/);
+    if (matchName) {
+      empName = matchName[1].trim();
+    }
+
+    if (!empName) return;
+    const normName = normalizePersonName(empName);
+    if (existingEmployeeNames.has(normName)) return;
+
+    const matchedEmp = state.administracion_employees.find(e => {
+      if (!e || !e.name) return false;
+      const eNorm = normalizePersonName(e.name);
+      return eNorm === normName || eNorm.includes(normName) || normName.includes(eNorm);
+    });
+
+    const targetEmpId = matchedEmp ? matchedEmp.id : (caja.employeeId || `emp-caja-${Date.now()}`);
+    const targetEmpName = matchedEmp ? matchedEmp.name : empName;
+    const normTarget = normalizePersonName(targetEmpName);
+    if (existingEmployeeNames.has(normTarget)) return;
+
+    const liqId = refId || ('LIQ-' + (caja.date ? new Date(caja.date).getTime() : Date.now()));
+    if (existingLiqIds.has(liqId)) return;
+
+    const baseSalary = matchedEmp ? (matchedEmp.salary || 4200) : 4200;
+    const daysInMonth = 31;
+    const dailySalary = baseSalary / daysInMonth;
+    const workedDaysAmount = dailySalary * daysWorked;
+    const netAmount = parseFloat(caja.amount || workedDaysAmount || 0);
+
+    const reconstructedLiq = {
+      id: liqId,
+      employeeId: targetEmpId,
+      employeeCode: matchedEmp ? (matchedEmp.employee_code || 'EMP-S/C') : 'EMP-S/C',
+      employeeName: targetEmpName,
+      employeePosition: matchedEmp ? (matchedEmp.position || 'Colaborador') : 'Colaborador',
+      employeeDepartment: matchedEmp ? (matchedEmp.department || 'Enfermería') : 'General',
+      hireDate: matchedEmp ? (matchedEmp.hireDate || '2024-01-15') : '',
+      exitDate: matchedEmp?.exitDate || (caja.date ? caja.date.substring(0, 10) : new Date().toISOString().substring(0, 10)),
+      reason: reason,
+      monthName: monthName,
+      baseSalary: baseSalary,
+      daysInMonth: daysInMonth,
+      daysWorked: daysWorked,
+      dailySalary: dailySalary,
+      workedDaysAmount: workedDaysAmount,
+      proportionalBonus: 0,
+      deductions: 0,
+      netAmount: netAmount,
+      notes: matchedEmp?.exitNotes || 'Recuperado automáticamente de registro de egreso en caja',
+      resignationDoc: matchedEmp?.resignationDoc || null,
+      autoDeactivate: true,
+      createdAt: caja.date || new Date().toISOString(),
+      status: 'Liquidado'
+    };
+
+    existingLiqIds.add(liqId);
+    existingEmployeeIds.add(targetEmpId);
+    existingEmployeeNames.add(normTarget);
+    state.administracion_liquidaciones.push(reconstructedLiq);
+    recovered = true;
+  });
+
+  // 3. Reconciliación desde Partidas Contables (state.administracion_contabilidad)
+  state.administracion_contabilidad.forEach(cont => {
+    if (!cont) return;
+    const concept = String(cont.concept || '');
+    if (!concept.toLowerCase().includes('liquidaci')) return;
+
+    let reason = 'Renuncia Voluntaria';
+    const matchReason = concept.match(/\((Renuncia Voluntaria|Despido Injustificado|Despido Justificado|Fin de Contrato|Mutuo Acuerdo)[^)]*\)/i);
+    if (matchReason) reason = matchReason[1];
+
+    let daysWorked = 15;
+    const matchDays = concept.match(/(\d+)\s*d[ií]as/i);
+    if (matchDays) daysWorked = parseInt(matchDays[1], 10);
+
+    let monthName = 'Octubre 2026';
+    const matchMonth = concept.match(/\(([^)]*\d{4})\)/i);
+    if (matchMonth) monthName = matchMonth[1];
+
+    let empName = '';
+    const matchName = concept.match(/:\s*([^-\n]+?)\s*-\s*\d+\s*d[ií]as/i);
+    if (matchName) empName = matchName[1].trim();
+
+    if (!empName) return;
+    const normName = normalizePersonName(empName);
+    if (existingEmployeeNames.has(normName)) return;
+
+    const matchedEmp = state.administracion_employees.find(e => {
+      if (!e || !e.name) return false;
+      const eNorm = normalizePersonName(e.name);
+      return eNorm === normName || eNorm.includes(normName) || normName.includes(eNorm);
+    });
+
+    const targetEmpId = matchedEmp ? matchedEmp.id : `emp-cont-${Date.now()}`;
+    const targetEmpName = matchedEmp ? matchedEmp.name : empName;
+    const normTarget = normalizePersonName(targetEmpName);
+    if (existingEmployeeNames.has(normTarget)) return;
+
+    const liqId = 'LIQ-' + (cont.date ? new Date(cont.date).getTime() : Date.now());
+    if (existingLiqIds.has(liqId)) return;
+
+    const baseSalary = matchedEmp ? (matchedEmp.salary || 4200) : 4200;
+    const daysInMonth = 31;
+    const dailySalary = baseSalary / daysInMonth;
+    const workedDaysAmount = dailySalary * daysWorked;
+    const netAmount = parseFloat(cont.totalDebits || workedDaysAmount || 0);
+
+    const reconstructedLiq = {
+      id: liqId,
+      employeeId: targetEmpId,
+      employeeCode: matchedEmp ? (matchedEmp.employee_code || 'EMP-S/C') : 'EMP-S/C',
+      employeeName: targetEmpName,
+      employeePosition: matchedEmp ? (matchedEmp.position || 'Colaborador') : 'Colaborador',
+      employeeDepartment: matchedEmp ? (matchedEmp.department || 'Enfermería') : 'General',
+      hireDate: matchedEmp ? (matchedEmp.hireDate || '2024-01-15') : '',
+      exitDate: matchedEmp?.exitDate || (cont.date ? cont.date.substring(0, 10) : new Date().toISOString().substring(0, 10)),
+      reason: reason,
+      monthName: monthName,
+      baseSalary: baseSalary,
+      daysInMonth: daysInMonth,
+      daysWorked: daysWorked,
+      dailySalary: dailySalary,
+      workedDaysAmount: workedDaysAmount,
+      proportionalBonus: 0,
+      deductions: 0,
+      netAmount: netAmount,
+      notes: matchedEmp?.exitNotes || 'Recuperado de partida contable de liquidación',
+      resignationDoc: matchedEmp?.resignationDoc || null,
+      autoDeactivate: true,
+      createdAt: cont.date || new Date().toISOString(),
+      status: 'Liquidado'
+    };
+
+    existingLiqIds.add(liqId);
+    existingEmployeeIds.add(targetEmpId);
+    existingEmployeeNames.add(normTarget);
+    state.administracion_liquidaciones.push(reconstructedLiq);
+    recovered = true;
+  });
+
+  // 4. Reconciliación desde Empleados Dados de Baja por Liquidación (status === 'Inactivo')
+  state.administracion_employees.forEach(emp => {
+    if (!emp) return;
+    const isInactive = emp.status === 'Inactivo';
+    const hasExitReason = Boolean(emp.exitReason || emp.liquidatedAt || emp.exitDate);
+
+    if (isInactive && hasExitReason) {
+      const normEmpName = normalizePersonName(emp.name);
+      if (existingEmployeeNames.has(normEmpName) || (emp.id && existingEmployeeIds.has(emp.id))) {
+        return;
+      }
+
+      const liqId = 'LIQ-' + (emp.liquidatedAt ? new Date(emp.liquidatedAt).getTime() : Date.now());
+      if (existingLiqIds.has(liqId)) return;
+
+      const exitDayNum = emp.exitDate ? parseInt(emp.exitDate.split('-')[2] || '15', 10) : 15;
+      const daysWorked = !isNaN(exitDayNum) && exitDayNum > 0 ? exitDayNum : 15;
+      const baseSalary = parseFloat(emp.salary || 4200);
+      const daysInMonth = 31;
+      const dailySalary = baseSalary / daysInMonth;
+      const workedDaysAmount = dailySalary * daysWorked;
+
+      const reconstructedLiq = {
+        id: liqId,
+        employeeId: emp.id,
+        employeeCode: emp.employee_code || 'EMP-S/C',
+        employeeName: emp.name,
+        employeePosition: emp.position || 'Colaborador',
+        employeeDepartment: emp.department || 'Enfermería',
+        hireDate: emp.hireDate || '2024-01-15',
+        exitDate: emp.exitDate || new Date().toISOString().substring(0, 10),
+        reason: emp.exitReason || 'Renuncia Voluntaria',
+        monthName: 'Octubre 2026',
+        baseSalary: baseSalary,
+        daysInMonth: daysInMonth,
+        daysWorked: daysWorked,
+        dailySalary: dailySalary,
+        workedDaysAmount: workedDaysAmount,
+        proportionalBonus: 0,
+        deductions: 0,
+        netAmount: workedDaysAmount,
+        notes: emp.exitNotes || 'Finiquito recuperado a partir de la baja del colaborador',
+        resignationDoc: emp.resignationDoc || null,
+        autoDeactivate: true,
+        createdAt: emp.liquidatedAt || new Date().toISOString(),
+        status: 'Liquidado'
+      };
+
+      existingLiqIds.add(liqId);
+      existingEmployeeIds.add(emp.id);
+      existingEmployeeNames.add(normEmpName);
+      state.administracion_liquidaciones.push(reconstructedLiq);
+      recovered = true;
+    }
+  });
+
+  // Ordenar por fecha descendente
+  state.administracion_liquidaciones.sort((a, b) => {
+    const tA = new Date(a.createdAt || a.exitDate || 0).getTime();
+    const tB = new Date(b.createdAt || b.exitDate || 0).getTime();
+    return tB - tA;
+  });
+
+  if (recovered) {
+    console.log(`[reconcileAndRecoverLiquidaciones] Se recuperaron y consolidaron ${state.administracion_liquidaciones.length} finiquitos.`);
+    try {
+      localStorage.setItem('medflow_liquidaciones', JSON.stringify(state.administracion_liquidaciones));
+    } catch (e) {}
+  }
+
+  return recovered;
 }
 
 export function migrateLaboratoryTestsCategories(state) {
