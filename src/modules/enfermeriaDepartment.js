@@ -1,5 +1,5 @@
 // src/modules/enfermeriaDepartment.js
-import { saveAppState } from '../main.js';
+import { saveAppState, saveToFirestore } from '../main.js';
 import { db, doc, setDoc } from '../firebase.js';
 
 // ==============================================================================
@@ -37,6 +37,7 @@ export const DEFAULT_NURSING_ROSTER_SAMPLE = [
 
 let activeEnfSubTab = 'rol-turnos';
 let currentRosterMonth = new Date().toISOString().substring(0, 7);
+let showAllShiftChanges = false;
 
 export function isUserJefaEnfermeria(currentUser) {
   if (!currentUser) return false;
@@ -520,6 +521,64 @@ function renderEnfermeriaRosterView(container, state) {
   }
 }
 
+function renderShiftChangeCardHtml(change, isAuthorizer) {
+  const isPending = change.status === 'Pendiente';
+  const isApproved = change.status === 'Autorizado';
+  const isRejected = change.status === 'Rechazado';
+
+  return `
+    <div style="background: rgba(255,255,255,0.02); border: 1px solid ${isApproved ? 'rgba(34, 197, 94, 0.3)' : isRejected ? 'rgba(239, 68, 68, 0.3)' : 'rgba(245, 158, 11, 0.4)'}; border-radius: 8px; padding: 14px; display: grid; grid-template-columns: 1.2fr 2fr 1.2fr; gap: 15px; align-items: center;">
+      
+      <div>
+        <div style="font-size: 0.72rem; color: var(--text-muted);">BOLETA OFICIAL NO.</div>
+        <strong style="font-size: 1.15rem; color: #ef4444; font-family: monospace; letter-spacing: 1px;">
+          ${change.voucherNumber || '000000'}
+        </strong>
+        <div style="margin-top: 6px;">
+          <span style="font-size: 0.72rem; padding: 3px 8px; border-radius: 4px; font-weight: bold; background: ${isApproved ? 'rgba(34, 197, 94, 0.15)' : isRejected ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)'}; color: ${isApproved ? '#4ade80' : isRejected ? '#f87171' : '#fbbf24'}; border: 1px solid ${isApproved ? '#22c55e' : isRejected ? '#ef4444' : '#f59e0b'};">
+            ${change.status}
+          </span>
+        </div>
+      </div>
+
+      <div style="font-size: 0.8rem; line-height: 1.4;">
+        <div>
+          <strong style="color: var(--accent-primary);">Fecha del Turno:</strong> ${change.date} &bull; 
+          <strong style="color: var(--accent-secondary);">Turno:</strong> <span style="background: #0284c7; color: #fff; padding: 1px 6px; border-radius: 3px; font-weight: bold; font-size: 0.72rem;">${change.shift}</span>
+        </div>
+        <div style="margin-top: 4px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+          <div>👤 <strong>Responsable:</strong> <span style="color: #f87171;">${change.originalEmpName}</span></div>
+          <div>🔄 <strong>Reemplazante:</strong> <span style="color: #4ade80;">${change.replacementEmpName}</span></div>
+        </div>
+        ${change.reason ? `<div style="margin-top: 4px; color: var(--text-muted); font-size: 0.75rem;">💬 <em>"${change.reason}"</em></div>` : ''}
+        <div style="margin-top: 4px; font-size: 0.7rem; color: var(--text-muted);">
+          Solicitado por: <strong>${change.requestedBy || 'Personal de Enfermería'}</strong> &bull; ${new Date(change.createdAt || Date.now()).toLocaleDateString('es-GT')}
+          ${change.authorizedBy ? `<br>Autorizado por: <strong style="color: #4ade80;">${change.authorizedBy}</strong>` : ''}
+          ${change.rejectedReason ? `<br><span style="color: #f87171;">Motivo rechazo: ${change.rejectedReason}</span>` : ''}
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px; justify-content: center; align-items: flex-end;">
+        <button class="btn btn-secondary btn-small btn-print-shift-voucher" data-id="${change.id}" style="padding: 4px 10px; font-size: 0.75rem; width: 100%;">
+          🖨️ Boleta Oficial
+        </button>
+
+        ${isPending ? `
+          <div style="display: flex; gap: 6px; width: 100%;">
+            <button class="btn btn-primary btn-small btn-approve-shift-change" data-id="${change.id}" ${!isAuthorizer ? 'disabled title="Requiere ser Administrador o Médico 1"' : ''} style="flex: 1; padding: 4px 6px; font-size: 0.72rem; background: #16a34a; border-color: #16a34a;">
+              ✅ Autorizar
+            </button>
+            <button class="btn btn-danger btn-small btn-reject-shift-change" data-id="${change.id}" ${!isAuthorizer ? 'disabled title="Requiere ser Administrador o Médico 1"' : ''} style="flex: 1; padding: 4px 6px; font-size: 0.72rem;">
+              ❌ Rechazar
+            </button>
+          </div>
+        ` : ''}
+      </div>
+
+    </div>
+  `;
+}
+
 function renderEnfermeriaShiftChangesView(container, state) {
   const currentUser = state.currentUser;
   const isAuthorizer = isUserShiftAuthorizer(currentUser);
@@ -528,11 +587,21 @@ function renderEnfermeriaShiftChangesView(container, state) {
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
   const currentMonthTitle = `${monthNames[parseInt(monthStr, 10) - 1]} de ${yearStr}`;
 
-  const monthChanges = state.administracion_enfermeria_cambios.filter(c => {
-    return c.month === currentRosterMonth || (c.date && c.date.startsWith(currentRosterMonth));
+  // Todas las solicitudes pendientes de autorización en el hospital (para Médicos 1 y Administrador)
+  const allPendingChanges = (state.administracion_enfermeria_cambios || []).filter(c => c.status === 'Pendiente');
+
+  // Filtrado de cambios para la lista principal
+  const monthSpecificChanges = (state.administracion_enfermeria_cambios || []).filter(c => {
+    const cMonth = c.month || (c.date ? c.date.substring(0, 7) : '');
+    return cMonth === currentRosterMonth || (c.date && c.date.startsWith(currentRosterMonth));
   });
-  const approvedCount = monthChanges.filter(c => c.status === 'Autorizado').length;
-  const pendingCount = monthChanges.filter(c => c.status === 'Pendiente').length;
+
+  const displayChanges = showAllShiftChanges 
+    ? (state.administracion_enfermeria_cambios || []) 
+    : monthSpecificChanges;
+
+  const approvedCount = monthSpecificChanges.filter(c => c.status === 'Autorizado').length;
+  const pendingCount = monthSpecificChanges.filter(c => c.status === 'Pendiente').length;
   const totalOccupied = approvedCount + pendingCount;
   const maxAllowed = 5;
   const isLimitReached = totalOccupied >= maxAllowed;
@@ -551,7 +620,7 @@ function renderEnfermeriaShiftChangesView(container, state) {
           </span>
         </div>
         <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">
-          Máximo 5 cambios autorizables por mes en el hospital.
+          Periodo ${currentMonthTitle} &bull; Máx. 5 autorizables.
         </div>
       </div>
 
@@ -561,7 +630,7 @@ function renderEnfermeriaShiftChangesView(container, state) {
           👑 Jefa Depto. Enfermería
         </div>
         <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">
-          Operado por: <strong>Vanessa Morales</strong> (${currentUser?.name || 'Enfermería'})
+          Sesión actual: <strong>${currentUser?.name || 'Enfermería'}</strong> (${currentUser?.role || 'Personal de Turno'})
         </div>
       </div>
 
@@ -571,16 +640,40 @@ function renderEnfermeriaShiftChangesView(container, state) {
           🛡️ Administrador o Médico 1
         </div>
         <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">
-          ${isAuthorizer ? '✅ Tienes atribuciones de autorización' : '🔒 Requiere firma de Dirección/Admin'}
+          ${isAuthorizer ? '✅ Tienes atribuciones de autorización activas' : '🔒 Requiere firma de Dirección/Admin'}
         </div>
       </div>
 
     </div>
 
+    <!-- SECCIÓN DESTACADA: SOLICITUDES PENDIENTES DE AUTORIZACIÓN -->
+    ${allPendingChanges.length > 0 ? `
+      <div class="glass-card" style="padding: 1.25rem; margin-bottom: 1.25rem; border: 1px solid rgba(245, 158, 11, 0.4); background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(245, 158, 11, 0.02) 100%);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.3rem;">🔔</span>
+            <h3 style="font-size: 1rem; color: #fbbf24; margin: 0; font-family: var(--font-heading);">
+              Solicitudes Pendientes de Autorización (${allPendingChanges.length})
+            </h3>
+          </div>
+          <span style="font-size: 0.72rem; color: #fde68a; background: rgba(245, 158, 11, 0.2); padding: 3px 8px; border-radius: 4px; font-weight: bold;">
+            ${isAuthorizer ? '🛡️ Acción requerida por ti (Administrador / Médico 1)' : '🔒 En espera de firma de Administrador o Médico 1'}
+          </span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          ${allPendingChanges.map(change => renderShiftChangeCardHtml(change, isAuthorizer)).join('')}
+        </div>
+      </div>
+    ` : ''}
+
     <div class="glass-card" style="padding: 1rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-      <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
         <label style="font-size: 0.85rem; font-weight: bold; color: var(--text-primary);">Periodo:</label>
-        <input type="month" id="input-shift-changes-month" value="${currentRosterMonth}" style="background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; font-size: 0.82rem;">
+        <input type="month" id="input-shift-changes-month" value="${currentRosterMonth}" ${showAllShiftChanges ? 'disabled' : ''} style="background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; font-size: 0.82rem;">
+        <button class="btn ${showAllShiftChanges ? 'btn-primary' : 'btn-secondary'} btn-small" id="btn-toggle-all-months" style="font-size: 0.78rem; padding: 5px 12px;">
+          ${showAllShiftChanges ? '📅 Filtrar por Mes' : '📑 Ver Todas las Boletas'}
+        </button>
       </div>
 
       <div>
@@ -602,72 +695,24 @@ function renderEnfermeriaShiftChangesView(container, state) {
 
     <div class="glass-card" style="padding: 1.25rem;">
       <h3 style="font-size: 1rem; color: var(--text-primary); margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
-        <span>📋 Boletas de Cambio de Turno - ${currentMonthTitle}</span>
-        <span style="font-size: 0.78rem; color: var(--text-muted); font-weight: normal;">${monthChanges.length} Registro(s)</span>
+        <span>📋 Boletas de Cambio de Turno - ${showAllShiftChanges ? 'Historial Completo (Todos los Periodos)' : currentMonthTitle}</span>
+        <span style="font-size: 0.78rem; color: var(--text-muted); font-weight: normal;">${displayChanges.length} Registro(s)</span>
       </h3>
 
-      ${monthChanges.length === 0 ? `
+      ${displayChanges.length === 0 ? `
         <div style="text-align: center; color: var(--text-muted); font-style: italic; padding: 2rem 0; font-size: 0.85rem;">
           No se han solicitado cambios de turno para el mes seleccionado (${currentMonthTitle}).
+          ${(state.administracion_enfermeria_cambios || []).length > 0 ? `
+            <div style="margin-top: 10px;">
+              <button class="btn btn-secondary btn-small" id="btn-quick-view-all" style="font-size: 0.78rem; padding: 4px 10px;">
+                Ver las ${(state.administracion_enfermeria_cambios || []).length} boleta(s) registradas en otros periodos
+              </button>
+            </div>
+          ` : ''}
         </div>
       ` : `
         <div style="display: flex; flex-direction: column; gap: 12px;">
-          ${monthChanges.map(change => {
-            const isPending = change.status === 'Pendiente';
-            const isApproved = change.status === 'Autorizado';
-            const isRejected = change.status === 'Rechazado';
-
-            return `
-              <div style="background: rgba(255,255,255,0.02); border: 1px solid ${isApproved ? 'rgba(34, 197, 94, 0.3)' : isRejected ? 'rgba(239, 68, 68, 0.3)' : 'rgba(2, 132, 199, 0.3)'}; border-radius: 8px; padding: 14px; display: grid; grid-template-columns: 1.2fr 2fr 1.2fr; gap: 15px; align-items: center;">
-                
-                <div>
-                  <div style="font-size: 0.72rem; color: var(--text-muted);">BOLETA OFICIAL NO.</div>
-                  <strong style="font-size: 1.15rem; color: #ef4444; font-family: monospace; letter-spacing: 1px;">
-                    ${change.voucherNumber || '000000'}
-                  </strong>
-                  <div style="margin-top: 6px;">
-                    <span style="font-size: 0.72rem; padding: 3px 8px; border-radius: 4px; font-weight: bold; background: ${isApproved ? 'rgba(34, 197, 94, 0.15)' : isRejected ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)'}; color: ${isApproved ? '#4ade80' : isRejected ? '#f87171' : '#fbbf24'}; border: 1px solid ${isApproved ? '#22c55e' : isRejected ? '#ef4444' : '#f59e0b'};">
-                      ${change.status}
-                    </span>
-                  </div>
-                </div>
-
-                <div style="font-size: 0.8rem; line-height: 1.4;">
-                  <div>
-                    <strong style="color: var(--accent-primary);">Fecha del Turno:</strong> ${change.date} &bull; 
-                    <strong style="color: var(--accent-secondary);">Turno:</strong> <span style="background: #0284c7; color: #fff; padding: 1px 6px; border-radius: 3px; font-weight: bold; font-size: 0.72rem;">${change.shift}</span>
-                  </div>
-                  <div style="margin-top: 4px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-                    <div>👤 <strong>Responsable:</strong> <span style="color: #f87171;">${change.originalEmpName}</span></div>
-                    <div>🔄 <strong>Reemplazante:</strong> <span style="color: #4ade80;">${change.replacementEmpName}</span></div>
-                  </div>
-                  ${change.reason ? `<div style="margin-top: 4px; color: var(--text-muted); font-size: 0.75rem;">💬 <em>"${change.reason}"</em></div>` : ''}
-                  <div style="margin-top: 4px; font-size: 0.7rem; color: var(--text-muted);">
-                    Solicitado por: <strong>${change.requestedBy || 'Vanessa Morales (Jefa de Servicio)'}</strong> &bull; ${new Date(change.createdAt).toLocaleDateString('es-GT')}
-                    ${change.authorizedBy ? `<br>Autorizado por: <strong style="color: #4ade80;">${change.authorizedBy}</strong>` : ''}
-                  </div>
-                </div>
-
-                <div style="display: flex; flex-direction: column; gap: 6px; justify-content: center; align-items: flex-end;">
-                  <button class="btn btn-secondary btn-small btn-print-shift-voucher" data-id="${change.id}" style="padding: 4px 10px; font-size: 0.75rem; width: 100%;">
-                    🖨️ Boleta Oficial
-                  </button>
-
-                  ${isPending ? `
-                    <div style="display: flex; gap: 6px; width: 100%;">
-                      <button class="btn btn-primary btn-small btn-approve-shift-change" data-id="${change.id}" ${!isAuthorizer ? 'disabled title="Requiere ser Administrador o Médico 1"' : ''} style="flex: 1; padding: 4px 6px; font-size: 0.72rem; background: #16a34a; border-color: #16a34a;">
-                        ✅ Autorizar
-                      </button>
-                      <button class="btn btn-danger btn-small btn-reject-shift-change" data-id="${change.id}" ${!isAuthorizer ? 'disabled title="Requiere ser Administrador o Médico 1"' : ''} style="flex: 1; padding: 4px 6px; font-size: 0.72rem;">
-                        ❌ Rechazar
-                      </button>
-                    </div>
-                  ` : ''}
-                </div>
-
-              </div>
-            `;
-          }).join('')}
+          ${displayChanges.map(change => renderShiftChangeCardHtml(change, isAuthorizer)).join('')}
         </div>
       `}
     </div>
@@ -677,6 +722,23 @@ function renderEnfermeriaShiftChangesView(container, state) {
   if (inputMonth) {
     inputMonth.addEventListener('change', (e) => {
       currentRosterMonth = e.target.value;
+      showAllShiftChanges = false;
+      renderEnfermeriaShiftChangesView(container, state);
+    });
+  }
+
+  const btnToggleAll = container.querySelector('#btn-toggle-all-months');
+  if (btnToggleAll) {
+    btnToggleAll.addEventListener('click', () => {
+      showAllShiftChanges = !showAllShiftChanges;
+      renderEnfermeriaShiftChangesView(container, state);
+    });
+  }
+
+  const btnQuickView = container.querySelector('#btn-quick-view-all');
+  if (btnQuickView) {
+    btnQuickView.addEventListener('click', () => {
+      showAllShiftChanges = true;
       renderEnfermeriaShiftChangesView(container, state);
     });
   }
@@ -701,12 +763,21 @@ function renderEnfermeriaShiftChangesView(container, state) {
       }
 
       change.status = 'Autorizado';
-      change.authorizedBy = currentUser?.name || 'Administrador';
+      change.authorizedBy = `${currentUser?.name || 'Administrador'} (${currentUser?.role || 'Admin'})`;
       change.authorizedAt = new Date().toISOString();
 
       applyShiftChangeToRoster(change, state);
 
       await saveAppState(state);
+      try {
+        await saveToFirestore('catalog_administracion_enfermeria_cambios', 'catalog_administracion_enfermeria_cambios', {
+          items: state.administracion_enfermeria_cambios
+        });
+        await saveToFirestore('administracion_enfermeria_cambios', change.id, change);
+      } catch (err) {
+        console.warn("Direct save error:", err);
+      }
+
       alert(`✅ Cambio de Turno No. ${change.voucherNumber} autorizado exitosamente y actualizado en el Rol de Turnos.`);
       renderEnfermeriaShiftChangesView(container, state);
     });
@@ -723,10 +794,19 @@ function renderEnfermeriaShiftChangesView(container, state) {
 
       change.status = 'Rechazado';
       change.rejectedReason = reason;
-      change.authorizedBy = currentUser?.name || 'Administrador';
+      change.authorizedBy = `${currentUser?.name || 'Administrador'} (${currentUser?.role || 'Admin'})`;
       change.authorizedAt = new Date().toISOString();
 
       await saveAppState(state);
+      try {
+        await saveToFirestore('catalog_administracion_enfermeria_cambios', 'catalog_administracion_enfermeria_cambios', {
+          items: state.administracion_enfermeria_cambios
+        });
+        await saveToFirestore('administracion_enfermeria_cambios', change.id, change);
+      } catch (err) {
+        console.warn("Direct save error:", err);
+      }
+
       alert(`❌ Solicitud de Cambio No. ${change.voucherNumber} rechazada.`);
       renderEnfermeriaShiftChangesView(container, state);
     });
@@ -908,6 +988,14 @@ function renderEnfermeriaPermitsView(container, state) {
 
       state.administracion_enfermeria_permisos.unshift(newPermit);
       await saveAppState(state);
+      try {
+        await saveToFirestore('catalog_administracion_enfermeria_permisos', 'catalog_administracion_enfermeria_permisos', {
+          items: state.administracion_enfermeria_permisos
+        });
+        await saveToFirestore('administracion_enfermeria_permisos', newPermit.id, newPermit);
+      } catch (fsErr) {
+        console.warn("Direct save error for permit:", fsErr);
+      }
       alert(`✅ Solicitud de permiso para ${empName} registrada correctamente.`);
       renderEnfermeriaPermitsView(container, state);
     });
@@ -926,6 +1014,14 @@ function renderEnfermeriaPermitsView(container, state) {
       applyPermitToRoster(permit, state);
 
       await saveAppState(state);
+      try {
+        await saveToFirestore('catalog_administracion_enfermeria_permisos', 'catalog_administracion_enfermeria_permisos', {
+          items: state.administracion_enfermeria_permisos
+        });
+        await saveToFirestore('administracion_enfermeria_permisos', permit.id, permit);
+      } catch (fsErr) {
+        console.warn("Direct save error on permit approve:", fsErr);
+      }
       alert(`✅ Permiso para ${permit.empName} aprobado y reflejado en el Rol de Turnos.`);
       renderEnfermeriaPermitsView(container, state);
     });
@@ -942,6 +1038,14 @@ function renderEnfermeriaPermitsView(container, state) {
       permit.approvedAt = new Date().toISOString();
 
       await saveAppState(state);
+      try {
+        await saveToFirestore('catalog_administracion_enfermeria_permisos', 'catalog_administracion_enfermeria_permisos', {
+          items: state.administracion_enfermeria_permisos
+        });
+        await saveToFirestore('administracion_enfermeria_permisos', permit.id, permit);
+      } catch (fsErr) {
+        console.warn("Direct save error on permit reject:", fsErr);
+      }
       alert(`❌ Permiso rechazado.`);
       renderEnfermeriaPermitsView(container, state);
     });
@@ -1131,6 +1235,9 @@ function openNewShiftChangeModal(state, onSavedCallback) {
       return;
     }
 
+    const currentUser = state.currentUser || (sessionStorage.getItem('medflow_user') ? JSON.parse(sessionStorage.getItem('medflow_user')) : null);
+    const requesterLabel = currentUser?.name ? `${currentUser.name} (${currentUser.role || 'Enfermería'})` : 'Vanessa Morales (Jefa de Departamento)';
+
     const newChange = {
       id: `SC-${Date.now()}`,
       voucherNumber: nextVoucherStr,
@@ -1141,12 +1248,22 @@ function openNewShiftChangeModal(state, onSavedCallback) {
       replacementEmpName: replEmp,
       reason: reasonVal,
       status: 'Pendiente',
-      requestedBy: 'Vanessa Morales (Jefa de Departamento)',
+      requestedBy: requesterLabel,
       createdAt: new Date().toISOString()
     };
 
     state.administracion_enfermeria_cambios.unshift(newChange);
+    currentRosterMonth = monthTarget;
     await saveAppState(state);
+
+    try {
+      await saveToFirestore('catalog_administracion_enfermeria_cambios', 'catalog_administracion_enfermeria_cambios', {
+        items: state.administracion_enfermeria_cambios
+      });
+      await saveToFirestore('administracion_enfermeria_cambios', newChange.id, newChange);
+    } catch (fsErr) {
+      console.warn("Direct Firestore save error for new shift change:", fsErr);
+    }
 
     alert(`✅ Boleta de Cambio de Turno No. ${nextVoucherStr} registrada exitosamente. Pendiente de autorización por Administrador o Médico 1.`);
     closeFn();

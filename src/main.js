@@ -664,6 +664,60 @@ export async function saveAppState(state) {
       }
     }
 
+    // Sincronizar Cambios de Turno de Enfermería
+    if (state.administracion_enfermeria_cambios && Array.isArray(state.administracion_enfermeria_cambios)) {
+      const prevCambios = lastSyncedState && lastSyncedState.administracion_enfermeria_cambios;
+      if (!prevCambios || JSON.stringify(prevCambios) !== JSON.stringify(state.administracion_enfermeria_cambios)) {
+        const docRef = doc(db, 'multimedica', 'catalog_administracion_enfermeria_cambios');
+        batch.set(docRef, { _collectionType: 'catalog_administracion_enfermeria_cambios', items: state.administracion_enfermeria_cambios });
+        hasWrites = true;
+      }
+      state.administracion_enfermeria_cambios.forEach(c => {
+        if (c && c.id) {
+          const prevC = lastSyncedState && lastSyncedState.administracion_enfermeria_cambios && lastSyncedState.administracion_enfermeria_cambios.find(x => x.id === c.id);
+          if (!prevC || JSON.stringify(prevC) !== JSON.stringify(c)) {
+            addWriteToBatch('administracion_enfermeria_cambios', c.id, c);
+          }
+        }
+      });
+    }
+
+    // Sincronizar Roles de Turnos de Enfermería
+    if (state.administracion_enfermeria_roles && Array.isArray(state.administracion_enfermeria_roles)) {
+      const prevRoles = lastSyncedState && lastSyncedState.administracion_enfermeria_roles;
+      if (!prevRoles || JSON.stringify(prevRoles) !== JSON.stringify(state.administracion_enfermeria_roles)) {
+        const docRef = doc(db, 'multimedica', 'catalog_administracion_enfermeria_roles');
+        batch.set(docRef, { _collectionType: 'catalog_administracion_enfermeria_roles', items: state.administracion_enfermeria_roles });
+        hasWrites = true;
+      }
+      state.administracion_enfermeria_roles.forEach(r => {
+        if (r && r.id) {
+          const prevR = lastSyncedState && lastSyncedState.administracion_enfermeria_roles && lastSyncedState.administracion_enfermeria_roles.find(x => x.id === r.id);
+          if (!prevR || JSON.stringify(prevR) !== JSON.stringify(r)) {
+            addWriteToBatch('administracion_enfermeria_roles', r.id, r);
+          }
+        }
+      });
+    }
+
+    // Sincronizar Solicitudes de Permisos de Enfermería
+    if (state.administracion_enfermeria_permisos && Array.isArray(state.administracion_enfermeria_permisos)) {
+      const prevPerm = lastSyncedState && lastSyncedState.administracion_enfermeria_permisos;
+      if (!prevPerm || JSON.stringify(prevPerm) !== JSON.stringify(state.administracion_enfermeria_permisos)) {
+        const docRef = doc(db, 'multimedica', 'catalog_administracion_enfermeria_permisos');
+        batch.set(docRef, { _collectionType: 'catalog_administracion_enfermeria_permisos', items: state.administracion_enfermeria_permisos });
+        hasWrites = true;
+      }
+      state.administracion_enfermeria_permisos.forEach(p => {
+        if (p && p.id) {
+          const prevP = lastSyncedState && lastSyncedState.administracion_enfermeria_permisos && lastSyncedState.administracion_enfermeria_permisos.find(x => x.id === p.id);
+          if (!prevP || JSON.stringify(prevP) !== JSON.stringify(p)) {
+            addWriteToBatch('administracion_enfermeria_permisos', p.id, p);
+          }
+        }
+      });
+    }
+
     // Sincronizar Médicos Externos (solo modificados)
     if (state.external_doctors && Array.isArray(state.external_doctors)) {
       state.external_doctors.forEach(d => {

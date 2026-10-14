@@ -596,9 +596,101 @@ export function initRealtimeFirestore(onFirstLoad) {
 
       firestoreState.administracion_asistencias = uniqueAsistencias;
       firestoreState.administracion_asistencias_audit = asistenciasAudit;
-      firestoreState.administracion_enfermeria_roles = enfermeriaRoles;
-      firestoreState.administracion_enfermeria_cambios = enfermeriaCambios;
-      firestoreState.administracion_enfermeria_permisos = enfermeriaPermisos;
+
+      // Deduplicar y validar Cambios de Turno de Enfermería
+      const uniqueCambios = [];
+      const seenCambioIds = new Set();
+      enfermeriaCambios.forEach(c => {
+        if (c && c.id && !seenCambioIds.has(c.id)) {
+          seenCambioIds.add(c.id);
+          uniqueCambios.push(c);
+        }
+      });
+      // Respaldo de recuperación: si Firestore remoto no tiene registros pero el caché local o memoria sí tiene
+      if (uniqueCambios.length === 0) {
+        try {
+          const cached = JSON.parse(localStorage.getItem('medflow_firestore_cache') || '{}');
+          const localCambios = (Array.isArray(cached.administracion_enfermeria_cambios) && cached.administracion_enfermeria_cambios.length > 0)
+            ? cached.administracion_enfermeria_cambios
+            : (firestoreState.administracion_enfermeria_cambios || []);
+          if (localCambios.length > 0) {
+            localCambios.forEach(c => {
+              if (c && c.id && !seenCambioIds.has(c.id)) {
+                seenCambioIds.add(c.id);
+                uniqueCambios.push(c);
+              }
+            });
+            // Guardar inmediatamente en Firestore para sincronización instantánea entre roles
+            saveDocument('catalog_administracion_enfermeria_cambios', 'catalog_administracion_enfermeria_cambios', {
+              items: uniqueCambios
+            });
+          }
+        } catch (e) {}
+      }
+
+      // Deduplicar Roles de Turno de Enfermería
+      const uniqueRoles = [];
+      const seenRoleIds = new Set();
+      enfermeriaRoles.forEach(r => {
+        const rId = r.id || `${r.year}-${r.month}`;
+        if (!seenRoleIds.has(rId)) {
+          seenRoleIds.add(rId);
+          uniqueRoles.push(r);
+        }
+      });
+      if (uniqueRoles.length === 0) {
+        try {
+          const cached = JSON.parse(localStorage.getItem('medflow_firestore_cache') || '{}');
+          const localRoles = (Array.isArray(cached.administracion_enfermeria_roles) && cached.administracion_enfermeria_roles.length > 0)
+            ? cached.administracion_enfermeria_roles
+            : (firestoreState.administracion_enfermeria_roles || []);
+          if (localRoles.length > 0) {
+            localRoles.forEach(r => {
+              const rId = r.id || `${r.year}-${r.month}`;
+              if (!seenRoleIds.has(rId)) {
+                seenRoleIds.add(rId);
+                uniqueRoles.push(r);
+              }
+            });
+            saveDocument('catalog_administracion_enfermeria_roles', 'catalog_administracion_enfermeria_roles', {
+              items: uniqueRoles
+            });
+          }
+        } catch (e) {}
+      }
+
+      // Deduplicar Permisos de Enfermería
+      const uniquePermisos = [];
+      const seenPermisoIds = new Set();
+      enfermeriaPermisos.forEach(p => {
+        if (p && p.id && !seenPermisoIds.has(p.id)) {
+          seenPermisoIds.add(p.id);
+          uniquePermisos.push(p);
+        }
+      });
+      if (uniquePermisos.length === 0) {
+        try {
+          const cached = JSON.parse(localStorage.getItem('medflow_firestore_cache') || '{}');
+          const localPerm = (Array.isArray(cached.administracion_enfermeria_permisos) && cached.administracion_enfermeria_permisos.length > 0)
+            ? cached.administracion_enfermeria_permisos
+            : (firestoreState.administracion_enfermeria_permisos || []);
+          if (localPerm.length > 0) {
+            localPerm.forEach(p => {
+              if (p && p.id && !seenPermisoIds.has(p.id)) {
+                seenPermisoIds.add(p.id);
+                uniquePermisos.push(p);
+              }
+            });
+            saveDocument('catalog_administracion_enfermeria_permisos', 'catalog_administracion_enfermeria_permisos', {
+              items: uniquePermisos
+            });
+          }
+        } catch (e) {}
+      }
+
+      firestoreState.administracion_enfermeria_roles = uniqueRoles;
+      firestoreState.administracion_enfermeria_cambios = uniqueCambios;
+      firestoreState.administracion_enfermeria_permisos = uniquePermisos;
       firestoreState.external_doctors = doctors;
       firestoreState.accounts_payable = payables;
       if (clinic) firestoreState.clinicInfo = clinic;
@@ -637,6 +729,9 @@ export function initRealtimeFirestore(onFirstLoad) {
           const activosFijos = [];
           const asistencias = [];
           const asistenciasAudit = [];
+          const enfermeriaRoles = [];
+          const enfermeriaCambios = [];
+          const enfermeriaPermisos = [];
           const doctors = [];
           const payables = [];
           let clinic = null;
@@ -744,6 +839,18 @@ export function initRealtimeFirestore(onFirstLoad) {
               asistenciasAudit.push(...(dData.items || []));
               return;
             }
+            if (dId === 'catalog_administracion_enfermeria_roles') {
+              enfermeriaRoles.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_administracion_enfermeria_cambios') {
+              enfermeriaCambios.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_administracion_enfermeria_permisos') {
+              enfermeriaPermisos.push(...(dData.items || []));
+              return;
+            }
             if (dId === 'catalog_external_doctors') {
               doctors.push(...(dData.items || []));
               return;
@@ -783,6 +890,9 @@ export function initRealtimeFirestore(onFirstLoad) {
             else if (type === 'administracion_activos_fijos') activosFijos.push(cleanDoc);
             else if (type === 'administracion_asistencias') asistencias.push(cleanDoc);
             else if (type === 'administracion_asistencias_audit') asistenciasAudit.push(cleanDoc);
+            else if (type === 'administracion_enfermeria_roles') enfermeriaRoles.push(cleanDoc);
+            else if (type === 'administracion_enfermeria_cambios') enfermeriaCambios.push(cleanDoc);
+            else if (type === 'administracion_enfermeria_permisos') enfermeriaPermisos.push(cleanDoc);
             else if (type === 'external_doctors') doctors.push(cleanDoc);
             else if (type === 'accounts_payable') payables.push(cleanDoc);
             else if (type === 'clinicInfo') clinic = cleanDoc;
@@ -859,6 +969,37 @@ export function initRealtimeFirestore(onFirstLoad) {
 
           firestoreState.administracion_asistencias = uniqueAsistenciasFallback;
           firestoreState.administracion_asistencias_audit = asistenciasAudit;
+
+          // Deduplicar enfermería en fallback
+          const uniqueCambiosFb = [];
+          const seenCambiosFb = new Set();
+          enfermeriaCambios.forEach(c => {
+            if (c && c.id && !seenCambiosFb.has(c.id)) {
+              seenCambiosFb.add(c.id);
+              uniqueCambiosFb.push(c);
+            }
+          });
+          const uniqueRolesFb = [];
+          const seenRolesFb = new Set();
+          enfermeriaRoles.forEach(r => {
+            const rId = r.id || `${r.year}-${r.month}`;
+            if (!seenRolesFb.has(rId)) {
+              seenRolesFb.add(rId);
+              uniqueRolesFb.push(r);
+            }
+          });
+          const uniquePermisosFb = [];
+          const seenPermFb = new Set();
+          enfermeriaPermisos.forEach(p => {
+            if (p && p.id && !seenPermFb.has(p.id)) {
+              seenPermFb.add(p.id);
+              uniquePermisosFb.push(p);
+            }
+          });
+
+          firestoreState.administracion_enfermeria_roles = uniqueRolesFb;
+          firestoreState.administracion_enfermeria_cambios = uniqueCambiosFb;
+          firestoreState.administracion_enfermeria_permisos = uniquePermisosFb;
           firestoreState.external_doctors = doctors;
           firestoreState.accounts_payable = payables;
           if (clinic) firestoreState.clinicInfo = clinic;
