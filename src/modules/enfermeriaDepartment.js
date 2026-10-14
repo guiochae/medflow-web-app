@@ -42,14 +42,32 @@ export function isUserJefaEnfermeria(currentUser) {
   if (!currentUser) return false;
   const role = String(currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const name = String(currentUser.name || '').toLowerCase();
-  return role.includes('enfermer') || role.includes('jefa') || name.includes('vanessa morales') || role.includes('admin');
+  const id = String(currentUser.id || '').toLowerCase();
+  return role.includes('enfermer') || 
+         role.includes('jefa') || 
+         name.includes('vanessa morales') || 
+         role.includes('admin') || 
+         role.includes('medico 1') || 
+         role.includes('medico_1') || 
+         role.includes('medico1') || 
+         role.includes('atribuciones administrador') ||
+         id === 'u-med-1' ||
+         name === 'administrador';
 }
 
 export function isUserShiftAuthorizer(currentUser) {
   if (!currentUser) return false;
   const role = String(currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const name = String(currentUser.name || '').toLowerCase();
-  return role.includes('admin') || role.includes('medico 1') || role.includes('médico 1') || name === 'administrador';
+  const id = String(currentUser.id || '').toLowerCase();
+  return role.includes('admin') || 
+         role.includes('medico 1') || 
+         role.includes('medico_1') || 
+         role.includes('medico1') || 
+         role.includes('atribuciones administrador') || 
+         id === 'u-med-1' || 
+         name === 'administrador' ||
+         name.includes('administrador');
 }
 
 export function isEmployeeJefa(emp) {

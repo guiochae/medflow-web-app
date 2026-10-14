@@ -122,6 +122,14 @@ export function getAppState() {
         }
       }
 
+      // Auto-inyección del módulo Administración para roles autorizados (Admin, Médico 1, Rol Enfermero, Recepcionista)
+      if (rLower.includes('admin') || rLower.includes('medico 1') || rLower.includes('medico_1') || rLower.includes('medico1') || rLower.includes('atribuciones administrador') || u.id === 'u-med-1' || rLower.includes('enfermero') || rLower.includes('enfermera') || rLower.includes('recepcionista')) {
+        u.modules = u.modules || [];
+        if (!u.modules.includes('administracion')) {
+          u.modules.push('administracion');
+        }
+      }
+
       cleanedUsers.push(u);
     });
     firestoreState.users = cleanedUsers;
@@ -151,12 +159,23 @@ export function getAppState() {
       try {
         const parsed = JSON.parse(loggedUser);
         const rLower = String(parsed.role || '').toLowerCase();
+        let changed = false;
         if (rLower.includes('admin') || rLower.includes('medico') || rLower.includes('médico') || rLower.includes('enfermero') || rLower.includes('enfermera') || rLower.includes('recepcionista') || rLower.includes('recep')) {
           parsed.modules = parsed.modules || [];
           if (!parsed.modules.includes('quirofano')) {
             parsed.modules.push('quirofano');
-            sessionStorage.setItem('medflow_logged_user', JSON.stringify(parsed));
+            changed = true;
           }
+        }
+        if (rLower.includes('admin') || rLower.includes('medico 1') || rLower.includes('medico_1') || rLower.includes('medico1') || rLower.includes('atribuciones administrador') || parsed.id === 'u-med-1' || rLower.includes('enfermero') || rLower.includes('enfermera') || rLower.includes('recepcionista')) {
+          parsed.modules = parsed.modules || [];
+          if (!parsed.modules.includes('administracion')) {
+            parsed.modules.push('administracion');
+            changed = true;
+          }
+        }
+        if (changed) {
+          sessionStorage.setItem('medflow_logged_user', JSON.stringify(parsed));
         }
         firestoreState.currentUser = parsed;
       } catch (e) {
@@ -779,7 +798,7 @@ export function updateSidebarInfo(state) {
 
 // Enrutador de Módulos
 export function router(route) {
-  // Route Guard para módulo de Administración (Administrador, Médico 1, Recepcionista)
+  // Route Guard para módulo de Administración (Administrador, Médico 1, Rol Enfermero, Recepcionista)
   if (route === 'administracion') {
     const loggedUser = sessionStorage.getItem('medflow_logged_user');
     let hasAccess = false;
@@ -788,13 +807,23 @@ export function router(route) {
         const userObj = JSON.parse(loggedUser);
         const roleLower = String(userObj.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         const nameLower = String(userObj.name || '').toLowerCase();
+        const userId = String(userObj.id || '').toLowerCase();
         const isFullAdmin = roleLower.includes('administrador') || 
                             roleLower.includes('admin') || 
-                            roleLower === 'medico_1' || 
-                            roleLower === 'medico 1' || 
+                            roleLower.includes('medico 1') || 
+                            roleLower.includes('medico_1') || 
+                            roleLower.includes('medico1') || 
+                            roleLower.includes('atribuciones administrador') || 
+                            userId === 'u-med-1' || 
                             nameLower.includes('administrador');
         const isRecepcionista = roleLower.includes('recepcionista');
-        hasAccess = isFullAdmin || isRecepcionista;
+        const isNurse = roleLower.includes('enfermero') || 
+                        roleLower.includes('enfermera') || 
+                        roleLower.includes('enfermeria') || 
+                        roleLower.startsWith('enf') || 
+                        nameLower.startsWith('enf.');
+        const userModules = userObj.modules || [];
+        hasAccess = isFullAdmin || isRecepcionista || isNurse || userModules.includes('administracion');
       } catch(e) {
         console.error("Error validando guard:", e);
       }
@@ -1100,10 +1129,14 @@ function initializeSidebar(loggedUser) {
   // Configurar menú de navegación con filtrado de permisos por usuario
   const userModules = userObj.modules || ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'encamamiento', 'quirofano', 'configuracion'];
   const roleLower = String(userObj.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const userId = String(userObj.id || '').toLowerCase();
   const isFullAdmin = roleLower.includes('administrador') || 
                       roleLower.includes('admin') || 
-                      roleLower === 'medico_1' || 
-                      roleLower === 'medico 1' || 
+                      roleLower.includes('medico 1') || 
+                      roleLower.includes('medico_1') || 
+                      roleLower.includes('medico1') || 
+                      roleLower.includes('atribuciones administrador') || 
+                      userId === 'u-med-1' || 
                       String(userObj.name || '').toLowerCase().includes('administrador');
 
   const navItems = document.querySelectorAll('.nav-item');
@@ -1143,13 +1176,19 @@ function initializeSidebar(loggedUser) {
                   userModules.includes('quirofano');
     }
 
-    // Aplicar restricción específica para Administración (Administrador, Médico 1, Recepcionista)
+    // Aplicar restricción específica para Administración (Administrador, Médico 1, Recepcionista, Rol Enfermero)
     if (target === 'administracion') {
       const isRecepcionista = roleLower.includes('recepcionista');
+      const isNurse = roleLower.includes('enfermero') || 
+                      roleLower.includes('enfermera') || 
+                      roleLower.includes('enfermeria') || 
+                      roleLower.startsWith('enf') || 
+                      String(userObj.name || '').toLowerCase().startsWith('enf.');
       hasAccess = isFullAdmin || 
                   roleLower.includes('administrador') || 
                   roleLower.includes('admin') || 
                   isRecepcionista ||
+                  isNurse ||
                   userModules.includes('administracion');
     }
 

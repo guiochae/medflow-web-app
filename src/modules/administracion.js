@@ -40,17 +40,26 @@ export function renderAdministracion(container) {
   // 1. Validar Control de Acceso (RBAC Granular)
   const roleLower = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const nameLower = String(currentUser && currentUser.name || '').toLowerCase();
+  const userId = String(currentUser && currentUser.id || '').toLowerCase();
 
   const isFullAdmin = roleLower.includes('administrador') || 
                       roleLower.includes('admin') || 
-                      roleLower === 'medico_1' || 
-                      roleLower === 'medico 1' || 
+                      roleLower.includes('medico 1') || 
+                      roleLower.includes('medico_1') || 
+                      roleLower.includes('medico1') || 
+                      roleLower.includes('atribuciones administrador') || 
+                      userId === 'u-med-1' || 
                       nameLower.includes('administrador');
 
   const isRecepcionista = roleLower.includes('recepcionista');
+  const isNurse = roleLower.includes('enfermero') || 
+                  roleLower.includes('enfermera') || 
+                  roleLower.includes('enfermeria') || 
+                  roleLower.startsWith('enf') || 
+                  nameLower.startsWith('enf.');
 
-  // Si no es admin y tampoco recepcionista, acceso denegado
-  if (!isFullAdmin && !isRecepcionista) {
+  // Si no es admin, recepcionista ni enfermero, acceso denegado
+  if (!isFullAdmin && !isRecepcionista && !isNurse) {
     container.innerHTML = `
       <div class="glass-card" style="text-align: center; padding: 4rem 2rem; max-width: 600px; margin: 3rem auto; border-top: 4px solid var(--accent-danger);">
         <span style="font-size: 3rem;">⚠️</span>
@@ -83,18 +92,29 @@ export function renderAdministracion(container) {
     }
   }
 
-  // 2. Renderizar Estructura del Módulo
-  container.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-      <div>
-        <h1 style="font-family: var(--font-heading); color: var(--accent-primary); margin: 0;">🏢 Panel de Administración</h1>
-        <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">Gestión financiera, contable, compras y recursos humanos (NIIF Guatemala).</p>
-      </div>
-      <div style="background: rgba(255,255,255,0.03); padding: 8px 16px; border-radius: 20px; border: 1px solid var(--border-color); font-size: 0.85rem; font-family: var(--font-mono);">
-        Cuenta Principal: <strong style="color: var(--accent-success);">Q${parseFloat(calculateAccountBalance(state, 'Caja y Bancos')).toFixed(2)}</strong>
-      </div>
-    </div>
+  // Si es Rol Enfermero (y no admin general), enfocar exclusivamente en Recursos Humanos / Depto. Enfermería
+  if (isNurse && !isFullAdmin) {
+    activeAdminTab = 'rrhh';
+    activeRrhhSubTab = 'enfermeria';
+  }
 
+  // 2. Renderizar Estructura del Módulo
+  const headerRightHtml = (isNurse && !isFullAdmin) ? `
+    <div style="background: rgba(2, 132, 199, 0.12); padding: 8px 16px; border-radius: 20px; border: 1px solid rgba(2, 132, 199, 0.3); font-size: 0.85rem; color: #38bdf8; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+      <span>👩‍⚕️</span> Depto. Enfermería (Roles de Turno y Permisos)
+    </div>
+  ` : `
+    <div style="background: rgba(255,255,255,0.03); padding: 8px 16px; border-radius: 20px; border: 1px solid var(--border-color); font-size: 0.85rem; font-family: var(--font-mono);">
+      Cuenta Principal: <strong style="color: var(--accent-success);">Q${parseFloat(calculateAccountBalance(state, 'Caja y Bancos')).toFixed(2)}</strong>
+    </div>
+  `;
+
+  const tabsContainerHtml = (isNurse && !isFullAdmin) ? `
+    <!-- Pestañas Principales del Módulo (Vista Enfermería) -->
+    <div class="tabs-container" style="display: flex; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 1px; margin-bottom: 1.5rem; overflow-x: auto;">
+      <button class="tab-btn active" id="admin-tab-rrhh">👩‍⚕️ Recursos Humanos (Depto. Enfermería)</button>
+    </div>
+  ` : `
     <!-- Pestañas Principales del Módulo -->
     <div class="tabs-container" style="display: flex; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 1px; margin-bottom: 1.5rem; overflow-x: auto;">
       <button class="tab-btn ${activeAdminTab === 'caja' ? 'active' : ''}" id="admin-tab-caja">💳 Facturación y Caja</button>
@@ -105,20 +125,42 @@ export function renderAdministracion(container) {
       <button class="tab-btn ${activeAdminTab === 'activos_fijos' ? 'active' : ''}" id="admin-tab-activos-fijos">🏷️ Activos Fijos</button>
       <button class="tab-btn ${activeAdminTab === 'reportes' ? 'active' : ''}" id="admin-tab-reportes">📈 Reportes y Analítica</button>
     </div>
+  `;
+
+  container.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+      <div>
+        <h1 style="font-family: var(--font-heading); color: var(--accent-primary); margin: 0;">🏢 Panel de Administración</h1>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">${isNurse && !isFullAdmin ? 'Gestión de roles de turno, cambios de turno y solicitudes de permisos de enfermería.' : 'Gestión financiera, contable, compras y recursos humanos (NIIF Guatemala).'}</p>
+      </div>
+      ${headerRightHtml}
+    </div>
+
+    ${tabsContainerHtml}
 
     <div id="admin-module-content">
       <!-- Se inyecta según pestaña activa -->
     </div>
   `;
 
-  // Bind Pestañas Principales
-  document.getElementById('admin-tab-caja').addEventListener('click', () => { activeAdminTab = 'caja'; renderAdminContent(state); });
-  document.getElementById('admin-tab-contabilidad').addEventListener('click', () => { activeAdminTab = 'contabilidad'; renderAdminContent(state); });
-  document.getElementById('admin-tab-compras').addEventListener('click', () => { activeAdminTab = 'compras'; renderAdminContent(state); });
-  document.getElementById('admin-tab-rrhh').addEventListener('click', () => { activeAdminTab = 'rrhh'; renderAdminContent(state); });
-  document.getElementById('admin-tab-medicos').addEventListener('click', () => { activeAdminTab = 'medicos'; renderAdminContent(state); });
-  document.getElementById('admin-tab-activos-fijos').addEventListener('click', () => { activeAdminTab = 'activos_fijos'; renderAdminContent(state); });
-  document.getElementById('admin-tab-reportes').addEventListener('click', () => { activeAdminTab = 'reportes'; renderAdminContent(state); });
+  // Bind Pestañas Principales de forma segura
+  const bindAdminTab = (id, tabName) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('click', () => {
+        activeAdminTab = tabName;
+        renderAdminContent(state);
+      });
+    }
+  };
+
+  bindAdminTab('admin-tab-caja', 'caja');
+  bindAdminTab('admin-tab-contabilidad', 'contabilidad');
+  bindAdminTab('admin-tab-compras', 'compras');
+  bindAdminTab('admin-tab-rrhh', 'rrhh');
+  bindAdminTab('admin-tab-medicos', 'medicos');
+  bindAdminTab('admin-tab-activos-fijos', 'activos_fijos');
+  bindAdminTab('admin-tab-reportes', 'reportes');
 
   // Cargar contenido
   renderAdminContent(state);
@@ -127,6 +169,26 @@ export function renderAdministracion(container) {
 function renderAdminContent(state) {
   const contentArea = document.getElementById('admin-module-content');
   if (!contentArea) return;
+
+  const currentUser = state.currentUser;
+  const roleLower = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const userId = String(currentUser && currentUser.id || '').toLowerCase();
+  const isFullAdmin = roleLower.includes('administrador') || 
+                      roleLower.includes('admin') || 
+                      roleLower.includes('medico 1') || 
+                      roleLower.includes('medico_1') || 
+                      roleLower.includes('medico1') || 
+                      roleLower.includes('atribuciones administrador') || 
+                      userId === 'u-med-1' || 
+                      String(currentUser && currentUser.name || '').toLowerCase().includes('administrador');
+  const isNurse = roleLower.includes('enfermero') || 
+                  roleLower.includes('enfermera') || 
+                  roleLower.includes('enfermeria') || 
+                  roleLower.startsWith('enf');
+
+  if (isNurse && !isFullAdmin) {
+    activeAdminTab = 'rrhh';
+  }
 
   // Actualizar clases de botones
   document.querySelectorAll('.tabs-container .tab-btn').forEach(btn => {
@@ -1348,8 +1410,41 @@ function renderRrhhTab(container, state) {
   // Asegurar que todos los colaboradores existentes tengan asignado su código correlativo
   backfillEmployeeCodes(state);
 
-  container.innerHTML = `
-    <!-- Sub-Pestañas de RRHH -->
+  const currentUser = state.currentUser;
+  const roleLower = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const nameLower = String(currentUser && currentUser.name || '').toLowerCase();
+  const userId = String(currentUser && currentUser.id || '').toLowerCase();
+
+  const isFullAdmin = roleLower.includes('administrador') || 
+                      roleLower.includes('admin') || 
+                      roleLower.includes('medico 1') || 
+                      roleLower.includes('medico_1') || 
+                      roleLower.includes('medico1') || 
+                      roleLower.includes('atribuciones administrador') || 
+                      userId === 'u-med-1' || 
+                      nameLower.includes('administrador');
+
+  const isNurse = roleLower.includes('enfermero') || 
+                  roleLower.includes('enfermera') || 
+                  roleLower.includes('enfermeria') || 
+                  roleLower.startsWith('enf') || 
+                  nameLower.startsWith('enf.');
+
+  // Si es enfermero y no es administrador general, restringir a Depto. Enfermería o Asistencia
+  if (isNurse && !isFullAdmin) {
+    if (activeRrhhSubTab !== 'enfermeria' && activeRrhhSubTab !== 'asistencia') {
+      activeRrhhSubTab = 'enfermeria';
+    }
+  }
+
+  const subTabsHtml = (isNurse && !isFullAdmin) ? `
+    <!-- Sub-Pestañas de RRHH para Enfermería -->
+    <div style="display: flex; gap: 10px; margin-bottom: 1.25rem; font-size: 0.85rem; overflow-x: auto; padding-bottom: 4px;">
+      <button class="btn ${activeRrhhSubTab === 'enfermeria' ? 'btn-primary' : 'btn-secondary'}" id="rrhh-subtab-enfermeria" style="padding: 6px 14px;">👩‍⚕️ Depto. Enfermería</button>
+      <button class="btn ${activeRrhhSubTab === 'asistencia' ? 'btn-primary' : 'btn-secondary'}" id="rrhh-subtab-asistencia" style="padding: 6px 14px;">🕒 Control de Asistencia</button>
+    </div>
+  ` : `
+    <!-- Sub-Pestañas de RRHH Completas -->
     <div style="display: flex; gap: 10px; margin-bottom: 1.25rem; font-size: 0.85rem; overflow-x: auto; padding-bottom: 4px;">
       <button class="btn ${activeRrhhSubTab === 'empleados' ? 'btn-primary' : 'btn-secondary'}" id="rrhh-subtab-empleados" style="padding: 6px 14px;">👔 Gestión de Empleados</button>
       <button class="btn ${activeRrhhSubTab === 'enfermeria' ? 'btn-primary' : 'btn-secondary'}" id="rrhh-subtab-enfermeria" style="padding: 6px 14px;">👩‍⚕️ Depto. Enfermería</button>
@@ -1357,30 +1452,47 @@ function renderRrhhTab(container, state) {
       <button class="btn ${activeRrhhSubTab === 'reportes' ? 'btn-primary' : 'btn-secondary'}" id="rrhh-subtab-reportes" style="padding: 6px 14px;">📊 Reportes de Asistencia</button>
       <button class="btn ${activeRrhhSubTab === 'nomina' ? 'btn-primary' : 'btn-secondary'}" id="rrhh-subtab-nomina" style="padding: 6px 14px;">🏦 Nómina Mensual</button>
     </div>
+  `;
+
+  container.innerHTML = `
+    ${subTabsHtml}
 
     <div id="rrhh-subtab-content">
       <!-- Se inyecta según sub-pestaña activa -->
     </div>
   `;
 
-  document.getElementById('rrhh-subtab-empleados').addEventListener('click', () => { activeRrhhSubTab = 'empleados'; renderRrhhTab(container, state); });
-  document.getElementById('rrhh-subtab-enfermeria').addEventListener('click', () => { activeRrhhSubTab = 'enfermeria'; renderRrhhTab(container, state); });
-  document.getElementById('rrhh-subtab-asistencia').addEventListener('click', () => { activeRrhhSubTab = 'asistencia'; renderRrhhTab(container, state); });
-  document.getElementById('rrhh-subtab-reportes').addEventListener('click', () => { activeRrhhSubTab = 'reportes'; renderRrhhTab(container, state); });
-  document.getElementById('rrhh-subtab-nomina').addEventListener('click', () => { activeRrhhSubTab = 'nomina'; renderRrhhTab(container, state); });
+  const bindRrhhSubTab = (id, subTabName) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('click', () => {
+        activeRrhhSubTab = subTabName;
+        renderRrhhTab(container, state);
+      });
+    }
+  };
+
+  bindRrhhSubTab('rrhh-subtab-empleados', 'empleados');
+  bindRrhhSubTab('rrhh-subtab-enfermeria', 'enfermeria');
+  bindRrhhSubTab('rrhh-subtab-asistencia', 'asistencia');
+  bindRrhhSubTab('rrhh-subtab-reportes', 'reportes');
+  bindRrhhSubTab('rrhh-subtab-nomina', 'nomina');
 
   const subArea = document.getElementById('rrhh-subtab-content');
 
-  if (activeRrhhSubTab === 'empleados') {
+  if (activeRrhhSubTab === 'empleados' && (!isNurse || isFullAdmin)) {
     renderRrhhEmpleados(subArea, state);
   } else if (activeRrhhSubTab === 'enfermeria') {
     renderRrhhEnfermeria(subArea, state);
   } else if (activeRrhhSubTab === 'asistencia') {
     renderRrhhAsistencia(subArea, state);
-  } else if (activeRrhhSubTab === 'reportes') {
+  } else if (activeRrhhSubTab === 'reportes' && (!isNurse || isFullAdmin)) {
     renderRrhhReportes(subArea, state);
-  } else if (activeRrhhSubTab === 'nomina') {
+  } else if (activeRrhhSubTab === 'nomina' && (!isNurse || isFullAdmin)) {
     renderRrhhNomina(subArea, state);
+  } else {
+    // Default seguro para rol enfermero
+    renderRrhhEnfermeria(subArea, state);
   }
 }
 

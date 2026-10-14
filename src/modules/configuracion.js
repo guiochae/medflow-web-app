@@ -172,6 +172,9 @@ export function renderConfiguracion(container) {
                     <input type="checkbox" class="u-module-cb" value="quirofano" checked> 🏥 Quirófano
                   </label>
                   <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; text-transform: none; color: var(--text-primary);">
+                    <input type="checkbox" class="u-module-cb" value="administracion" checked> 🏢 Administración
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; text-transform: none; color: var(--text-primary);">
                     <input type="checkbox" class="u-module-cb" value="configuracion" checked> ⚙️ Configuración
                   </label>
                 </div>
@@ -653,7 +656,7 @@ export function renderConfiguracion(container) {
       if (document.getElementById('u-phone')) document.getElementById('u-phone').value = user.phone || '';
       if (document.getElementById('u-password')) document.getElementById('u-password').value = user.password || 'Glol5414';
 
-      const userMods = user.modules || ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'encamamiento', 'quirofano', 'configuracion'];
+      const userMods = user.modules || ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'encamamiento', 'quirofano', 'administracion', 'configuracion'];
       document.querySelectorAll('.u-module-cb').forEach(cb => {
         cb.checked = userMods.includes(cb.value);
       });
@@ -1118,6 +1121,15 @@ function handleRoleChange(role) {
     if (licenseInput) licenseInput.removeAttribute('required');
     if (phoneGroup) phoneGroup.style.display = 'none';
     if (phoneInput) phoneInput.removeAttribute('required');
+  }
+
+  // Auto-seleccionar módulo Administración para roles autorizados
+  const roleSelectVal = (document.getElementById('u-role')?.value || '').toLowerCase();
+  const adminCb = document.querySelector('.u-module-cb[value="administracion"]');
+  if (adminCb) {
+    if (roleSelectVal.includes('admin') || roleSelectVal.includes('medico 1') || roleSelectVal.includes('médico 1') || role === 'enfermero' || role === 'recepcionista') {
+      adminCb.checked = true;
+    }
   }
 }
 
