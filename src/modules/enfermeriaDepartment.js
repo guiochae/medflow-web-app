@@ -35,6 +35,176 @@ export const DEFAULT_NURSING_ROSTER_SAMPLE = [
   { name: 'A.E. MARIELA CHOC', role: 'AUXILIAR DE ENFERMERIA', isJefa: false, isFixed8h: false, shifts: ['M','T','M','L','N','T','M','M','N','L','M','M','N','T','M','M','T','L','N','T','M','N','T','L','M','M','L','M','M','M','N'] }
 ];
 
+// ==============================================================================
+// 🔍 UTILIDADES DE IDENTIDAD, DEDUPLICACIÓN Y GESTIÓN DE BAJAS LABORALES
+// ==============================================================================
+
+export function normalizeNursingPersonName(str) {
+  return String(str || '')
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    // Eliminar prefijos clínicos oficiales y abreviaturas
+    .replace(/^(a\.e\.|ae\.|ae|e\.|lic\.|lic|dr\.|dr|dra\.|dra|enf\.|enf|aux\.|aux)\s+/gi, '')
+    .replace(/\s+(a\.e\.|ae\.|ae|e\.|lic\.|lic|dr\.|dr|dra\.|dra|enf\.|enf|aux\.|aux)\s+/gi, ' ')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/v/g, 'b')
+    .replace(/y/g, 'i')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function isSameNursingPerson(nameA, nameB) {
+  if (!nameA || !nameB) return false;
+  const nA = normalizeNursingPersonName(nameA);
+  const nB = normalizeNursingPersonName(nameB);
+  if (nA === nB) return true;
+  if (!nA || !nB) return false;
+
+  const tokensA = nA.split(' ').filter(t => t.length >= 2);
+  const tokensB = nB.split(' ').filter(t => t.length >= 2);
+  if (tokensA.length >= 2 && tokensB.length >= 2) {
+    const aInB = tokensA.every(t => tokensB.includes(t));
+    const bInA = tokensB.every(t => tokensA.includes(t));
+    if (aInB || bInA) return true;
+  }
+  return false;
+}
+
+export function getEmployeeExitInfo(emp, targetMonth, state) {
+  if (!emp) return { isInactive: false, exitDate: null, exitMonth: null, exitDay: null };
+
+  let exitDate = emp.exitDate || null;
+  if (!exitDate && state && state.administracion_liquidaciones) {
+    const liq = state.administracion_liquidaciones.find(l => 
+      (l.employeeId && l.employeeId === emp.id) || 
+      isSameNursingPerson(l.employeeName, emp.name)
+    );
+    if (liq && liq.exitDate) {
+      exitDate = liq.exitDate;
+      emp.exitDate = exitDate;
+      emp.status = 'Inactivo';
+      if (liq.reason && !emp.exitReason) emp.exitReason = liq.reason;
+    }
+  }
+
+  if (!exitDate) {
+    const isInactive = emp.status === 'Inactivo';
+    return { isInactive, exitDate: null, exitMonth: null, exitDay: null };
+  }
+
+  const [ey, em, ed] = exitDate.split('-');
+  const exitMonth = `${ey}-${em}`;
+  const exitDay = parseInt(ed, 10);
+
+  return {
+    isInactive: true,
+    exitDate: exitDate,
+    exitMonth: exitMonth,
+    exitDay: !isNaN(exitDay) ? exitDay : null
+  };
+}
+
+export function deduplicateAndSanitizeNursingStaff(state) {
+  if (!state) return { changed: false, removedIds: [] };
+  state.administracion_employees = Array.isArray(state.administracion_employees) ? state.administracion_employees : [];
+  state.administracion_enfermeria_roles = Array.isArray(state.administracion_enfermeria_roles) ? state.administracion_enfermeria_roles : [];
+  state.administracion_liquidaciones = Array.isArray(state.administracion_liquidaciones) ? state.administracion_liquidaciones : [];
+
+  let changed = false;
+
+  // 1. Saneamiento de matrices schedule en todos los roles: eliminar claves duplicadas con 0 turnos
+  state.administracion_enfermeria_roles.forEach(roster => {
+    if (!roster || !roster.schedule) return;
+    const keys = Object.keys(roster.schedule);
+    const keyShiftCounts = {};
+
+    keys.forEach(k => {
+      let activeCount = 0;
+      const sched = roster.schedule[k] || {};
+      Object.keys(sched).forEach(d => {
+        const val = sched[d];
+        if (val && val !== 'L' && val !== 'BAJA' && val !== '-' && val !== 'P') {
+          activeCount++;
+        }
+      });
+      keyShiftCounts[k] = activeCount;
+    });
+
+    for (let i = 0; i < keys.length; i++) {
+      for (let j = i + 1; j < keys.length; j++) {
+        const k1 = keys[i];
+        const k2 = keys[j];
+        if (roster.schedule[k1] && roster.schedule[k2] && isSameNursingPerson(k1, k2)) {
+          const c1 = keyShiftCounts[k1] || 0;
+          const c2 = keyShiftCounts[k2] || 0;
+          if (c1 === 0 && c2 > 0) {
+            delete roster.schedule[k1];
+            changed = true;
+          } else if (c2 === 0 && c1 > 0) {
+            delete roster.schedule[k2];
+            changed = true;
+          } else if (c1 === 0 && c2 === 0) {
+            delete roster.schedule[k2];
+            changed = true;
+          }
+        }
+      }
+    }
+
+    if (roster.schedule['VANESSA MORALES']) {
+      delete roster.schedule['VANESSA MORALES'];
+      changed = true;
+    }
+  });
+
+  // 2. Deduplicar lista de empleados en state.administracion_employees
+  const consolidated = [];
+  const removedIds = [];
+
+  state.administracion_employees.forEach(emp => {
+    if (!emp) return;
+    const existingIdx = consolidated.findIndex(e => isSameNursingPerson(e.name, emp.name));
+    if (existingIdx === -1) {
+      const exitInfo = getEmployeeExitInfo(emp, null, state);
+      if (exitInfo.exitDate) {
+        emp.status = 'Inactivo';
+        emp.exitDate = exitInfo.exitDate;
+      }
+      consolidated.push(emp);
+    } else {
+      const canonical = consolidated[existingIdx];
+      if (emp.id && emp.id !== canonical.id) {
+        removedIds.push(emp.id);
+      }
+
+      // Si el duplicado tiene prefijo oficial (A.E. o E.) y el canónico no, adoptar el nombre oficial
+      const hasPrefix = /^(a\.e\.|e\.|lic\.)/i.test(emp.name);
+      if (hasPrefix && !/^(a\.e\.|e\.|lic\.)/i.test(canonical.name)) {
+        canonical.name = emp.name;
+      }
+
+      // Propagar baja laboral
+      if (emp.status === 'Inactivo' || emp.exitDate) {
+        canonical.status = 'Inactivo';
+        canonical.exitDate = emp.exitDate || canonical.exitDate;
+        canonical.exitReason = emp.exitReason || canonical.exitReason;
+      }
+      if (emp.resignationDoc && !canonical.resignationDoc) {
+        canonical.resignationDoc = emp.resignationDoc;
+      }
+      changed = true;
+    }
+  });
+
+  if (consolidated.length !== state.administracion_employees.length) {
+    state.administracion_employees = consolidated;
+    changed = true;
+  }
+
+  return { changed, removedIds };
+}
+
 let activeEnfSubTab = 'rol-turnos';
 let currentRosterMonth = new Date().toISOString().substring(0, 7);
 let showAllShiftChanges = false;
@@ -84,7 +254,11 @@ export function renderRrhhEnfermeria(container, state) {
   state.administracion_enfermeria_permisos = state.administracion_enfermeria_permisos || [];
   state.administracion_employees = state.administracion_employees || [];
 
+  const sanitizeResult = deduplicateAndSanitizeNursingStaff(state);
   ensureNursingEmployeesSeeded(state);
+  if (sanitizeResult.changed) {
+    saveAppState(state);
+  }
 
   const pendingChangesCount = state.administracion_enfermeria_cambios.filter(c => c.status === 'Pendiente').length;
   const pendingPermitsCount = state.administracion_enfermeria_permisos.filter(p => p.status === 'Pendiente').length;
@@ -185,14 +359,59 @@ function renderEnfermeriaRosterView(container, state) {
     delete rosterObj.schedule['VANESSA MORALES'];
   }
 
-  // Obtener exclusivamente al personal asistencial rotativo (excluye a la Jefa de Depto)
-  const rosterStaff = getNursingRosterStaff(state);
+  // Obtener exclusivamente al personal asistencial rotativo (excluye a la Jefa de Depto y a bajas previas)
+  const rosterStaff = getNursingRosterStaff(state, currentRosterMonth);
+
+  // Saneamiento de schedule: eliminar claves duplicadas con 0 turnos y sincronizar claves con el personal del rol
+  if (rosterObj.schedule) {
+    const keys = Object.keys(rosterObj.schedule);
+    const keyShiftCounts = {};
+
+    keys.forEach(k => {
+      let activeCount = 0;
+      const sObj = rosterObj.schedule[k] || {};
+      Object.keys(sObj).forEach(d => {
+        const v = sObj[d];
+        if (v && v !== 'L' && v !== 'BAJA' && v !== '-' && v !== 'P') {
+          activeCount++;
+        }
+      });
+      keyShiftCounts[k] = activeCount;
+    });
+
+    for (let i = 0; i < keys.length; i++) {
+      for (let j = i + 1; j < keys.length; j++) {
+        const k1 = keys[i];
+        const k2 = keys[j];
+        if (rosterObj.schedule[k1] && rosterObj.schedule[k2] && isSameNursingPerson(k1, k2)) {
+          const c1 = keyShiftCounts[k1] || 0;
+          const c2 = keyShiftCounts[k2] || 0;
+          if (c1 === 0 && c2 > 0) {
+            delete rosterObj.schedule[k1];
+          } else if (c2 === 0 && c1 > 0) {
+            delete rosterObj.schedule[k2];
+          } else if (c1 === 0 && c2 === 0) {
+            delete rosterObj.schedule[k2];
+          }
+        }
+      }
+    }
+  }
 
   rosterStaff.forEach(emp => {
+    // Si no existe la clave exacta pero existe bajo otra variante (ej. sin prefijo), sincronizar
     if (!rosterObj.schedule[emp.name]) {
-      rosterObj.schedule[emp.name] = {};
-      for (let d = 1; d <= totalDays; d++) {
-        rosterObj.schedule[emp.name][d] = 'L';
+      const matchKey = Object.keys(rosterObj.schedule).find(k => isSameNursingPerson(k, emp.name));
+      if (matchKey) {
+        rosterObj.schedule[emp.name] = rosterObj.schedule[matchKey];
+        if (matchKey !== emp.name) {
+          delete rosterObj.schedule[matchKey];
+        }
+      } else {
+        rosterObj.schedule[emp.name] = {};
+        for (let d = 1; d <= totalDays; d++) {
+          rosterObj.schedule[emp.name][d] = 'L';
+        }
       }
     }
   });
@@ -209,6 +428,12 @@ function renderEnfermeriaRosterView(container, state) {
     dailyCoverage['M/T'][d] = 0;
 
     rosterStaff.forEach(emp => {
+      const exitInfo = getEmployeeExitInfo(emp, currentRosterMonth, state);
+      const isExitMonth = (exitInfo.exitMonth === currentRosterMonth && exitInfo.exitDay !== null);
+      if (isExitMonth && d > exitInfo.exitDay) {
+        return; // A partir del día siguiente de su salida, no computa en la cobertura diaria
+      }
+
       const shift = rosterObj.schedule[emp.name]?.[d] || 'L';
       if (shift === 'M') dailyCoverage.M[d]++;
       else if (shift === 'T') dailyCoverage.T[d]++;
@@ -349,10 +574,17 @@ function renderEnfermeriaRosterView(container, state) {
         <tbody>
           ${rosterStaff.map((emp) => {
             const empSchedule = rosterObj.schedule[emp.name] || {};
+            const exitInfo = getEmployeeExitInfo(emp, currentRosterMonth, state);
+            const isExitMonth = (exitInfo.exitMonth === currentRosterMonth && exitInfo.exitDay !== null);
+            const exitDay = isExitMonth ? exitInfo.exitDay : null;
 
             let countM = 0, countT = 0, countN = 0, countL = 0, countEsp = 0, totalHours = 0;
 
             for (let d = 1; d <= totalDays; d++) {
+              if (exitDay !== null && d > exitDay) {
+                // A partir del día siguiente de su salida, no computa turnos ni horas
+                continue;
+              }
               const shift = empSchedule[d] || 'L';
               if (shift === 'M') { countM++; totalHours += 8; }
               else if (shift === 'T') { countT++; totalHours += 8; }
@@ -369,7 +601,14 @@ function renderEnfermeriaRosterView(container, state) {
               <tr style="border-bottom: 1px solid rgba(255,255,255,0.06);" data-emp-name="${emp.name}">
                 
                 <td style="padding: 6px 10px; text-align: left; position: sticky; left: 0; background: #0f172a; z-index: 4; border-right: 2px solid #334155; font-weight: bold; color: #f8fafc; overflow: hidden; text-overflow: ellipsis;">
-                  ${emp.name}
+                  <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                    <span>${emp.name}</span>
+                    ${exitDay !== null ? `
+                      <span style="background: rgba(239, 68, 68, 0.22); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); padding: 1px 5px; border-radius: 4px; font-size: 0.6rem; font-weight: bold; white-space: nowrap;" title="Baja Laboral el ${exitInfo.exitDate}">
+                        BAJA ${exitInfo.exitDate.substring(5)}
+                      </span>
+                    ` : ''}
+                  </div>
                 </td>
 
                 <td style="padding: 6px 8px; text-align: left; position: sticky; left: 160px; background: #0f172a; z-index: 4; border-right: 2px solid #334155; font-size: 0.68rem; color: var(--text-muted);">
@@ -381,6 +620,24 @@ function renderEnfermeriaRosterView(container, state) {
                   const dateObj = new Date(yearNum, monthNum, d);
                   const dayOfWeek = dateObj.getDay();
                   const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+
+                  const isAfterExit = (exitDay !== null && d > exitDay);
+
+                  if (isAfterExit) {
+                    return `
+                      <td class="roster-cell roster-cell-baja" 
+                          data-emp="${emp.name}" 
+                          data-day="${d}" 
+                          data-disabled="true"
+                          style="padding: 2px; background: rgba(239, 68, 68, 0.08); cursor: not-allowed; user-select: none;"
+                          title="${emp.name} - Baja Laboral (${exitInfo.exitDate}). A partir del día siguiente de su salida no tiene turnos asignados.">
+                        <div style="background: rgba(239, 68, 68, 0.16); color: #f87171; border: 1px dashed rgba(239, 68, 68, 0.45); border-radius: 3px; font-weight: 800; font-size: 0.65rem; padding: 3px 0; line-height: 1; min-height: 18px; display: flex; align-items: center; justify-content: center;">
+                          BAJA
+                        </div>
+                      </td>
+                    `;
+                  }
+
                   const shiftCode = empSchedule[d] || 'L';
                   const shiftDef = SHIFT_TYPES[shiftCode] || SHIFT_TYPES['L'];
 
@@ -469,6 +726,9 @@ function renderEnfermeriaRosterView(container, state) {
   const cycleOrder = ['M', 'T', 'N', 'L', 'M/T', '18H', '24H', 'P'];
   container.querySelectorAll('.roster-cell').forEach(cell => {
     cell.addEventListener('click', () => {
+      if (cell.getAttribute('data-disabled') === 'true') {
+        return; // Inhabilitado para días posteriores a la baja del colaborador
+      }
       const empName = cell.getAttribute('data-emp');
       const day = parseInt(cell.getAttribute('data-day'), 10);
       const currentCode = rosterObj.schedule[empName]?.[day] || 'L';
@@ -486,7 +746,7 @@ function renderEnfermeriaRosterView(container, state) {
   if (btnAutofill) {
     btnAutofill.addEventListener('click', () => {
       if (confirm(`¿Desea autogenerar una distribución equitativa de turnos para ${currentMonthTitle}? Esto respetará los descansos reglamentarios post-guardia nocturna.`)) {
-        autogenerateEquitableRoster(rosterObj, totalDays, rosterStaff);
+        autogenerateEquitableRoster(rosterObj, totalDays, rosterStaff, state, currentRosterMonth);
         saveAppState(state);
         alert(`✨ Rol optimizado y distribuido equitativamente para ${currentMonthTitle}.`);
         renderEnfermeriaRosterView(container, state);
@@ -825,8 +1085,10 @@ function renderEnfermeriaShiftChangesView(container, state) {
 
 function renderEnfermeriaPermitsView(container, state) {
   const currentUser = state.currentUser;
-  const isAuthorizer = isUserShiftAuthorizer(currentUser);
-  const eligibleStaff = getNursingEmployeesList(state);
+  const eligibleStaff = getNursingEmployeesList(state).filter(e => {
+    const exitInfo = getEmployeeExitInfo(e, null, state);
+    return !exitInfo.isInactive;
+  });
 
   container.innerHTML = `
     <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px; align-items: flex-start;">
@@ -1077,16 +1339,18 @@ function renderEnfermeriaStaffDirectoryView(container, state) {
       <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;">
         ${staff.map(emp => {
           const isJefa = isEmployeeJefa(emp);
+          const exitInfo = getEmployeeExitInfo(emp, null, state);
           return `
-            <div style="background: rgba(255,255,255,0.02); border: 1px solid ${isJefa ? 'rgba(99, 102, 241, 0.5)' : 'var(--border-color)'}; border-radius: 8px; padding: 12px; display: flex; gap: 12px; align-items: center; ${isJefa ? 'background: rgba(99, 102, 241, 0.06);' : ''}">
-              <div style="width: 44px; height: 44px; border-radius: 50%; background: ${isJefa ? '#4338ca' : '#0369a1'}; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0; font-weight: bold;">
-                ${isJefa ? '👑' : '👩‍⚕️'}
+            <div style="background: rgba(255,255,255,0.02); border: 1px solid ${isJefa ? 'rgba(99, 102, 241, 0.5)' : (exitInfo.isInactive ? 'rgba(239, 68, 68, 0.4)' : 'var(--border-color)')}; border-radius: 8px; padding: 12px; display: flex; gap: 12px; align-items: center; ${isJefa ? 'background: rgba(99, 102, 241, 0.06);' : (exitInfo.isInactive ? 'background: rgba(239, 68, 68, 0.04);' : '')}">
+              <div style="width: 44px; height: 44px; border-radius: 50%; background: ${isJefa ? '#4338ca' : (exitInfo.isInactive ? '#991b1b' : '#0369a1')}; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0; font-weight: bold;">
+                ${isJefa ? '👑' : (exitInfo.isInactive ? '🛑' : '👩‍⚕️')}
               </div>
               <div style="flex: 1; overflow: hidden;">
                 <div style="font-weight: bold; font-size: 0.88rem; color: #fff; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">
                   ${isJefa ? '👑 ' : ''}${emp.name}
+                  ${exitInfo.isInactive ? `<span style="margin-left: 6px; font-size: 0.65rem; background: rgba(239, 68, 68, 0.2); color: #f87171; padding: 1px 6px; border-radius: 3px; font-weight: bold;">Baja (${exitInfo.exitDate || 'Inactivo'})</span>` : ''}
                 </div>
-                <div style="font-size: 0.75rem; color: ${isJefa ? '#a5b4fc' : 'var(--accent-primary)'}; font-weight: 600;">
+                <div style="font-size: 0.75rem; color: ${isJefa ? '#a5b4fc' : (exitInfo.isInactive ? '#fca5a5' : 'var(--accent-primary)')}; font-weight: 600;">
                   ${emp.position || emp.role || 'Enfermería'}
                 </div>
                 <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">
@@ -1169,9 +1433,12 @@ function openNewShiftChangeModal(state, onSavedCallback) {
           </label>
           <select id="sc-original-emp" required style="width: 100%; padding: 8px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 0.85rem;">
             <option value="">-- Seleccionar Persona Responsable --</option>
-            ${eligibleTurnPersonnel.map(e => `
-              <option value="${e.name}">${e.name} (${e.position || 'Enfermería'})</option>
-            `).join('')}
+            ${eligibleTurnPersonnel.map(e => {
+              const exitInfo = getEmployeeExitInfo(e, null, state);
+              return `
+                <option value="${e.name}">${e.name} (${e.position || 'Enfermería'})${exitInfo.exitDate ? ` [Baja el ${exitInfo.exitDate}]` : ''}</option>
+              `;
+            }).join('')}
           </select>
         </div>
 
@@ -1181,9 +1448,12 @@ function openNewShiftChangeModal(state, onSavedCallback) {
           </label>
           <select id="sc-replacement-emp" required style="width: 100%; padding: 8px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 0.85rem;">
             <option value="">-- Seleccionar Persona Reemplazante --</option>
-            ${eligibleTurnPersonnel.map(e => `
-              <option value="${e.name}">${e.name} (${e.position || 'Enfermería'})</option>
-            `).join('')}
+            ${eligibleTurnPersonnel.map(e => {
+              const exitInfo = getEmployeeExitInfo(e, null, state);
+              return `
+                <option value="${e.name}">${e.name} (${e.position || 'Enfermería'})${exitInfo.exitDate ? ` [Baja el ${exitInfo.exitDate}]` : ''}</option>
+              `;
+            }).join('')}
           </select>
         </div>
 
@@ -1221,6 +1491,22 @@ function openNewShiftChangeModal(state, onSavedCallback) {
 
     if (origEmp === replEmp) {
       alert("⚠️ La persona responsable y la reemplazante no pueden ser la misma.");
+      return;
+    }
+
+    const origEmpObj = eligibleTurnPersonnel.find(x => x.name === origEmp);
+    const replEmpObj = eligibleTurnPersonnel.find(x => x.name === replEmp);
+
+    const origExitInfo = getEmployeeExitInfo(origEmpObj, null, state);
+    const replExitInfo = getEmployeeExitInfo(replEmpObj, null, state);
+
+    if (origExitInfo.exitDate && dateVal > origExitInfo.exitDate) {
+      alert(`⚠️ No se puede registrar cambio de turno para ${origEmp} en fecha (${dateVal}) posterior a su baja laboral (${origExitInfo.exitDate}).`);
+      return;
+    }
+
+    if (replExitInfo.exitDate && dateVal > replExitInfo.exitDate) {
+      alert(`⚠️ No se puede asignar como reemplazante a ${replEmp} en fecha (${dateVal}) posterior a su baja laboral (${replExitInfo.exitDate}).`);
       return;
     }
 
@@ -1551,8 +1837,14 @@ export function printOfficialRosterDocument(rosterObj, totalDays, yearNum, month
         <tbody>
           ${rosterStaff.map(emp => {
             const sched = rosterObj.schedule[emp.name] || {};
+            const curMonthKey = `${yearNum}-${String(monthNum + 1).padStart(2, '0')}`;
+            const exitInfo = getEmployeeExitInfo(emp, curMonthKey, state);
+            const isExitMonth = (exitInfo.exitMonth === curMonthKey && exitInfo.exitDay !== null);
+            const exitDay = isExitMonth ? exitInfo.exitDay : null;
+
             let cM=0, cT=0, cN=0, cL=0, cEsp=0, h=0;
             for (let d=1; d<=totalDays; d++) {
+              if (exitDay !== null && d > exitDay) continue;
               const s = sched[d] || 'L';
               if (s==='M') { cM++; h+=8; }
               else if (s==='T') { cT++; h+=8; }
@@ -1564,11 +1856,14 @@ export function printOfficialRosterDocument(rosterObj, totalDays, yearNum, month
             }
             return `
               <tr>
-                <td class="name-col">${emp.name}</td>
+                <td class="name-col">${emp.name} ${exitDay !== null ? `<span style="color: #dc2626; font-size: 7px;">(BAJA ${exitInfo.exitDate})</span>` : ''}</td>
                 <td class="name-col" style="font-size: 7.5px;">${emp.position || emp.role || 'Enfermero/a'}</td>
                 ${Array.from({ length: totalDays }, (_, i) => {
                   const d = i + 1;
                   const isWeekend = ([0, 6].includes(new Date(yearNum, monthNum, d).getDay()));
+                  if (exitDay !== null && d > exitDay) {
+                    return `<td style="color: #dc2626; font-weight: bold; font-size: 7px; background: #fee2e2;">BAJA</td>`;
+                  }
                   const s = sched[d] || 'L';
                   return `<td class="${isWeekend ? 'weekend' : ''}">${s}</td>`;
                 }).join('')}
@@ -1652,6 +1947,10 @@ function evaluateRosterFitness(schedule, totalDays, staff) {
 
     for (let d = 1; d <= totalDays; d++) {
       const shift = empSched[d] || 'L';
+      if (shift === 'BAJA' || shift === '-') {
+        consecutiveWorkDays = 0;
+        continue;
+      }
       const prevShift = empSched[d - 1];
 
       if (prevShift === 'N' && (shift === 'M' || shift === '18H' || shift === '24H')) {
@@ -1680,14 +1979,22 @@ function evaluateRosterFitness(schedule, totalDays, staff) {
   return issues;
 }
 
-function autogenerateEquitableRoster(rosterObj, totalDays, staff) {
+function autogenerateEquitableRoster(rosterObj, totalDays, staff, state, currentRosterMonth) {
   const rotationCycle = ['M', 'T', 'N', 'L', 'M', 'T', 'L'];
 
   staff.forEach((emp, empIdx) => {
-    rosterObj.schedule[emp.name] = {};
+    const exitInfo = getEmployeeExitInfo(emp, currentRosterMonth, state);
+    const isExitMonth = (exitInfo.exitMonth === currentRosterMonth && exitInfo.exitDay !== null);
+    const maxDay = isExitMonth ? exitInfo.exitDay : totalDays;
+
+    rosterObj.schedule[emp.name] = rosterObj.schedule[emp.name] || {};
     for (let d = 1; d <= totalDays; d++) {
-      const cycleIdx = (d + empIdx * 2) % rotationCycle.length;
-      rosterObj.schedule[emp.name][d] = rotationCycle[cycleIdx];
+      if (d > maxDay) {
+        rosterObj.schedule[emp.name][d] = 'BAJA';
+      } else {
+        const cycleIdx = (d + empIdx * 2) % rotationCycle.length;
+        rosterObj.schedule[emp.name][d] = rotationCycle[cycleIdx];
+      }
     }
   });
 }
@@ -1735,12 +2042,36 @@ export function getNursingEmployeesList(state) {
     return dept.includes('enfermer') || pos.includes('enfermer') || pos.includes('auxiliar') || pos.includes('jefa') || name.includes('vanessa morales');
   });
 
-  return nursing.length > 0 ? nursing : emps;
+  const baseList = nursing.length > 0 ? nursing : emps;
+
+  // Deduplicar lista asegurando un único registro por colaborador
+  const deduplicated = [];
+  baseList.forEach(e => {
+    if (!e) return;
+    const exists = deduplicated.some(d => isSameNursingPerson(d.name, e.name));
+    if (!exists) {
+      deduplicated.push(e);
+    }
+  });
+
+  return deduplicated;
 }
 
-export function getNursingRosterStaff(state) {
+export function getNursingRosterStaff(state, targetMonth) {
   // Personal asistencial rotativo que integra el Rol de Turnos (Excluye expresamente a la Jefa del Departamento)
-  return getNursingEmployeesList(state).filter(emp => !isEmployeeJefa(emp));
+  const staff = getNursingEmployeesList(state).filter(emp => !isEmployeeJefa(emp));
+
+  if (!targetMonth) return staff;
+
+  // Ocultar a partir del mes siguiente de su salida a colaboradores dados de baja o que hayan renunciado
+  const monthStart = `${targetMonth}-01`;
+  return staff.filter(emp => {
+    const exitInfo = getEmployeeExitInfo(emp, targetMonth, state);
+    if (exitInfo.exitDate && exitInfo.exitDate < monthStart) {
+      return false; // La persona ya causó baja antes de este mes, no debe aparecer en el rol
+    }
+    return true;
+  });
 }
 
 export function ensureNursingEmployeesSeeded(state) {
@@ -1773,10 +2104,10 @@ export function ensureNursingEmployeesSeeded(state) {
     }
   }
 
-  // 2. Asegurar al personal de turno rotativo
+  // 2. Asegurar al personal de turno rotativo (sin duplicar bajo ninguna variante de nombre)
   DEFAULT_NURSING_ROSTER_SAMPLE.forEach((sample, idx) => {
-    const exists = state.administracion_employees.some(e => e.name && e.name.trim().toLowerCase() === sample.name.toLowerCase());
-    if (!exists) {
+    const existingEmp = state.administracion_employees.find(e => isSameNursingPerson(e.name, sample.name));
+    if (!existingEmp) {
       state.administracion_employees.push({
         id: `emp-enf-${idx + 1}`,
         employee_code: `EMP-0${String(11 + idx)}`,
@@ -1792,6 +2123,12 @@ export function ensureNursingEmployeesSeeded(state) {
         isFixed8h: false,
         hireDate: '2024-01-15'
       });
+    } else {
+      // Si ya existe pero no tenía título clínico en el nombre, actualizar al nombre oficial para el rol
+      const hasPrefix = /^(a\.e\.|e\.|lic\.)/i.test(existingEmp.name);
+      if (!hasPrefix) {
+        existingEmp.name = sample.name;
+      }
     }
   });
 }

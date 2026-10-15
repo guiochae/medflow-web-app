@@ -12,6 +12,7 @@ import { renderAdministracion } from './modules/administracion.js';
 import { initQrWidget, removeQrWidget } from './modules/qrWidget.js';
 import { renderAttendanceMobileView } from './modules/attendanceMobileView.js';
 import { renderAttendanceKioskView } from './modules/attendanceKioskView.js';
+import { deduplicateAndSanitizeNursingStaff } from './modules/enfermeriaDepartment.js';
 import logoUrl from './assets/logo.jpg';
 import {
   db,
@@ -188,6 +189,7 @@ export function getAppState() {
     purgeAndSanitizePayrolls(firestoreState);
     reconcileAndRecoverConsultations(firestoreState);
     reconcileAndRecoverLiquidaciones(firestoreState);
+    deduplicateAndSanitizeNursingStaff(firestoreState);
 
     return firestoreState;
   }
@@ -257,6 +259,7 @@ export async function saveAppState(state) {
   purgeAndSanitizePayrolls(state);
   reconcileAndRecoverConsultations(state);
   reconcileAndRecoverLiquidaciones(state);
+  deduplicateAndSanitizeNursingStaff(state);
   updateSidebarInfo(state);
 
   // Sincronizar de inmediato el estado en memoria para reactividad local offline
