@@ -1505,6 +1505,27 @@ export function backfillEmployeeCodes(state) {
     modified = true;
   }
 
+  // 1.1 Asegurar la correcta asignación de código oficial EMP-033 y alias EMP-019 para Ana Cecilia Jimenez Dubón
+  const anaEmp = state.administracion_employees.find(e => {
+    if (!e) return false;
+    const n = String(e.name || '').toLowerCase();
+    return n.includes('ana cecilia') && n.includes('jimenez');
+  });
+  if (anaEmp) {
+    anaEmp.alias_codes = anaEmp.alias_codes || [];
+    if (!anaEmp.alias_codes.includes('EMP-019')) anaEmp.alias_codes.push('EMP-019');
+    if (!anaEmp.alias_codes.includes('EMP-033')) anaEmp.alias_codes.push('EMP-033');
+    if (anaEmp.employee_code !== 'EMP-033') {
+      anaEmp.employee_code = 'EMP-033';
+      modified = true;
+    }
+    anaEmp.linked_user_id = 'u-14-g9r5';
+    anaEmp.phone = anaEmp.phone || '32384885';
+    anaEmp.whatsapp_number = anaEmp.whatsapp_number || '+502 3238-4885';
+    anaEmp.position = anaEmp.position || 'Recepcionista';
+    anaEmp.department = 'Administración';
+  }
+
   // 2. Encontrar el correlativo más alto existente (EMP-001, EMP-002, ...)
   let maxSeq = 0;
   const assignedCodes = new Set();
@@ -1516,6 +1537,17 @@ export function backfillEmployeeCodes(state) {
         if (num > maxSeq) maxSeq = num;
         assignedCodes.add(String(emp.employee_code).trim().toUpperCase());
       }
+    }
+    if (emp && Array.isArray(emp.alias_codes)) {
+      emp.alias_codes.forEach(a => {
+        if (/^EMP-\d+$/i.test(String(a).trim())) {
+          const num = parseInt(String(a).trim().replace(/^EMP-/i, ''), 10);
+          if (!isNaN(num)) {
+            if (num > maxSeq) maxSeq = num;
+            assignedCodes.add(String(a).trim().toUpperCase());
+          }
+        }
+      });
     }
   });
 

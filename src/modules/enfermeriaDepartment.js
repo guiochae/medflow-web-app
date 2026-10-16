@@ -158,13 +158,30 @@ export function deduplicateAndSanitizeNursingStaff(state) {
     }
   });
 
-  // 2. Deduplicar lista de empleados en state.administracion_employees
+  // 2. Deduplicar lista de empleados en state.administracion_employees (ESTRICTAMENTE PARA PERSONAL DE ENFERMERÍA)
+  const isNursingMember = (emp) => {
+    if (!emp) return false;
+    const dept = String(emp.department || '').toLowerCase();
+    const pos = String(emp.position || '').toLowerCase();
+    const isDept = dept.includes('enferm');
+    const isPos = /enfermer|auxiliar de enfermeria|jefa de departamento de enfermeria/i.test(pos);
+    const inSample = DEFAULT_NURSING_ROSTER_SAMPLE.some(s => isSameNursingPerson(s.name, emp.name));
+    return isDept || isPos || inSample;
+  };
+
   const consolidated = [];
   const removedIds = [];
 
   state.administracion_employees.forEach(emp => {
     if (!emp) return;
-    const existingIdx = consolidated.findIndex(e => isSameNursingPerson(e.name, emp.name));
+
+    // Colaboradores que NO son de Enfermería (Administración, Médicos, Intendencia, Recepción, etc.) no deben ser tocados aquí
+    if (!isNursingMember(emp)) {
+      consolidated.push(emp);
+      return;
+    }
+
+    const existingIdx = consolidated.findIndex(e => isNursingMember(e) && isSameNursingPerson(e.name, emp.name));
     if (existingIdx === -1) {
       const exitInfo = getEmployeeExitInfo(emp, null, state);
       if (exitInfo.exitDate) {
@@ -176,6 +193,20 @@ export function deduplicateAndSanitizeNursingStaff(state) {
       const canonical = consolidated[existingIdx];
       if (emp.id && emp.id !== canonical.id) {
         removedIds.push(emp.id);
+      }
+
+      // Preservar códigos alias
+      canonical.alias_codes = canonical.alias_codes || [];
+      if (canonical.employee_code && !canonical.alias_codes.includes(canonical.employee_code)) {
+        canonical.alias_codes.push(canonical.employee_code);
+      }
+      if (emp.employee_code && !canonical.alias_codes.includes(emp.employee_code)) {
+        canonical.alias_codes.push(emp.employee_code);
+      }
+      if (Array.isArray(emp.alias_codes)) {
+        emp.alias_codes.forEach(a => {
+          if (!canonical.alias_codes.includes(a)) canonical.alias_codes.push(a);
+        });
       }
 
       // Si el duplicado tiene prefijo oficial (A.E. o E.) y el canónico no, adoptar el nombre oficial

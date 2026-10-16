@@ -151,7 +151,7 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
   const rawInput = employeeCode.trim();
   const rawInputUpper = rawInput.toUpperCase();
 
-  // 1. Extraer el número del código para comparación flexible (ej: "EMP-017", "EMP-17", "EMP17", "017", "17")
+  // 1. Extraer el número del código para comparación flexible (ej: "EMP-017", "EMP-17", "EMP17", "017", "17", "EMP - 033")
   const numMatch = rawInputUpper.match(/^EMP[-_\s]*0*(\d+)$/i) || rawInputUpper.match(/^0*(\d+)$/);
   const codeNum = numMatch && numMatch[1] ? parseInt(numMatch[1], 10) : null;
   const standardCode = codeNum !== null ? `EMP-${String(codeNum).padStart(3, '0')}` : rawInputUpper;
@@ -159,8 +159,133 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
   state.administracion_employees = state.administracion_employees || [];
   state.administracion_asistencias = state.administracion_asistencias || [];
 
-  // 2. Si la lista local de empleados está vacía, intentar lectura directa de respaldo desde Firestore
-  if (!state.administracion_employees || state.administracion_employees.length === 0) {
+  const cleanRawInput = rawInput.replace(/\s+/g, '');
+  const numOnly = rawInput.replace(/\D+/g, '');
+  const rawInputLower = rawInput.toLowerCase();
+
+  // Función auxiliar de coincidencia multi-criterio para listas de colaboradores
+  const findInList = (list) => {
+    if (!Array.isArray(list)) return null;
+
+    return list.find(e => {
+      if (!e) return false;
+      const eCode = e.employee_code ? String(e.employee_code).trim().toUpperCase() : '';
+      const eId = e.id ? String(e.id).trim().toUpperCase() : '';
+      const eLinkedUserId = e.linked_user_id ? String(e.linked_user_id).trim().toUpperCase() : '';
+      const aliases = (Array.isArray(e.alias_codes) ? e.alias_codes : []).map(a => String(a).trim().toUpperCase());
+      const eDpi = e.dpi ? String(e.dpi).replace(/\s+/g, '').trim() : '';
+      const ePhone = e.phone ? String(e.phone).replace(/\D+/g, '') : '';
+      const eWa = e.whatsapp_number ? String(e.whatsapp_number).replace(/\D+/g, '') : '';
+      const eNameLower = String(e.name || '').trim().toLowerCase();
+
+      // Coincidencia exacta con código principal, ID o usuario vinculado
+      if (eCode === standardCode || eCode === rawInputUpper || eId === rawInputUpper || eLinkedUserId === rawInputUpper) return true;
+
+      // Coincidencia con alias históricos
+      if (aliases.includes(standardCode) || aliases.includes(rawInputUpper)) return true;
+
+      // Coincidencia numérica flexible con código principal o alias
+      if (codeNum !== null) {
+        const eNumMatch = eCode.match(/^EMP[-_\s]*0*(\d+)$/i) || eCode.match(/^0*(\d+)$/);
+        if (eNumMatch && eNumMatch[1] && parseInt(eNumMatch[1], 10) === codeNum) return true;
+
+        const aliasMatch = aliases.some(a => {
+          const m = a.match(/^EMP[-_\s]*0*(\d+)$/i) || a.match(/^0*(\d+)$/);
+          return m && m[1] && parseInt(m[1], 10) === codeNum;
+        });
+        if (aliasMatch) return true;
+      }
+
+      // Coincidencia por DPI
+      if (cleanRawInput && eDpi && (eDpi === cleanRawInput || eDpi.endsWith(cleanRawInput))) return true;
+
+      // Coincidencia por teléfono o WhatsApp
+      if (numOnly.length >= 7) {
+        if (ePhone && (ePhone === numOnly || ePhone.endsWith(numOnly))) return true;
+        if (eWa && (eWa === numOnly || eWa.endsWith(numOnly))) return true;
+      }
+
+      // Coincidencia por nombre completo
+      if (eNameLower && (eNameLower === rawInputLower || (rawInputLower.length >= 6 && eNameLower.includes(rawInputLower)))) return true;
+
+      return false;
+    });
+  };
+
+  let employee = findInList(state.administracion_employees);
+
+  // Fallback 1: Buscar en historial de asistencias previas
+  // Si alguien ya marcó con este código antes (ej: 36 asistencias de Ana Cecilia con EMP-033), auto-recuperar
+  if (!employee && Array.isArray(state.administracion_asistencias) && state.administracion_asistencias.length > 0) {
+    const hist = state.administracion_asistencias.find(a => {
+      if (!a) return false;
+      const aCode = a.employee_code ? String(a.employee_code).trim().toUpperCase() : '';
+      if (aCode === standardCode || aCode === rawInputUpper) return true;
+      if (codeNum !== null) {
+        const aNumMatch = aCode.match(/^EMP[-_\s]*0*(\d+)$/i) || aCode.match(/^0*(\d+)$/);
+        if (aNumMatch && aNumMatch[1] && parseInt(aNumMatch[1], 10) === codeNum) return true;
+      }
+      return false;
+    });
+
+    if (hist) {
+      employee = (state.administracion_employees || []).find(e => {
+        if (!e) return false;
+        if (hist.employee_id && (e.id === hist.employee_id || e.linked_user_id === hist.employee_id)) return true;
+        if (hist.employee_name && e.name && e.name.trim().toLowerCase() === hist.employee_name.trim().toLowerCase()) return true;
+        return false;
+      });
+
+      if (employee) {
+        employee.alias_codes = employee.alias_codes || [];
+        if (!employee.alias_codes.includes(standardCode)) employee.alias_codes.push(standardCode);
+      }
+    }
+  }
+
+  // Fallback 2: Buscar en usuarios del sistema (state.users)
+  if (!employee && Array.isArray(state.users) && state.users.length > 0) {
+    const matchedUser = state.users.find(u => {
+      if (!u) return false;
+      const uCode = u.employee_code ? String(u.employee_code).trim().toUpperCase() : '';
+      const uId = u.id ? String(u.id).trim().toUpperCase() : '';
+      const uNameLower = String(u.name || '').trim().toLowerCase();
+      if (uCode === standardCode || uCode === rawInputUpper || uId === rawInputUpper) return true;
+      if (uNameLower && (uNameLower === rawInputLower || (rawInputLower.length >= 6 && uNameLower.includes(rawInputLower)))) return true;
+      return false;
+    });
+
+    if (matchedUser) {
+      employee = (state.administracion_employees || []).find(e => {
+        if (!e) return false;
+        if (e.id === matchedUser.id || e.linked_user_id === matchedUser.id) return true;
+        if (e.name && matchedUser.name && e.name.trim().toLowerCase() === matchedUser.name.trim().toLowerCase()) return true;
+        return false;
+      });
+
+      if (!employee) {
+        employee = {
+          id: matchedUser.id,
+          employee_code: standardCode,
+          alias_codes: [standardCode],
+          name: matchedUser.name,
+          position: matchedUser.role || 'Colaborador',
+          department: String(matchedUser.role || '').toLowerCase().includes('medic') ? 'Médico' : 'Administración',
+          shift: 'Matutino',
+          status: 'Activo',
+          phone: matchedUser.phone || '',
+          whatsapp_number: matchedUser.phone ? `+502 ${matchedUser.phone}` : '+502 5555-0000'
+        };
+        state.administracion_employees.push(employee);
+        if (firestoreState && Array.isArray(firestoreState.administracion_employees)) {
+          firestoreState.administracion_employees.push(employee);
+        }
+      }
+    }
+  }
+
+  // Fallback 3: Consulta directa de respaldo a Firestore si aún no se encuentra
+  if (!employee) {
     try {
       const docSnap = await getDoc(doc(db, 'multimedica', 'catalog_administracion_employees'));
       if (docSnap.exists()) {
@@ -169,42 +294,12 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
         if (Array.isArray(emps) && emps.length > 0) {
           state.administracion_employees = emps;
           if (firestoreState) firestoreState.administracion_employees = emps;
+          employee = findInList(emps);
         }
       }
     } catch (e) {
       console.warn("Aviso en consulta de respaldo de empleados:", e);
     }
-  }
-
-  // 3. Buscar por coincidencia exacta, estándar, numérica, DPI o teléfono
-  let employee = (state.administracion_employees || []).find(e => {
-    if (!e) return false;
-    const eCode = e.employee_code ? String(e.employee_code).trim().toUpperCase() : '';
-    const eId = e.id ? String(e.id).trim().toUpperCase() : '';
-    const eDpi = e.dpi ? String(e.dpi).replace(/\s+/g, '').trim() : '';
-    const ePhone = e.phone ? String(e.phone).replace(/\D+/g, '') : '';
-    const cleanRawInput = rawInput.replace(/\s+/g, '');
-    const numOnly = rawInput.replace(/\D+/g, '');
-
-    if (eCode === standardCode || eCode === rawInputUpper || eId === rawInputUpper) return true;
-
-    if (codeNum !== null) {
-      const eNumMatch = eCode.match(/^EMP[-_\s]*0*(\d+)$/i) || eCode.match(/^0*(\d+)$/);
-      if (eNumMatch && eNumMatch[1] && parseInt(eNumMatch[1], 10) === codeNum) return true;
-    }
-
-    if (cleanRawInput && eDpi && (eDpi === cleanRawInput || eDpi.endsWith(cleanRawInput))) return true;
-    if (numOnly.length >= 7 && ePhone && (ePhone === numOnly || ePhone.endsWith(numOnly))) return true;
-
-    return false;
-  });
-
-  // Búsqueda alternativa por coincidencia de nombre si el código no coincide
-  if (!employee) {
-    const rawInputLower = rawInput.toLowerCase();
-    employee = (state.administracion_employees || []).find(e => 
-      e && e.name && e.name.trim().toLowerCase() === rawInputLower
-    );
   }
 
   if (!employee) {
@@ -226,8 +321,17 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
   const todayYMD = now.toLocaleDateString('en-CA');
   const currentTimeStr = now.toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 
+  // Función para asociar registros existentes con este empleado
+  const isEmpAttendance = (a) => {
+    if (!a) return false;
+    if (a.employee_id === employee.id) return true;
+    if (employee.linked_user_id && a.employee_id === employee.linked_user_id) return true;
+    if (a.employee_code && (a.employee_code === employee.employee_code || (Array.isArray(employee.alias_codes) && employee.alias_codes.includes(a.employee_code)))) return true;
+    return false;
+  };
+
   // Anti-duplicados: verificar si marcó el mismo evento hace menos de 2 minutos (120,000 ms)
-  const recentRecords = state.administracion_asistencias.filter(a => a.employee_id === employee.id);
+  const recentRecords = state.administracion_asistencias.filter(isEmpAttendance);
   const lastRecord = recentRecords.length > 0 ? recentRecords[0] : null;
 
   if (lastRecord) {
@@ -276,7 +380,7 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
   } else if (type === 'SALIDA') {
     status = 'ON_TIME';
     const todaysEntry = state.administracion_asistencias.find(a => 
-      a.employee_id === employee.id && a.date === todayYMD && a.type === 'ENTRADA'
+      isEmpAttendance(a) && a.date === todayYMD && a.type === 'ENTRADA'
     );
     if (todaysEntry && todaysEntry.time_in) {
       const inTime = new Date(todaysEntry.time_in).getTime();
@@ -317,37 +421,45 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
   }
   saveStateToLocalCache();
 
-  // 4. Guardar de forma atómica y esperada en Firestore
-  try {
-    // 4.1 Guardar documento individual independiente (nunca sobreescribe a otros)
-    const indRef = doc(db, 'multimedica', newAttendance.id);
-    await setDoc(indRef, { ...newAttendance, _collectionType: 'administracion_asistencias' }, { merge: true });
-
-    // 4.2 Actualización no destructiva del catálogo consolidado
+  // 4. Guardar de forma atómica y esperada en Firestore (con timeout de protección para red móvil lenta)
+  const firestoreSavePromise = (async () => {
     try {
-      let mergedItems = [...state.administracion_asistencias];
-      const catSnap = await getDoc(doc(db, 'multimedica', 'catalog_administracion_asistencias'));
-      if (catSnap.exists()) {
-        const catData = catSnap.data();
-        const existingItems = catData.items || [];
-        const seen = new Set();
-        mergedItems = [newAttendance, ...existingItems, ...state.administracion_asistencias].filter(item => {
-          if (!item || !item.id || seen.has(item.id)) return false;
-          seen.add(item.id);
-          return true;
-        });
-        mergedItems.sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date));
-        state.administracion_asistencias = mergedItems;
-        if (firestoreState) firestoreState.administracion_asistencias = mergedItems;
+      // 4.1 Guardar documento individual independiente
+      const indRef = doc(db, 'multimedica', newAttendance.id);
+      await setDoc(indRef, { ...newAttendance, _collectionType: 'administracion_asistencias' }, { merge: true });
+
+      // 4.2 Actualización no destructiva del catálogo consolidado
+      try {
+        let mergedItems = [...state.administracion_asistencias];
+        const catSnap = await getDoc(doc(db, 'multimedica', 'catalog_administracion_asistencias'));
+        if (catSnap.exists()) {
+          const catData = catSnap.data();
+          const existingItems = catData.items || [];
+          const seen = new Set();
+          mergedItems = [newAttendance, ...existingItems, ...state.administracion_asistencias].filter(item => {
+            if (!item || !item.id || seen.has(item.id)) return false;
+            seen.add(item.id);
+            return true;
+          });
+          mergedItems.sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date));
+          state.administracion_asistencias = mergedItems;
+          if (firestoreState) firestoreState.administracion_asistencias = mergedItems;
+        }
+        const docRef = doc(db, 'multimedica', 'catalog_administracion_asistencias');
+        await setDoc(docRef, { _collectionType: 'catalog_administracion_asistencias', items: mergedItems.slice(0, 1000) }, { merge: true });
+      } catch (catErr) {
+        console.warn("Aviso actualizando catálogo central:", catErr);
       }
-      const docRef = doc(db, 'multimedica', 'catalog_administracion_asistencias');
-      await setDoc(docRef, { _collectionType: 'catalog_administracion_asistencias', items: mergedItems.slice(0, 1000) }, { merge: true });
-    } catch (catErr) {
-      console.warn("Aviso actualizando catálogo central:", catErr);
+    } catch (err) {
+      console.error("Error guardando marcaje en Firestore:", err);
     }
-  } catch (err) {
-    console.error("Error guardando marcaje en Firestore:", err);
-  }
+  })();
+
+  // Esperar confirmación de guardado en la nube con un límite de 2.5s para no bloquear la experiencia de usuario
+  await Promise.race([
+    firestoreSavePromise,
+    new Promise(res => setTimeout(res, 2500))
+  ]);
 
   // Notificar sincronización general en segundo plano
   try {
