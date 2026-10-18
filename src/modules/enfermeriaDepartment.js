@@ -891,27 +891,43 @@ function renderEnfermeriaShiftChangesView(container, state) {
     ? (state.administracion_enfermeria_cambios || []) 
     : monthSpecificChanges;
 
-  const approvedCount = monthSpecificChanges.filter(c => c.status === 'Autorizado').length;
-  const pendingCount = monthSpecificChanges.filter(c => c.status === 'Pendiente').length;
-  const totalOccupied = approvedCount + pendingCount;
-  const maxAllowed = 5;
-  const isLimitReached = totalOccupied >= maxAllowed;
+  const staff = getNursingEmployeesList(state);
+  const eligibleTurnPersonnel = staff.filter(e => !isEmployeeJefa(e));
+
+  // Regla 3: Conteo individual de cambios por enfermero/a en el mes seleccionado (Máx. 5 por colaborador)
+  const nurseChangeStats = eligibleTurnPersonnel.map(emp => {
+    const activeChanges = monthSpecificChanges.filter(c => 
+      (c.status === 'Autorizado' || c.status === 'Pendiente') && 
+      isSameNursingPerson(c.originalEmpName, emp.name)
+    );
+    const count = activeChanges.length;
+    return {
+      name: emp.name,
+      position: emp.position || 'Enfermería',
+      count: count,
+      available: Math.max(0, 5 - count),
+      isLimitReached: count >= 5
+    };
+  });
+
+  const nursesAtLimit = nurseChangeStats.filter(s => s.isLimitReached);
+  const totalMonthChangesCount = monthSpecificChanges.length;
 
   container.innerHTML = `
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 1.25rem;">
       
-      <div class="glass-card" style="padding: 1rem; border-left: 4px solid ${isLimitReached ? '#ef4444' : '#0284c7'};">
-        <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Límite Mensual de Cambios (Regla 3)</div>
+      <div class="glass-card" style="padding: 1rem; border-left: 4px solid #0284c7;">
+        <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Límite por Colaborador (Regla 3)</div>
         <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px;">
-          <span style="font-size: 1.6rem; font-weight: 900; color: ${isLimitReached ? '#f87171' : 'var(--accent-primary)'};">
-            ${totalOccupied} / ${maxAllowed}
+          <span style="font-size: 1.6rem; font-weight: 900; color: var(--accent-primary);">
+            Máx. 5 / enfermero
           </span>
-          <span style="font-size: 0.72rem; color: ${isLimitReached ? '#ef4444' : '#4ade80'}; font-weight: bold;">
-            ${isLimitReached ? '⛔ LÍMITE ALCANZADO' : `✅ ${maxAllowed - totalOccupied} Disponibles`}
+          <span style="font-size: 0.72rem; color: ${nursesAtLimit.length > 0 ? '#f59e0b' : '#4ade80'}; font-weight: bold;">
+            ${nursesAtLimit.length > 0 ? `⚠️ ${nursesAtLimit.length} al límite (5/5)` : '✅ Cuotas individuales activas'}
           </span>
         </div>
         <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">
-          Periodo ${currentMonthTitle} &bull; Máx. 5 autorizables.
+          Periodo ${currentMonthTitle} &bull; Máximo 5 cambios al mes por cada enfermero/a.
         </div>
       </div>
 
@@ -968,18 +984,42 @@ function renderEnfermeriaShiftChangesView(container, state) {
       </div>
 
       <div>
-        <button class="btn btn-primary" id="btn-open-new-shift-change" ${isLimitReached ? 'disabled title="Límite mensual de 5 cambios alcanzado"' : ''} style="font-size: 0.85rem; padding: 8px 16px;">
+        <button class="btn btn-primary" id="btn-open-new-shift-change" style="font-size: 0.85rem; padding: 8px 16px;">
           ➕ Solicitar Cambio de Turno (Boleta Oficial)
         </button>
       </div>
     </div>
 
-    ${isLimitReached ? `
-      <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; padding: 12px; margin-bottom: 1.25rem; color: #fca5a5; font-size: 0.82rem; display: flex; align-items: center; gap: 10px;">
-        <span style="font-size: 1.5rem;">⛔</span>
+    <!-- CUOTA MENSUAL DE CAMBIOS POR ENFERMERO (REGLA 3) -->
+    <div class="glass-card" style="padding: 0.85rem 1.25rem; margin-bottom: 1.25rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(0, 242, 254, 0.15);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+        <div style="font-size: 0.8rem; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 6px;">
+          <span>📊</span> Estado de Cuotas Mensuales por Enfermero/a (${currentMonthTitle}) &bull; Regla 3 (Máx. 5 c/u):
+        </div>
+        <div style="font-size: 0.72rem; color: var(--text-muted);">
+          Total en el servicio: <strong style="color: #fff;">${totalMonthChangesCount}</strong> boleta(s)
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px;">
+        ${nurseChangeStats.map(s => `
+          <div style="background: ${s.isLimitReached ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.03)'}; border: 1px solid ${s.isLimitReached ? 'rgba(239, 68, 68, 0.4)' : 'rgba(255, 255, 255, 0.08)'}; border-radius: 6px; padding: 6px 10px; display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+            <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 6px;" title="${s.name}">
+              <strong style="color: ${s.isLimitReached ? '#fca5a5' : '#e2e8f0'};">${s.name}</strong>
+            </div>
+            <span style="font-family: monospace; font-weight: 800; font-size: 0.78rem; padding: 2px 6px; border-radius: 4px; background: ${s.isLimitReached ? '#ef4444' : (s.count > 0 ? 'rgba(2, 132, 199, 0.3)' : 'rgba(255, 255, 255, 0.05)')}; color: ${s.isLimitReached ? '#fff' : (s.count > 0 ? '#38bdf8' : '#94a3b8')};">
+              ${s.count}/5
+            </span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    ${nursesAtLimit.length > 0 ? `
+      <div style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; padding: 10px 14px; margin-bottom: 1.25rem; color: #fde68a; font-size: 0.8rem; display: flex; align-items: center; gap: 8px;">
+        <span>⚠️</span>
         <div>
-          <strong>Límite de Cambios de Turno Alcanzado para ${currentMonthTitle}:</strong>
-          <br>El sistema ha registrado los 5 cambios reglamentarios permitidos para este mes. Según la política hospitalaria, no se autorizarán cambios adicionales salvo disposición extraordinaria de Dirección Médica.
+          <strong>Límite mensual individual alcanzado (5/5 cambios):</strong> ${nursesAtLimit.map(n => n.name).join(', ')} ha(n) alcanzado su cuota máxima de 5 cambios en ${currentMonthTitle}. Los demás colaboradores disponen de su cuota reglamentaria normal.
         </div>
       </div>
     ` : ''}
@@ -1421,6 +1461,49 @@ function openNewShiftChangeModal(state, onSavedCallback) {
     document.body.appendChild(modal);
   }
 
+  const getNurseMonthChangesCount = (empName, targetMonth) => {
+    return (state.administracion_enfermeria_cambios || []).filter(c => {
+      if (!c) return false;
+      const cMonth = c.month || (c.date ? c.date.substring(0, 7) : '');
+      const isSameMonth = cMonth === targetMonth || (c.date && c.date.startsWith(targetMonth));
+      const isActive = c.status === 'Autorizado' || c.status === 'Pendiente';
+      return isSameMonth && isActive && isSameNursingPerson(c.originalEmpName, empName);
+    }).length;
+  };
+
+  const populateOriginalEmpSelect = (targetDateStr) => {
+    const origSelect = modal.querySelector('#sc-original-emp');
+    if (!origSelect) return;
+    const currentVal = origSelect.value;
+    const targetMonth = (targetDateStr || new Date().toISOString().substring(0, 10)).substring(0, 7);
+
+    let html = '<option value="">-- Seleccionar Persona Responsable --</option>';
+    eligibleTurnPersonnel.forEach(e => {
+      const exitInfo = getEmployeeExitInfo(e, null, state);
+      const isPostExit = exitInfo.exitDate && targetDateStr && targetDateStr > exitInfo.exitDate;
+      const changeCount = getNurseMonthChangesCount(e.name, targetMonth);
+      const isLimitReached = changeCount >= 5;
+      const isDisabled = isLimitReached || isPostExit;
+
+      let labelTag = `[${changeCount}/5 cambios en el mes]`;
+      if (isLimitReached) {
+        labelTag = `⛔ [Límite alcanzado: 5/5 cambios en ${targetMonth}]`;
+      }
+      if (isPostExit) {
+        labelTag = `🛑 [Baja laboral el ${exitInfo.exitDate}]`;
+      } else if (exitInfo.exitDate) {
+        labelTag += ` (Baja: ${exitInfo.exitDate})`;
+      }
+
+      const selectedAttr = (e.name === currentVal && !isDisabled) ? 'selected' : '';
+      const disabledAttr = isDisabled ? 'disabled' : '';
+
+      html += `<option value="${e.name}" ${disabledAttr} ${selectedAttr}>${e.name} (${e.position || 'Enfermería'}) - ${labelTag}</option>`;
+    });
+
+    origSelect.innerHTML = html;
+  };
+
   modal.innerHTML = `
     <div style="background: #0f172a; border: 1px solid rgba(0,242,254,0.3); border-radius: 12px; width: 100%; max-width: 580px; max-height: 90vh; overflow-y: auto; padding: 20px; box-shadow: 0 25px 50px rgba(0,0,0,0.8); color: #fff; font-family: system-ui, -apple-system, sans-serif;">
       
@@ -1460,16 +1543,10 @@ function openNewShiftChangeModal(state, onSavedCallback) {
 
         <div class="form-group">
           <label style="font-size: 0.82rem; font-weight: bold; color: #f87171;">
-            👤 Nombre de la Persona Responsable del Turno *
+            👤 Nombre de la Persona Responsable del Turno (Regla 3: Máx. 5 al mes) *
           </label>
           <select id="sc-original-emp" required style="width: 100%; padding: 8px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 0.85rem;">
             <option value="">-- Seleccionar Persona Responsable --</option>
-            ${eligibleTurnPersonnel.map(e => {
-              const exitInfo = getEmployeeExitInfo(e, null, state);
-              return `
-                <option value="${e.name}">${e.name} (${e.position || 'Enfermería'})${exitInfo.exitDate ? ` [Baja el ${exitInfo.exitDate}]` : ''}</option>
-              `;
-            }).join('')}
           </select>
         </div>
 
@@ -1494,7 +1571,7 @@ function openNewShiftChangeModal(state, onSavedCallback) {
         </div>
 
         <div style="background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.15); border-radius: 6px; padding: 10px; font-size: 0.72rem; color: var(--text-muted);">
-          ℹ️ Esta solicitud generará la Boleta Oficial con las 4 firmas requeridas: <strong>Persona Responsable</strong>, <strong>Persona Reemplazante</strong>, <strong>Jefa de Servicio (Vanessa Morales)</strong> y <strong>Autorización AD</strong>.
+          ℹ️ <strong>Reglamento Oficial:</strong> La Regla 3 establece un límite máximo de <strong>5 cambios al mes por cada colaborador</strong>. Esta solicitud generará la Boleta Oficial con las 4 firmas requeridas: <strong>Persona Responsable</strong>, <strong>Persona Reemplazante</strong>, <strong>Jefa de Servicio (Vanessa Morales)</strong> y <strong>Autorización AD</strong>.
         </div>
 
         <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;">
@@ -1507,6 +1584,14 @@ function openNewShiftChangeModal(state, onSavedCallback) {
   `;
 
   modal.style.display = 'flex';
+
+  const dateInput = document.getElementById('sc-date');
+  if (dateInput) {
+    populateOriginalEmpSelect(dateInput.value);
+    dateInput.addEventListener('change', () => {
+      populateOriginalEmpSelect(dateInput.value);
+    });
+  }
 
   const closeFn = () => { modal.style.display = 'none'; };
   document.getElementById('btn-cancel-shift-change').addEventListener('click', closeFn);
@@ -1543,12 +1628,17 @@ function openNewShiftChangeModal(state, onSavedCallback) {
 
     const monthTarget = dateVal.substring(0, 7);
 
-    const monthChanges = state.administracion_enfermeria_cambios.filter(c => {
-      return (c.month === monthTarget || (c.date && c.date.startsWith(monthTarget))) && (c.status === 'Autorizado' || c.status === 'Pendiente');
+    // Regla 3: Límite individual de máximo 5 cambios al mes por cada enfermero/a
+    const nurseMonthChanges = (state.administracion_enfermeria_cambios || []).filter(c => {
+      if (!c) return false;
+      const cMonth = c.month || (c.date ? c.date.substring(0, 7) : '');
+      const isSameMonth = cMonth === monthTarget || (c.date && c.date.startsWith(monthTarget));
+      const isActive = c.status === 'Autorizado' || c.status === 'Pendiente';
+      return isSameMonth && isActive && isSameNursingPerson(c.originalEmpName, origEmp);
     });
 
-    if (monthChanges.length >= 5) {
-      alert(`⛔ Límite mensual excedido (Regla 3):\n\nEl sistema ya cuenta con ${monthChanges.length} cambios de turno en trámite/autorizados para el mes ${monthTarget}.\nEl reglamento del hospital rechaza automáticamente solicitudes adicionales.`);
+    if (nurseMonthChanges.length >= 5) {
+      alert(`⛔ Límite individual mensual alcanzado (Regla 3):\n\nEl colaborador ${origEmp} ya cuenta con ${nurseMonthChanges.length} de 5 cambios de turno en trámite o autorizados para el mes ${monthTarget}.\n\nSegún la Regla 3 del reglamento hospitalario, cada enfermero/a tiene un límite máximo de 5 cambios de turno al mes.`);
       return;
     }
 
