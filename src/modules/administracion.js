@@ -1553,11 +1553,14 @@ function renderRrhhEmpleados(container, state) {
             <div class="form-group">
               <label>Turno / Horario *</label>
               <select id="e-shift" required style="width: 100%; padding: 8px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
-                <option value="Matutino" ${editingEmp && editingEmp.shift === 'Matutino' ? 'selected' : ''}>Matutino (07:00 - 15:00)</option>
-                <option value="Vespertino" ${editingEmp && editingEmp.shift === 'Vespertino' ? 'selected' : ''}>Vespertino (13:00 - 21:00)</option>
-                <option value="Nocturno" ${editingEmp && editingEmp.shift === 'Nocturno' ? 'selected' : ''}>Nocturno (19:00 - 07:00)</option>
-                <option value="Mixto" ${editingEmp && editingEmp.shift === 'Mixto' ? 'selected' : ''}>Mixto (08:00 - 17:00)</option>
-                <option value="Jornada 24h" ${editingEmp && editingEmp.shift === 'Jornada 24h' ? 'selected' : ''}>Jornada 24 Horas</option>
+                <option value="Matutino (07:00 - 13:00)">Matutino (07:00 - 13:00)</option>
+                <option value="Vespertino (13:00 - 19:00)">Vespertino (13:00 - 19:00)</option>
+                <option value="Nocturno (19:00 - 07:00)">Nocturno (19:00 - 07:00)</option>
+                <option value="Mixto (07:00 - 19:00)">Mixto (07:00 - 19:00)</option>
+                <option value="8 Horas (07:00 - 16:00)">8 Horas (07:00 - 16:00)</option>
+                <option value="18 Horas (19:00 - 13:00)">18 Horas (19:00 - 13:00)</option>
+                <option value="24 Horas (07:00 - 07:00)">24 Horas (07:00 - 07:00)</option>
+                <option value="Rotativo (Rol de Turnos)">Rotativo (Según Rol de Turnos)</option>
               </select>
             </div>
             <div class="form-group">
@@ -1696,6 +1699,51 @@ function renderRrhhEmpleados(container, state) {
       badge.style.background = '#ef4444';
     }
   };
+
+  // Configuración de Horarios / Turnos aplicables según Departamento
+  const deptSelect = document.getElementById('e-department');
+  const shiftSelect = document.getElementById('e-shift');
+
+  const nursingShifts = [
+    { value: 'Matutino (07:00 - 13:00)', label: 'Matutino (07:00 - 13:00)', short: 'Matutino' },
+    { value: 'Vespertino (13:00 - 19:00)', label: 'Vespertino (13:00 - 19:00)', short: 'Vespertino' },
+    { value: 'Nocturno (19:00 - 07:00)', label: 'Nocturno (19:00 - 07:00)', short: 'Nocturno' },
+    { value: 'Mixto (07:00 - 19:00)', label: 'Mixto (07:00 - 19:00)', short: 'Mixto' },
+    { value: '8 Horas (07:00 - 16:00)', label: '8 Horas (07:00 - 16:00)', short: '8 Horas' },
+    { value: '18 Horas (19:00 - 13:00)', label: '18 Horas (19:00 - 13:00)', short: '18 Horas' },
+    { value: '24 Horas (07:00 - 07:00)', label: '24 Horas (07:00 - 07:00)', short: '24 Horas' },
+    { value: 'Rotativo (Rol de Turnos)', label: 'Rotativo (Según Rol de Turnos)', short: 'Rotativo' }
+  ];
+
+  const generalShifts = [
+    { value: 'Matutino (07:00 - 15:00)', label: 'Matutino (07:00 - 15:00)', short: 'Matutino' },
+    { value: 'Vespertino (13:00 - 21:00)', label: 'Vespertino (13:00 - 21:00)', short: 'Vespertino' },
+    { value: 'Nocturno (19:00 - 07:00)', label: 'Nocturno (19:00 - 07:00)', short: 'Nocturno' },
+    { value: 'Mixto (08:00 - 17:00)', label: 'Mixto (08:00 - 17:00)', short: 'Mixto' },
+    { value: 'Jornada 24 Horas (07:00 - 07:00)', label: 'Jornada 24 Horas (07:00 - 07:00)', short: '24 Horas' }
+  ];
+
+  const updateShiftOptions = (preferredVal) => {
+    if (!deptSelect || !shiftSelect) return;
+    const isNursing = /enfermer/i.test(deptSelect.value) || deptSelect.value === 'Enfermería';
+    const list = isNursing ? nursingShifts : generalShifts;
+    const currentVal = preferredVal || (editingEmp ? editingEmp.shift : '') || shiftSelect.value || '';
+
+    shiftSelect.innerHTML = list.map(s => {
+      const isSelected = (
+        s.value === currentVal ||
+        s.short.toLowerCase() === currentVal.toLowerCase() ||
+        (currentVal && currentVal.toLowerCase().startsWith(s.short.toLowerCase())) ||
+        (currentVal && s.value.toLowerCase().startsWith(currentVal.toLowerCase()))
+      );
+      return `<option value="${s.value}" ${isSelected ? 'selected' : ''}>${s.label}</option>`;
+    }).join('');
+  };
+
+  if (deptSelect && shiftSelect) {
+    deptSelect.addEventListener('change', () => updateShiftOptions());
+    updateShiftOptions(editingEmp ? editingEmp.shift : null);
+  }
 
   salaryInput.addEventListener('input', executeRecommendationAlgorithm);
   executeRecommendationAlgorithm();

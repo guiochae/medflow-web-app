@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { saveAppState } from '../main.js';
 import { db, firestoreState, saveStateToLocalCache } from '../firebase.js';
 import { doc, getDoc, setDoc, getDocs, collection } from 'firebase/firestore';
+import { isSameNursingPerson } from '../modules/enfermeriaDepartment.js';
 
 const QR_SECRET = 'LUGAMED_ATTENDANCE_SECRET_2026_TOTP';
 const TOKEN_WINDOW_SECONDS = 30; // Rotación cada 30 segundos
@@ -348,16 +349,71 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
 
   let shiftStartHour = 7;
   let shiftStartMinute = 0;
-  const shift = employee.shift || 'Matutino';
+  let shiftLabel = employee.shift || 'Matutino';
 
-  if (shift === 'Vespertino') {
-    shiftStartHour = 13;
-  } else if (shift === 'Nocturno') {
-    shiftStartHour = 19;
-  } else if (shift === 'Mixto') {
-    shiftStartHour = 8;
-  } else {
-    shiftStartHour = 7;
+  const rawShift = String(employee.shift || 'Matutino').toLowerCase();
+  const isNursing = (employee.department && /enfermer/i.test(employee.department)) ||
+                    (employee.position && /enferm/i.test(employee.position));
+
+  // 1. Revisar si el colaborador tiene turno asignado en el Rol Oficial de Enfermería para la fecha actual
+  if (isNursing && state && state.administracion_enfermeria_roles) {
+    const [y, m, d] = todayYMD.split('-');
+    const currentMonthKey = `${y}-${m}`;
+    const dayNum = parseInt(d, 10);
+    const monthRoster = state.administracion_enfermeria_roles.find(r => r.month === currentMonthKey);
+    if (monthRoster && monthRoster.schedule) {
+      const staffKey = Object.keys(monthRoster.schedule).find(k => 
+        k.toLowerCase().trim() === employee.name.toLowerCase().trim() ||
+        (typeof isSameNursingPerson === 'function' && isSameNursingPerson(k, employee.name))
+      );
+      if (staffKey && monthRoster.schedule[staffKey]) {
+        const todayCode = monthRoster.schedule[staffKey][dayNum];
+        if (todayCode && todayCode !== 'L' && todayCode !== 'BAJA' && todayCode !== 'P') {
+          if (todayCode === 'M') {
+            shiftStartHour = 7;
+            shiftLabel = 'Matutino (07:00 - 13:00)';
+          } else if (todayCode === 'T') {
+            shiftStartHour = 13;
+            shiftLabel = 'Vespertino (13:00 - 19:00)';
+          } else if (todayCode === 'N') {
+            shiftStartHour = 19;
+            shiftLabel = 'Nocturno (19:00 - 07:00)';
+          } else if (todayCode === 'MX' || todayCode === 'M/T') {
+            shiftStartHour = 7;
+            shiftLabel = 'Mixto (07:00 - 19:00)';
+          } else if (todayCode === '8H' || todayCode === 'D') {
+            shiftStartHour = 7;
+            shiftLabel = '8 Horas (07:00 - 16:00)';
+          } else if (todayCode === '18H') {
+            shiftStartHour = 19;
+            shiftLabel = '18 Horas (19:00 - 13:00)';
+          } else if (todayCode === '24H') {
+            shiftStartHour = 7;
+            shiftLabel = '24 Horas (07:00 - 07:00)';
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Si no se derivó del rol dinámico, evaluar según su turno asignado en el perfil
+  if (shiftLabel === (employee.shift || 'Matutino')) {
+    if (rawShift.includes('vespertino') || rawShift.includes('13:00') || rawShift.includes('tarde')) {
+      shiftStartHour = 13;
+    } else if (rawShift.includes('nocturno') || rawShift.includes('19:00 - 07:00') || rawShift.includes('noche')) {
+      shiftStartHour = 19;
+    } else if (rawShift.includes('18 hora') || rawShift.includes('18h') || rawShift.includes('19:00 - 13:00')) {
+      shiftStartHour = 19;
+    } else if (rawShift.includes('mixto')) {
+      // Para enfermería Mixto es 07:00 a 19:00. Para administrativo es 08:00 a 17:00.
+      shiftStartHour = isNursing ? 7 : 8;
+    } else if (rawShift.includes('8 hora') || rawShift.includes('8h')) {
+      shiftStartHour = 7;
+    } else if (rawShift.includes('24 hora') || rawShift.includes('24h')) {
+      shiftStartHour = 7;
+    } else {
+      shiftStartHour = 7;
+    }
   }
 
   let status = 'ON_TIME';
@@ -379,11 +435,16 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
     }
   } else if (type === 'SALIDA') {
     status = 'ON_TIME';
-    const todaysEntry = state.administracion_asistencias.find(a => 
-      isEmpAttendance(a) && a.date === todayYMD && a.type === 'ENTRADA'
-    );
-    if (todaysEntry && todaysEntry.time_in) {
-      const inTime = new Date(todaysEntry.time_in).getTime();
+    // Buscar la entrada más reciente del colaborador (en las últimas 30 horas para cubrir turnos nocturnos, de 18h y 24h)
+    const recentEntry = state.administracion_asistencias.find(a => {
+      if (!isEmpAttendance(a) || a.type !== 'ENTRADA' || !a.time_in) return false;
+      const inTime = new Date(a.time_in).getTime();
+      const diffHours = (now.getTime() - inTime) / (1000 * 60 * 60);
+      return diffHours >= 0 && diffHours <= 30;
+    });
+
+    if (recentEntry && recentEntry.time_in) {
+      const inTime = new Date(recentEntry.time_in).getTime();
       const outTime = now.getTime();
       const diffHours = (outTime - inTime) / (1000 * 60 * 60);
       hoursWorked = Math.max(0, parseFloat(diffHours.toFixed(2)));
@@ -396,7 +457,7 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
     employee_code: employee.employee_code || standardCode,
     employee_name: employee.name,
     department: employee.department || employee.specialty || 'General',
-    shift: employee.shift || 'Matutino',
+    shift: shiftLabel || employee.shift || 'Matutino',
     date: todayYMD,
     time_in: type === 'ENTRADA' ? nowIso : null,
     time_out: type === 'SALIDA' ? nowIso : null,

@@ -6,16 +6,18 @@ import { db, doc, setDoc } from '../firebase.js';
 // 👩‍⚕️ SUBMÓDULO: GESTIÓN INTEGRAL DEL DEPARTAMENTO DE ENFERMERÍA (RRHH)
 // ==============================================================================
 
-// Catálogo Oficial de Turnos y Códigos
+// Catálogo Oficial de Turnos y Códigos para Personal de Enfermería
 export const SHIFT_TYPES = {
-  'M': { code: 'M', name: 'Mañana', hours: 8, schedule: '07:00 - 15:00', bg: '#0284c7', color: '#ffffff', lightBg: 'rgba(2, 132, 199, 0.15)', desc: 'Turno Matutino' },
-  'T': { code: 'T', name: 'Tarde', hours: 8, schedule: '15:00 - 23:00', bg: '#16a34a', color: '#ffffff', lightBg: 'rgba(22, 163, 74, 0.15)', desc: 'Turno Vespertino' },
-  'N': { code: 'N', name: 'Noche', hours: 12, schedule: '19:00 - 07:00', bg: '#dc2626', color: '#ffffff', lightBg: 'rgba(220, 38, 38, 0.15)', desc: 'Turno Nocturno' },
+  'M': { code: 'M', name: 'Mañana', hours: 6, schedule: '07:00 - 13:00', bg: '#0284c7', color: '#ffffff', lightBg: 'rgba(2, 132, 199, 0.15)', desc: 'Turno Matutino (7am a 13pm)' },
+  'T': { code: 'T', name: 'Tarde', hours: 6, schedule: '13:00 - 19:00', bg: '#16a34a', color: '#ffffff', lightBg: 'rgba(22, 163, 74, 0.15)', desc: 'Turno Vespertino (13pm a 19pm)' },
+  'N': { code: 'N', name: 'Noche', hours: 12, schedule: '19:00 - 07:00', bg: '#dc2626', color: '#ffffff', lightBg: 'rgba(220, 38, 38, 0.15)', desc: 'Turno Nocturno (19pm a 7am)' },
+  'MX': { code: 'MX', name: 'Mixto', hours: 12, schedule: '07:00 - 19:00', bg: '#0891b2', color: '#ffffff', lightBg: 'rgba(8, 145, 178, 0.15)', desc: 'Turno Mixto (7am a 19pm)' },
+  'M/T': { code: 'M/T', name: 'Mixto (M/T)', hours: 12, schedule: '07:00 - 19:00', bg: '#0891b2', color: '#ffffff', lightBg: 'rgba(8, 145, 178, 0.15)', desc: 'Turno Mixto (7am a 19pm)' },
+  '8H': { code: '8H', name: '8 Horas', hours: 8, schedule: '07:00 - 16:00', bg: '#6366f1', color: '#ffffff', lightBg: 'rgba(99, 102, 241, 0.15)', desc: 'Jornada 8 Horas (7am a 16pm)' },
+  '18H': { code: '18H', name: 'Especial 18 Horas', hours: 18, schedule: '19:00 - 13:00', bg: '#ca8a04', color: '#ffffff', lightBg: 'rgba(202, 138, 4, 0.2)', desc: 'Turno Especial 18 Horas (7pm a 13pm)' },
+  '24H': { code: '24H', name: 'Especial 24 Horas', hours: 24, schedule: '07:00 - 07:00', bg: '#ea580c', color: '#ffffff', lightBg: 'rgba(234, 88, 12, 0.2)', desc: 'Turno Especial 24 Horas (7am a 7am)' },
+  'D': { code: 'D', name: '8 Horas / Diurno', hours: 8, schedule: '07:00 - 16:00', bg: '#6366f1', color: '#ffffff', lightBg: 'rgba(99, 102, 241, 0.15)', desc: 'Jornada 8 Horas Diurna Fija (7am a 16pm)' },
   'L': { code: 'L', name: 'Libre', hours: 0, schedule: 'Descanso Reglamentario', bg: '#64748b', color: '#ffffff', lightBg: 'rgba(100, 116, 139, 0.15)', desc: 'Descanso / Libre' },
-  'M/T': { code: 'M/T', name: 'Mañana + Tarde', hours: 16, schedule: '07:00 - 23:00', bg: '#d97706', color: '#ffffff', lightBg: 'rgba(217, 119, 6, 0.15)', desc: 'Turno Doble Diurno' },
-  '18H': { code: '18H', name: 'Especial 18 Horas', hours: 18, schedule: 'Jornada Especial 18h', bg: '#ca8a04', color: '#ffffff', lightBg: 'rgba(202, 138, 4, 0.2)', desc: 'Turno Especial 18 Horas' },
-  '24H': { code: '24H', name: 'Especial 24 Horas', hours: 24, schedule: 'Jornada Continua 24h', bg: '#ea580c', color: '#ffffff', lightBg: 'rgba(234, 88, 12, 0.2)', desc: 'Turno Especial 24 Horas' },
-  'D': { code: 'D', name: 'Día / Administrativo', hours: 8, schedule: '08:00 - 17:00', bg: '#6366f1', color: '#ffffff', lightBg: 'rgba(99, 102, 241, 0.15)', desc: 'Jornada Diurna Fija (8 Horas / Administrativo)' },
   'P': { code: 'P', name: 'Permiso / Licencia', hours: 0, schedule: 'Permiso Oficial Autorizado', bg: '#db2777', color: '#ffffff', lightBg: 'rgba(219, 39, 119, 0.15)', desc: 'Permiso / Licencia' }
 };
 
@@ -449,11 +451,13 @@ function renderEnfermeriaRosterView(container, state) {
 
   const fitnessIssues = evaluateRosterFitness(rosterObj.schedule, totalDays, rosterStaff);
 
-  const dailyCoverage = { M: {}, T: {}, N: {}, '18H': {}, '24H': {}, 'M/T': {} };
+  const dailyCoverage = { M: {}, T: {}, N: {}, MX: {}, '8H': {}, '18H': {}, '24H': {}, 'M/T': {} };
   for (let d = 1; d <= totalDays; d++) {
     dailyCoverage.M[d] = 0;
     dailyCoverage.T[d] = 0;
     dailyCoverage.N[d] = 0;
+    dailyCoverage.MX[d] = 0;
+    dailyCoverage['8H'][d] = 0;
     dailyCoverage['18H'][d] = 0;
     dailyCoverage['24H'][d] = 0;
     dailyCoverage['M/T'][d] = 0;
@@ -469,9 +473,14 @@ function renderEnfermeriaRosterView(container, state) {
       if (shift === 'M') dailyCoverage.M[d]++;
       else if (shift === 'T') dailyCoverage.T[d]++;
       else if (shift === 'N') dailyCoverage.N[d]++;
+      else if (shift === 'MX' || shift === 'M/T') {
+        dailyCoverage.MX[d]++;
+        dailyCoverage.M[d]++;
+        dailyCoverage.T[d]++;
+      }
+      else if (shift === '8H' || shift === 'D') dailyCoverage['8H'][d]++;
       else if (shift === '18H') dailyCoverage['18H'][d]++;
       else if (shift === '24H') dailyCoverage['24H'][d]++;
-      else if (shift === 'M/T') dailyCoverage['M/T'][d]++;
     });
   }
 
@@ -489,13 +498,15 @@ function renderEnfermeriaRosterView(container, state) {
       </div>
 
       <div style="display: flex; gap: 4px; flex-wrap: wrap; align-items: center; font-size: 0.72rem;">
-        <span style="color: var(--text-muted); margin-right: 4px; font-weight: bold;">Códigos:</span>
-        <span style="background: #0284c7; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">M: Mañana</span>
-        <span style="background: #16a34a; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">T: Tarde</span>
-        <span style="background: #dc2626; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">N: Noche</span>
+        <span style="color: var(--text-muted); margin-right: 4px; font-weight: bold;">Códigos Oficiales:</span>
+        <span style="background: #0284c7; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;" title="Matutino: 7am a 13pm (6h)">M: 07-13h</span>
+        <span style="background: #16a34a; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;" title="Vespertino: 13pm a 19pm (6h)">T: 13-19h</span>
+        <span style="background: #dc2626; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;" title="Nocturno: 19pm a 7am (12h)">N: 19-07h</span>
+        <span style="background: #0891b2; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;" title="Mixto: 7am a 19pm (12h)">MX: 07-19h</span>
+        <span style="background: #6366f1; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;" title="8 Horas: 7am a 16pm (8h)">8H: 07-16h</span>
+        <span style="background: #ca8a04; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;" title="18 Horas: 7pm a 13pm (18h)">18H: 19-13h</span>
+        <span style="background: #ea580c; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;" title="24 Horas: 7am a 7am (24h)">24H: 07-07h</span>
         <span style="background: #64748b; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">L: Libre</span>
-        <span style="background: #ca8a04; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">18H</span>
-        <span style="background: #ea580c; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">24H</span>
         <span style="background: #db2777; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold;">P: Permiso</span>
       </div>
 
@@ -617,14 +628,14 @@ function renderEnfermeriaRosterView(container, state) {
                 continue;
               }
               const shift = empSchedule[d] || 'L';
-              if (shift === 'M') { countM++; totalHours += 8; }
-              else if (shift === 'T') { countT++; totalHours += 8; }
+              if (shift === 'M') { countM++; totalHours += 6; }
+              else if (shift === 'T') { countT++; totalHours += 6; }
               else if (shift === 'N') { countN++; totalHours += 12; }
               else if (shift === 'L') { countL++; }
-              else if (shift === 'M/T') { countM++; countT++; totalHours += 16; }
+              else if (shift === 'MX' || shift === 'M/T') { countM++; countT++; totalHours += 12; }
+              else if (shift === '8H' || shift === 'D') { totalHours += 8; }
               else if (shift === '18H') { countEsp++; totalHours += 18; }
               else if (shift === '24H') { countEsp++; totalHours += 24; }
-              else if (shift === 'D') { totalHours += 8; }
               else if (shift === 'P') { /* Permiso */ }
             }
 
@@ -754,7 +765,7 @@ function renderEnfermeriaRosterView(container, state) {
     });
   }
 
-  const cycleOrder = ['M', 'T', 'N', 'L', 'M/T', '18H', '24H', 'P'];
+  const cycleOrder = ['M', 'T', 'N', 'L', 'MX', '8H', '18H', '24H', 'P'];
   container.querySelectorAll('.roster-cell').forEach(cell => {
     cell.addEventListener('click', () => {
       if (cell.getAttribute('data-disabled') === 'true') {
@@ -1531,12 +1542,13 @@ function openNewShiftChangeModal(state, onSavedCallback) {
           <div class="form-group">
             <label style="font-size: 0.82rem; font-weight: bold;">Turno (M, T, N...) *</label>
             <select id="sc-shift" required style="width: 100%; padding: 8px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 0.85rem;">
-              <option value="M">M - Mañana (07:00 - 15:00)</option>
-              <option value="T">T - Tarde (15:00 - 23:00)</option>
-              <option value="N">N - Noche (19:00 - 07:00)</option>
-              <option value="18H">18H - Especial 18 Horas</option>
-              <option value="24H">24H - Especial 24 Horas</option>
-              <option value="M/T">M/T - Doble Turno Diurno</option>
+              <option value="M">M - Matutino (7am a 13pm / 07:00 - 13:00)</option>
+              <option value="T">T - Vespertino (13pm a 19pm / 13:00 - 19:00)</option>
+              <option value="N">N - Nocturno (19pm a 7am / 19:00 - 07:00)</option>
+              <option value="MX">MX - Mixto (7am a 19pm / 07:00 - 19:00)</option>
+              <option value="8H">8H - Jornada 8 Horas (7am a 16pm / 07:00 - 16:00)</option>
+              <option value="18H">18H - Especial 18 Horas (7pm a 13pm / 19:00 - 13:00)</option>
+              <option value="24H">24H - Especial 24 Horas (7am a 7am / 07:00 - 07:00)</option>
             </select>
           </div>
         </div>
@@ -1931,6 +1943,9 @@ export function printOfficialRosterDocument(rosterObj, totalDays, yearNum, month
       <div class="header">
         <h1>HOSPITAL PRIVADO DE SAYAXCHE PETEN</h1>
         <h2>ROL DE TURNOS DE ENFERMERÍA - ${monthTitle}</h2>
+        <div style="font-size: 8px; margin-top: 4px; text-align: center; color: #444;">
+          <strong>Horarios Oficiales:</strong> Matutino 7am a 13pm (6h) &bull; Vespertino 13pm a 19pm (6h) &bull; Nocturno 19pm a 7am (12h) &bull; Mixto 7am a 19pm (12h) &bull; 8 Horas 7am a 16pm (8h) &bull; 18 Horas 7pm a 13pm (18h) &bull; 24 Horas 7am a 7am (24h)
+        </div>
       </div>
 
       <table>
@@ -1967,11 +1982,12 @@ export function printOfficialRosterDocument(rosterObj, totalDays, yearNum, month
             for (let d=1; d<=totalDays; d++) {
               if (exitDay !== null && d > exitDay) continue;
               const s = sched[d] || 'L';
-              if (s==='M') { cM++; h+=8; }
-              else if (s==='T') { cT++; h+=8; }
+              if (s==='M') { cM++; h+=6; }
+              else if (s==='T') { cT++; h+=6; }
               else if (s==='N') { cN++; h+=12; }
               else if (s==='L') { cL++; }
-              else if (s==='M/T') { cM++; cT++; h+=16; }
+              else if (s==='MX' || s==='M/T') { cM++; cT++; h+=12; }
+              else if (s==='8H' || s==='D') { h+=8; }
               else if (s==='18H') { cEsp++; h+=18; }
               else if (s==='24H') { cEsp++; h+=24; }
             }
