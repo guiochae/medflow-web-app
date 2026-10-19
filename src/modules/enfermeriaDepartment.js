@@ -346,7 +346,14 @@ export function renderRrhhEnfermeria(container, state) {
   }
 }
 
+let lastRosterScrollLeft = 0;
+
 function renderEnfermeriaRosterView(container, state) {
+  const existingScrollBox = container.querySelector('#roster-grid-scroll-wrapper');
+  if (existingScrollBox) {
+    lastRosterScrollLeft = existingScrollBox.scrollLeft;
+  }
+
   const [yearStr, monthStr] = currentRosterMonth.split('-');
   const yearNum = parseInt(yearStr, 10);
   const monthNum = parseInt(monthStr, 10) - 1;
@@ -560,7 +567,7 @@ function renderEnfermeriaRosterView(container, state) {
       </div>
     `}
 
-    <div class="glass-card" style="padding: 0.5rem; overflow-x: auto; margin-bottom: 1.5rem; border: 1px solid var(--border-color);">
+    <div id="roster-grid-scroll-wrapper" class="glass-card" style="padding: 0.5rem; overflow-x: auto; margin-bottom: 1.5rem; border: 1px solid var(--border-color);">
       <table id="roster-grid-table" style="width: 100%; border-collapse: collapse; font-size: 0.75rem; text-align: center; white-space: nowrap; font-family: monospace;">
         <thead>
           <tr style="background: #0f172a; color: #94a3b8; border-bottom: 1px solid #334155;">
@@ -690,11 +697,27 @@ function renderEnfermeriaRosterView(container, state) {
                     <td class="roster-cell" 
                         data-emp="${emp.name}" 
                         data-day="${d}" 
-                        style="padding: 2px; cursor: pointer; user-select: none; ${isWeekend ? 'background: rgba(245, 158, 11, 0.08);' : ''} ${hasFatigueAlert ? 'border: 2px solid #ef4444;' : ''}"
-                        title="${emp.name} - Día ${d}: ${shiftDef.name} (${shiftDef.schedule}) [Haz clic para cambiar turno]">
-                      <div style="background: ${shiftDef.bg}; color: ${shiftDef.color}; border-radius: 3px; font-weight: 800; font-size: 0.72rem; padding: 3px 0; line-height: 1; min-height: 18px; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 2px rgba(0,0,0,0.3);">
-                        ${shiftCode}
+                        style="padding: 2px; position: relative; user-select: none; ${isWeekend ? 'background: rgba(245, 158, 11, 0.08);' : ''} ${hasFatigueAlert ? 'border: 2px solid #ef4444;' : ''}"
+                        title="${emp.name} - Día ${d}: ${shiftDef.name} (${shiftDef.schedule}) &bull; Haz clic para seleccionar turno en lista desplegable">
+                      <div class="roster-badge" style="background: ${shiftDef.bg}; color: ${shiftDef.color}; border-radius: 4px; font-weight: 800; font-size: 0.72rem; padding: 2px 1px; line-height: 1.2; min-height: 20px; display: flex; align-items: center; justify-content: center; gap: 1px; box-shadow: 0 1px 2px rgba(0,0,0,0.3); pointer-events: none; transition: transform 0.1s ease, filter 0.1s ease;">
+                        <span>${shiftCode}</span>
+                        <span style="font-size: 0.55rem; opacity: 0.85; margin-left: 1px;">▾</span>
                       </div>
+                      <select class="roster-cell-select" 
+                              data-emp="${emp.name}" 
+                              data-day="${d}" 
+                              title="Seleccionar turno para ${emp.name} el día ${d}"
+                              style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 5;">
+                        <option value="M" ${shiftCode === 'M' ? 'selected' : ''}>🔵 M - Matutino (7am a 13pm / 6h)</option>
+                        <option value="T" ${shiftCode === 'T' ? 'selected' : ''}>🟢 T - Vespertino (13pm a 19pm / 6h)</option>
+                        <option value="N" ${shiftCode === 'N' ? 'selected' : ''}>🔴 N - Nocturno (19pm a 7am / 12h)</option>
+                        <option value="MX" ${shiftCode === 'MX' ? 'selected' : ''}>🩵 MX - Mixto (7am a 19pm / 12h)</option>
+                        <option value="8H" ${shiftCode === '8H' ? 'selected' : ''}>🟣 8H - 8 Horas (7am a 16pm / 8h)</option>
+                        <option value="18H" ${shiftCode === '18H' ? 'selected' : ''}>🟡 18H - Especial 18 Horas (7pm a 13pm / 18h)</option>
+                        <option value="24H" ${shiftCode === '24H' ? 'selected' : ''}>🟠 24H - Especial 24 Horas (7am a 7am / 24h)</option>
+                        <option value="L" ${shiftCode === 'L' ? 'selected' : ''}>⚪ L - Libre (Descanso Reglamentario)</option>
+                        <option value="P" ${shiftCode === 'P' ? 'selected' : ''}>🌸 P - Permiso Autorizado</option>
+                      </select>
                     </td>
                   `;
                 }).join('')}
@@ -765,22 +788,45 @@ function renderEnfermeriaRosterView(container, state) {
     });
   }
 
-  const cycleOrder = ['M', 'T', 'N', 'L', 'MX', '8H', '18H', '24H', 'P'];
-  container.querySelectorAll('.roster-cell').forEach(cell => {
-    cell.addEventListener('click', () => {
-      if (cell.getAttribute('data-disabled') === 'true') {
-        return; // Inhabilitado para días posteriores a la baja del colaborador
-      }
-      const empName = cell.getAttribute('data-emp');
-      const day = parseInt(cell.getAttribute('data-day'), 10);
-      const currentCode = rosterObj.schedule[empName]?.[day] || 'L';
-      const curIdx = cycleOrder.indexOf(currentCode);
-      const nextCode = cycleOrder[(curIdx + 1) % cycleOrder.length];
+  const scrollWrapper = container.querySelector('#roster-grid-scroll-wrapper');
+  if (scrollWrapper) {
+    if (lastRosterScrollLeft) {
+      scrollWrapper.scrollLeft = lastRosterScrollLeft;
+    }
+    scrollWrapper.addEventListener('scroll', () => {
+      lastRosterScrollLeft = scrollWrapper.scrollLeft;
+    });
+  }
 
-      rosterObj.schedule[empName][day] = nextCode;
+  container.querySelectorAll('.roster-cell-select').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      const empName = sel.getAttribute('data-emp');
+      const day = parseInt(sel.getAttribute('data-day'), 10);
+      const newShift = e.target.value;
+
+      if (!rosterObj.schedule[empName]) {
+        rosterObj.schedule[empName] = {};
+      }
+      rosterObj.schedule[empName][day] = newShift;
       rosterObj.updatedAt = new Date().toISOString();
 
       renderEnfermeriaRosterView(container, state);
+    });
+
+    sel.addEventListener('focus', () => {
+      const badge = sel.previousElementSibling;
+      if (badge) {
+        badge.style.boxShadow = '0 0 0 2px #38bdf8';
+        badge.style.transform = 'scale(1.08)';
+      }
+    });
+
+    sel.addEventListener('blur', () => {
+      const badge = sel.previousElementSibling;
+      if (badge) {
+        badge.style.boxShadow = '0 1px 2px rgba(0,0,0,0.3)';
+        badge.style.transform = 'none';
+      }
     });
   });
 
