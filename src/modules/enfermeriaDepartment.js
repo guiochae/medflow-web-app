@@ -456,6 +456,32 @@ function renderEnfermeriaRosterView(container, state) {
     }
   });
 
+  // Sincronizar todos los cambios de turno del mes en el horario del rol
+  const monthChanges = (state.administracion_enfermeria_cambios || []).filter(c => {
+    if (!c) return false;
+    const cMonth = c.month || (c.date ? c.date.substring(0, 7) : '');
+    return cMonth === currentRosterMonth || (c.date && c.date.startsWith(currentRosterMonth));
+  });
+
+  const authorizedMonthChanges = monthChanges.filter(c => c.status === 'Autorizado');
+  const pendingMonthChanges = monthChanges.filter(c => c.status === 'Pendiente');
+
+  authorizedMonthChanges.forEach(change => {
+    applyShiftChangeToRoster(change, state, rosterObj);
+  });
+
+  // Sincronizar permisos autorizados del mes
+  const monthPermits = (state.administracion_enfermeria_permisos || []).filter(p => {
+    if (!p) return false;
+    const pStartMonth = (p.dateStart || '').substring(0, 7);
+    const pEndMonth = (p.dateEnd || p.dateStart || '').substring(0, 7);
+    return (p.status === 'Autorizado' || p.status === 'Aprobado') && 
+           (pStartMonth === currentRosterMonth || pEndMonth === currentRosterMonth);
+  });
+  monthPermits.forEach(permit => {
+    applyPermitToRoster(permit, state, rosterObj);
+  });
+
   const fitnessIssues = evaluateRosterFitness(rosterObj.schedule, totalDays, rosterStaff);
 
   const dailyCoverage = { M: {}, T: {}, N: {}, MX: {}, '8H': {}, '18H': {}, '24H': {}, 'M/T': {} };
@@ -566,6 +592,48 @@ function renderEnfermeriaRosterView(container, state) {
         <span>✨</span> <strong>Idoneidad Verificada:</strong> El rol respeta los descansos post-nocturnos y mantiene cobertura continua sin sobrecargas de fatiga.
       </div>
     `}
+
+    ${(authorizedMonthChanges.length > 0 || pendingMonthChanges.length > 0) ? `
+      <div class="glass-card" style="padding: 10px 14px; margin-bottom: 1.25rem; border-left: 4px solid #38bdf8; background: rgba(56, 189, 248, 0.05); display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.25rem;">🔄</span>
+            <div>
+              <strong style="color: #38bdf8; font-size: 0.85rem;">Cambios de Turno Oficiales Reflejados en el Rol (${authorizedMonthChanges.length})</strong>
+              <span style="font-size: 0.72rem; color: var(--text-muted); margin-left: 6px;">Las casillas marcadas con <strong>🔄</strong> reflejan reemplazos autorizados con boleta oficial.</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            ${pendingMonthChanges.length > 0 ? `
+              <span style="background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); padding: 3px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: bold;">
+                ⏳ ${pendingMonthChanges.length} solicitud(es) pendiente(s)
+              </span>
+            ` : ''}
+            <button class="btn btn-secondary btn-small" id="btn-roster-goto-cambios" style="font-size: 0.75rem; padding: 4px 10px; border-color: rgba(56, 189, 248, 0.4); color: #38bdf8;">
+              Gestionar Boletas de Cambio 📋
+            </button>
+          </div>
+        </div>
+
+        ${authorizedMonthChanges.length > 0 ? `
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px;">
+            ${authorizedMonthChanges.map(c => {
+              const d = parseInt((c.date || '').split('-')[2], 10);
+              return `
+                <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; padding: 4px 8px; font-size: 0.72rem; display: flex; align-items: center; gap: 6px;">
+                  <strong style="color: #ef4444; font-family: monospace;">#${c.voucherNumber}</strong>
+                  <span style="color: #94a3b8;">Día ${d}:</span>
+                  <strong style="color: #4ade80;">${c.replacementEmpName}</strong>
+                  <span style="color: #94a3b8;">cubre a</span>
+                  <strong style="color: #f87171;">${c.originalEmpName}</strong>
+                  <span style="background: #0284c7; color: #fff; padding: 1px 5px; border-radius: 3px; font-weight: bold; font-size: 0.65rem;">${c.shift}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        ` : ''}
+      </div>
+    ` : ''}
 
     <div id="roster-grid-scroll-wrapper" class="glass-card" style="padding: 0.5rem; overflow-x: auto; margin-bottom: 1.5rem; border: 1px solid var(--border-color);">
       <table id="roster-grid-table" style="width: 100%; border-collapse: collapse; font-size: 0.75rem; text-align: center; white-space: nowrap; font-family: monospace;">
@@ -693,15 +761,48 @@ function renderEnfermeriaRosterView(container, state) {
                   const prevShift = empSchedule[d - 1];
                   const hasFatigueAlert = (prevShift === 'N' && (shiftCode === 'M' || shiftCode === '18H' || shiftCode === '24H'));
 
+                  const coveringChange = authorizedMonthChanges.find(c => {
+                    const cDay = parseInt((c.date || '').split('-')[2], 10);
+                    return cDay === d && isSameNursingPerson(c.replacementEmpName, emp.name);
+                  });
+
+                  const coveredChange = authorizedMonthChanges.find(c => {
+                    const cDay = parseInt((c.date || '').split('-')[2], 10);
+                    return cDay === d && isSameNursingPerson(c.originalEmpName, emp.name);
+                  });
+
+                  const pendingChange = pendingMonthChanges.find(c => {
+                    const cDay = parseInt((c.date || '').split('-')[2], 10);
+                    return cDay === d && (isSameNursingPerson(c.replacementEmpName, emp.name) || isSameNursingPerson(c.originalEmpName, emp.name));
+                  });
+
+                  let cellExtraStyle = '';
+                  let cellTitle = `${emp.name} - Día ${d}: ${shiftDef.name} (${shiftDef.schedule}) &bull; Haz clic para seleccionar turno en lista desplegable`;
+                  let shiftBadgeTag = `<span style="font-size: 0.55rem; opacity: 0.85; margin-left: 1px;">▾</span>`;
+
+                  if (coveringChange) {
+                    cellExtraStyle = 'box-shadow: inset 0 0 0 1.5px #38bdf8;';
+                    cellTitle = `${emp.name} - Día ${d}: ${shiftDef.name} (${shiftDef.schedule}) &bull; 🔄 CUBRE A ${coveringChange.originalEmpName} &bull; Boleta Oficial No. ${coveringChange.voucherNumber}`;
+                    shiftBadgeTag = `<span style="font-size: 0.62rem; color: #38bdf8; margin-left: 2px;" title="Cubre a ${coveringChange.originalEmpName} (Boleta #${coveringChange.voucherNumber})">🔄</span>`;
+                  } else if (coveredChange) {
+                    cellExtraStyle = 'box-shadow: inset 0 0 0 1.5px #c084fc;';
+                    cellTitle = `${emp.name} - Día ${d}: ${shiftDef.name} &bull; 🔄 TURNO CUBIERTO POR ${coveredChange.replacementEmpName} &bull; Boleta Oficial No. ${coveredChange.voucherNumber}`;
+                    shiftBadgeTag = `<span style="font-size: 0.62rem; color: #c084fc; margin-left: 2px;" title="Cubierto por ${coveredChange.replacementEmpName} (Boleta #${coveredChange.voucherNumber})">🔄</span>`;
+                  } else if (pendingChange) {
+                    cellExtraStyle = 'box-shadow: inset 0 0 0 1.5px #fbbf24;';
+                    cellTitle = `${emp.name} - Día ${d}: ${shiftDef.name} &bull; ⏳ Solicitud de Cambio de Turno Pendiente (Boleta No. ${pendingChange.voucherNumber})`;
+                    shiftBadgeTag = `<span style="font-size: 0.62rem; color: #fbbf24; margin-left: 2px;" title="Cambio en trámite">⏳</span>`;
+                  }
+
                   return `
                     <td class="roster-cell" 
                         data-emp="${emp.name}" 
                         data-day="${d}" 
-                        style="padding: 2px; position: relative; user-select: none; ${isWeekend ? 'background: rgba(245, 158, 11, 0.08);' : ''} ${hasFatigueAlert ? 'border: 2px solid #ef4444;' : ''}"
-                        title="${emp.name} - Día ${d}: ${shiftDef.name} (${shiftDef.schedule}) &bull; Haz clic para seleccionar turno en lista desplegable">
+                        style="padding: 2px; position: relative; user-select: none; ${isWeekend ? 'background: rgba(245, 158, 11, 0.08);' : ''} ${hasFatigueAlert ? 'border: 2px solid #ef4444;' : ''} ${cellExtraStyle}"
+                        title="${cellTitle}">
                       <div class="roster-badge" style="background: ${shiftDef.bg}; color: ${shiftDef.color}; border-radius: 4px; font-weight: 800; font-size: 0.72rem; padding: 2px 1px; line-height: 1.2; min-height: 20px; display: flex; align-items: center; justify-content: center; gap: 1px; box-shadow: 0 1px 2px rgba(0,0,0,0.3); pointer-events: none; transition: transform 0.1s ease, filter 0.1s ease;">
                         <span>${shiftCode}</span>
-                        <span style="font-size: 0.55rem; opacity: 0.85; margin-left: 1px;">▾</span>
+                        ${shiftBadgeTag}
                       </div>
                       <select class="roster-cell-select" 
                               data-emp="${emp.name}" 
@@ -865,6 +966,19 @@ function renderEnfermeriaRosterView(container, state) {
   if (btnPrint) {
     btnPrint.addEventListener('click', () => {
       printOfficialRosterDocument(rosterObj, totalDays, yearNum, monthNum, monthNames, dayLetters, rosterStaff, state);
+    });
+  }
+
+  const btnGotoCambios = container.querySelector('#btn-roster-goto-cambios');
+  if (btnGotoCambios) {
+    btnGotoCambios.addEventListener('click', () => {
+      activeEnfSubTab = 'cambios';
+      const wrapper = document.getElementById('rrhh-enfermeria-container');
+      if (wrapper) {
+        renderRrhhEnfermeria(wrapper, state);
+      } else {
+        renderEnfermeriaShiftChangesView(container, state);
+      }
     });
   }
 }
@@ -1162,11 +1276,22 @@ function renderEnfermeriaShiftChangesView(container, state) {
           items: state.administracion_enfermeria_cambios
         });
         await saveToFirestore('administracion_enfermeria_cambios', change.id, change);
+
+        const monthKey = change.month || (change.date || '').substring(0, 7);
+        const updatedRoster = (state.administracion_enfermeria_roles || []).find(r => r.month === monthKey);
+        if (updatedRoster) {
+          await saveToFirestore('catalog_administracion_enfermeria_roles', 'catalog_administracion_enfermeria_roles', {
+            items: state.administracion_enfermeria_roles
+          });
+          await saveToFirestore('administracion_enfermeria_roles', updatedRoster.id || `ROSTER-${monthKey}`, updatedRoster);
+          const docRef = doc(db, 'multimedica', `roster_${monthKey}`);
+          await setDoc(docRef, { ...updatedRoster, _collectionType: 'administracion_enfermeria_roles' }, { merge: true });
+        }
       } catch (err) {
         console.warn("Direct save error:", err);
       }
 
-      alert(`✅ Cambio de Turno No. ${change.voucherNumber} autorizado exitosamente y actualizado en el Rol de Turnos.`);
+      alert(`✅ Cambio de Turno No. ${change.voucherNumber} autorizado exitosamente y reflejado en el Rol de Turnos.`);
       renderEnfermeriaShiftChangesView(container, state);
     });
   });
@@ -1494,6 +1619,9 @@ function renderEnfermeriaStaffDirectoryView(container, state) {
 }
 
 function openNewShiftChangeModal(state, onSavedCallback) {
+  const currentUser = state.currentUser || (sessionStorage.getItem('medflow_user') ? JSON.parse(sessionStorage.getItem('medflow_user')) : null);
+  const isAuthorizer = isUserShiftAuthorizer(currentUser);
+
   const staff = getNursingEmployeesList(state);
   // Regla 4: La Jefa del Departamento no puede realizar cambios de turno
   const eligibleTurnPersonnel = staff.filter(e => !isEmployeeJefa(e));
@@ -1628,6 +1756,15 @@ function openNewShiftChangeModal(state, onSavedCallback) {
           <textarea id="sc-reason" rows="2" placeholder="Motivo de fuerza mayor, compensación, etc..." style="width: 100%; padding: 8px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 0.82rem;"></textarea>
         </div>
 
+        ${isAuthorizer ? `
+          <div style="display: flex; align-items: center; gap: 8px; background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.25); border-radius: 6px; padding: 8px 10px;">
+            <input type="checkbox" id="sc-auto-authorize" checked style="width: 16px; height: 16px; cursor: pointer;">
+            <label for="sc-auto-authorize" style="font-size: 0.75rem; color: #4ade80; cursor: pointer; margin: 0; font-weight: 600;">
+              ✅ Autorizar de inmediato y aplicar cambio en el Rol de Turnos (Autorización AD / Médico 1)
+            </label>
+          </div>
+        ` : ''}
+
         <div style="background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.15); border-radius: 6px; padding: 10px; font-size: 0.72rem; color: var(--text-muted);">
           ℹ️ <strong>Reglamento Oficial:</strong> La Regla 3 establece un límite máximo de <strong>5 cambios al mes por cada colaborador</strong>. Esta solicitud generará la Boleta Oficial con las 4 firmas requeridas: <strong>Persona Responsable</strong>, <strong>Persona Reemplazante</strong>, <strong>Jefa de Servicio (Vanessa Morales)</strong> y <strong>Autorización AD</strong>.
         </div>
@@ -1703,6 +1840,9 @@ function openNewShiftChangeModal(state, onSavedCallback) {
     const currentUser = state.currentUser || (sessionStorage.getItem('medflow_user') ? JSON.parse(sessionStorage.getItem('medflow_user')) : null);
     const requesterLabel = currentUser?.name ? `${currentUser.name} (${currentUser.role || 'Enfermería'})` : 'Vanessa Morales (Jefa de Departamento)';
 
+    const autoAuthorizeEl = document.getElementById('sc-auto-authorize');
+    const shouldAutoAuthorize = isAuthorizer && autoAuthorizeEl && autoAuthorizeEl.checked;
+
     const newChange = {
       id: `SC-${Date.now()}`,
       voucherNumber: nextVoucherStr,
@@ -1712,10 +1852,16 @@ function openNewShiftChangeModal(state, onSavedCallback) {
       originalEmpName: origEmp,
       replacementEmpName: replEmp,
       reason: reasonVal,
-      status: 'Pendiente',
+      status: shouldAutoAuthorize ? 'Autorizado' : 'Pendiente',
       requestedBy: requesterLabel,
       createdAt: new Date().toISOString()
     };
+
+    if (shouldAutoAuthorize) {
+      newChange.authorizedBy = `${currentUser?.name || 'Administrador'} (${currentUser?.role || 'Admin'})`;
+      newChange.authorizedAt = new Date().toISOString();
+      applyShiftChangeToRoster(newChange, state);
+    }
 
     state.administracion_enfermeria_cambios.unshift(newChange);
     currentRosterMonth = monthTarget;
@@ -1726,11 +1872,27 @@ function openNewShiftChangeModal(state, onSavedCallback) {
         items: state.administracion_enfermeria_cambios
       });
       await saveToFirestore('administracion_enfermeria_cambios', newChange.id, newChange);
+
+      if (shouldAutoAuthorize) {
+        const updatedRoster = (state.administracion_enfermeria_roles || []).find(r => r.month === monthTarget);
+        if (updatedRoster) {
+          await saveToFirestore('catalog_administracion_enfermeria_roles', 'catalog_administracion_enfermeria_roles', {
+            items: state.administracion_enfermeria_roles
+          });
+          await saveToFirestore('administracion_enfermeria_roles', updatedRoster.id || `ROSTER-${monthTarget}`, updatedRoster);
+          const docRef = doc(db, 'multimedica', `roster_${monthTarget}`);
+          await setDoc(docRef, { ...updatedRoster, _collectionType: 'administracion_enfermeria_roles' }, { merge: true });
+        }
+      }
     } catch (fsErr) {
       console.warn("Direct Firestore save error for new shift change:", fsErr);
     }
 
-    alert(`✅ Boleta de Cambio de Turno No. ${nextVoucherStr} registrada exitosamente. Pendiente de autorización por Administrador o Médico 1.`);
+    if (shouldAutoAuthorize) {
+      alert(`✅ Boleta de Cambio de Turno No. ${nextVoucherStr} autorizada y registrada con éxito. Se ha reflejado inmediatamente en el Rol de Turnos.`);
+    } else {
+      alert(`✅ Boleta de Cambio de Turno No. ${nextVoucherStr} registrada exitosamente. Pendiente de autorización por Administrador o Médico 1.`);
+    }
     closeFn();
     if (onSavedCallback) onSavedCallback();
   });
@@ -2048,7 +2210,17 @@ export function printOfficialRosterDocument(rosterObj, totalDays, yearNum, month
                     return `<td style="color: #dc2626; font-weight: bold; font-size: 7px; background: #fee2e2;">BAJA</td>`;
                   }
                   const s = sched[d] || 'L';
-                  return `<td class="${isWeekend ? 'weekend' : ''}">${s}</td>`;
+                  const curMonthKey = `${yearNum}-${String(monthNum + 1).padStart(2, '0')}`;
+                  const monthChangesList = (state.administracion_enfermeria_cambios || []).filter(c => {
+                    if (!c || c.status !== 'Autorizado') return false;
+                    const cMonth = c.month || (c.date ? c.date.substring(0, 7) : '');
+                    return cMonth === curMonthKey || (c.date && c.date.startsWith(curMonthKey));
+                  });
+                  const isChanged = monthChangesList.some(c => {
+                    const dNum = parseInt((c.date || '').split('-')[2], 10);
+                    return dNum === d && (isSameNursingPerson(c.replacementEmpName, emp.name) || isSameNursingPerson(c.originalEmpName, emp.name));
+                  });
+                  return `<td class="${isWeekend ? 'weekend' : ''}" style="${isChanged ? 'font-weight: bold; background: #e0f2fe;' : ''}">${s}${isChanged ? '*' : ''}</td>`;
                 }).join('')}
                 <td>${cM}</td><td>${cT}</td><td>${cN}</td><td>${cL}</td><td>${cEsp}</td><td><strong>${h}h</strong></td>
               </tr>
@@ -2056,6 +2228,24 @@ export function printOfficialRosterDocument(rosterObj, totalDays, yearNum, month
           }).join('')}
         </tbody>
       </table>
+
+      ${(() => {
+        const curMonthKey = `${yearNum}-${String(monthNum + 1).padStart(2, '0')}`;
+        const monthChangesList = (state.administracion_enfermeria_cambios || []).filter(c => {
+          if (!c || c.status !== 'Autorizado') return false;
+          const cMonth = c.month || (c.date ? c.date.substring(0, 7) : '');
+          return cMonth === curMonthKey || (c.date && c.date.startsWith(curMonthKey));
+        });
+        if (monthChangesList.length === 0) return '';
+        return `
+          <div style="margin-top: 10px; font-size: 7.5px; border-top: 1px dashed #666; padding-top: 4px; color: #333;">
+            <strong>* Anexo de Cambios de Turno Autorizados (${curMonthKey}):</strong>
+            ${monthChangesList.map(c => `
+              <span>[Boleta #${c.voucherNumber}: Día ${parseInt((c.date || '').split('-')[2], 10)} - ${c.replacementEmpName} cubre a ${c.originalEmpName} (${c.shift})]</span>
+            `).join(' &bull; ')}
+          </div>
+        `;
+      })()}
 
       <div class="signatures">
         <div class="sign-box">
@@ -2182,38 +2372,84 @@ function autogenerateEquitableRoster(rosterObj, totalDays, staff, state, current
   });
 }
 
-function applyShiftChangeToRoster(change, state) {
+export function applyShiftChangeToRoster(change, state, targetRoster = null) {
+  if (!change || !change.date) return;
   const [y, m, dStr] = (change.date || '').split('-');
-  const monthKey = `${y}-${m}`;
+  const monthKey = change.month || `${y}-${m}`;
   const dayNum = parseInt(dStr, 10);
+  if (isNaN(dayNum) || dayNum < 1 || dayNum > 31) return;
 
-  let roster = state.administracion_enfermeria_roles.find(r => r.month === monthKey);
-  if (!roster) return;
-
-  if (roster.schedule[change.originalEmpName] && roster.schedule[change.replacementEmpName]) {
-    const prevReplacementShift = roster.schedule[change.replacementEmpName][dayNum] || 'L';
-    roster.schedule[change.originalEmpName][dayNum] = prevReplacementShift;
-    roster.schedule[change.replacementEmpName][dayNum] = change.shift;
-    roster.updatedAt = new Date().toISOString();
+  state.administracion_enfermeria_roles = Array.isArray(state.administracion_enfermeria_roles) ? state.administracion_enfermeria_roles : [];
+  let roster = targetRoster || state.administracion_enfermeria_roles.find(r => r.month === monthKey);
+  if (!roster) {
+    const totalDays = new Date(parseInt(y, 10), parseInt(m, 10), 0).getDate();
+    roster = {
+      id: `ROSTER-${monthKey}`,
+      month: monthKey,
+      status: 'Publicado',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdBy: 'Sistema (Cambio de Turno)',
+      schedule: {}
+    };
+    state.administracion_enfermeria_roles.push(roster);
   }
+
+  roster.schedule = roster.schedule || {};
+
+  // Resolver las claves exactas en roster.schedule usando isSameNursingPerson
+  const scheduleKeys = Object.keys(roster.schedule);
+  const origKey = scheduleKeys.find(k => isSameNursingPerson(k, change.originalEmpName)) || change.originalEmpName;
+  const replKey = scheduleKeys.find(k => isSameNursingPerson(k, change.replacementEmpName)) || change.replacementEmpName;
+
+  roster.schedule[origKey] = roster.schedule[origKey] || {};
+  roster.schedule[replKey] = roster.schedule[replKey] || {};
+
+  const targetShift = change.shift || 'M';
+  const currentReplShift = roster.schedule[replKey][dayNum];
+  const prevReplShift = (currentReplShift && currentReplShift !== targetShift) ? currentReplShift : 'L';
+
+  // 1. Quien cubre (reemplazante) asume el turno asignado
+  roster.schedule[replKey][dayNum] = targetShift;
+
+  // 2. Quien es cubierto (responsable original) queda relevado
+  // Si tenía asignado el turno a cambiar o aún no tenía turno, pasa a 'L' (o al turno permutado)
+  if (!roster.schedule[origKey][dayNum] || roster.schedule[origKey][dayNum] === targetShift) {
+    roster.schedule[origKey][dayNum] = (prevReplShift !== targetShift) ? prevReplShift : 'L';
+  }
+
+  roster.updatedAt = new Date().toISOString();
+  change.appliedToRoster = true;
+  change.appliedAt = new Date().toISOString();
 }
 
-function applyPermitToRoster(permit, state) {
+export function applyPermitToRoster(permit, state, targetRoster = null) {
+  if (!permit || !permit.dateStart) return;
   const [y, m, dStr] = (permit.dateStart || '').split('-');
   const monthKey = `${y}-${m}`;
   const startDay = parseInt(dStr, 10);
   const endDay = parseInt((permit.dateEnd || '').split('-')[2] || dStr, 10);
+  if (isNaN(startDay)) return;
 
-  let roster = state.administracion_enfermeria_roles.find(r => r.month === monthKey);
+  state.administracion_enfermeria_roles = Array.isArray(state.administracion_enfermeria_roles) ? state.administracion_enfermeria_roles : [];
+  let roster = targetRoster || state.administracion_enfermeria_roles.find(r => r.month === monthKey);
   if (!roster) return;
 
-  if (roster.schedule[permit.empName]) {
-    for (let d = startDay; d <= endDay; d++) {
-      roster.schedule[permit.empName][d] = 'P';
+  roster.schedule = roster.schedule || {};
+  const scheduleKeys = Object.keys(roster.schedule);
+  const empKey = scheduleKeys.find(k => isSameNursingPerson(k, permit.empName)) || permit.empName;
+
+  if (roster.schedule[empKey]) {
+    const maxEnd = isNaN(endDay) ? startDay : endDay;
+    for (let d = startDay; d <= maxEnd; d++) {
+      if (d >= 1 && d <= 31) {
+        roster.schedule[empKey][d] = 'P';
+      }
     }
     roster.updatedAt = new Date().toISOString();
   }
 }
+
 
 export function getNursingEmployeesList(state) {
   const emps = state.administracion_employees || [];
