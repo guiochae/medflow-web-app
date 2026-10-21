@@ -1320,6 +1320,19 @@ function renderConsultationForm(patient, doctors) {
     if (editingConsultation.gyoData) {
       initialGyo = editingConsultation.gyoData;
     }
+  } else {
+    // Si es una nueva consulta, reflejar el motivo registrado en Admisión / Preconsulta
+    initialReason = patient.currentReason || patient.reasonForConsultation || '';
+    if (!initialReason && Array.isArray(patient.appointments) && patient.appointments.length > 0) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const todayAppt = patient.appointments.find(a => a.date === todayStr);
+      if (todayAppt && todayAppt.notes) {
+        initialReason = todayAppt.notes;
+      }
+    }
+    if (!initialReason && patient.vitalSigns && patient.vitalSigns.length > 0 && patient.vitalSigns[0].reason) {
+      initialReason = patient.vitalSigns[0].reason;
+    }
   }
 
   // Obtener signos vitales recientes si existen
@@ -1411,7 +1424,10 @@ function renderConsultationForm(patient, doctors) {
 
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <label for="c-reason" style="margin-bottom: 0;">Motivo de la Consulta</label>
+            <label for="c-reason" style="margin-bottom: 0;">
+              Motivo de la Consulta
+              ${!editingConsultation && initialReason ? `<small style="color: var(--accent-primary); font-weight: normal; margin-left: 6px;">(Registrado en Admisión / Preconsulta)</small>` : ''}
+            </label>
             <button type="button" class="btn-dictate" data-target="c-reason" title="Dictado por voz" style="background: none; border: none; font-size: 0.95rem; cursor: pointer; padding: 2px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; color: var(--text-muted); transition: all 0.2s;">
               <span class="mic-icon">🎙️</span> <span class="dictate-status" style="font-size: 0.75rem; font-weight: bold;">Dictar</span>
             </button>
@@ -1840,6 +1856,11 @@ function renderConsultationForm(patient, doctors) {
 
   reasonInput.addEventListener('input', handleInputTrigger);
   symptomsInput.addEventListener('input', handleInputTrigger);
+
+  // Si ya hay un motivo registrado proveniente de Admisión o Preconsulta, activar el asistente automáticamente
+  if (reasonInput.value && reasonInput.value.trim()) {
+    handleInputTrigger();
+  }
 
   // Manejador de Procedimientos Clínicos y Curaciones
   const procNameInput = document.getElementById('proc-name-input');
@@ -2756,6 +2777,12 @@ function renderConsultationForm(patient, doctors) {
         // Guardar en el historial clínico del paciente
         patientObj.consultations.unshift(newConsultation);
         patient.consultations = patientObj.consultations;
+
+        // Limpiar motivo pendiente de la consulta actual para que futuras consultas no arrastren el motivo ya atendido
+        patientObj.currentReason = '';
+        patientObj.reasonForConsultation = '';
+        patient.currentReason = '';
+        patient.reasonForConsultation = '';
 
         // Guardar en el historial de facturación del paciente (detalle de cobro consolidado)
         const todayStr = new Date().toISOString().substring(0, 10);

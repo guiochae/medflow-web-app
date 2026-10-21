@@ -221,6 +221,10 @@ function showNewPatientForm() {
           <label for="p-address">Dirección de Domicilio</label>
           <input type="text" id="p-address" required placeholder="Ej. Calle Principal 1-23 Zona 1">
         </div>
+        <div class="form-group">
+          <label for="p-reason">Motivo de la Consulta *</label>
+          <textarea id="p-reason" required placeholder="Ej. Cefalea intensa, dolor abdominal agudo, fiebre de 3 días, control de rutina..." rows="2" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 0.9rem; resize: vertical;"></textarea>
+        </div>
         <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
           <button type="button" class="btn btn-secondary" id="btn-cancel-new-patient">Cancelar</button>
           <button type="submit" class="btn btn-primary">Registrar Paciente</button>
@@ -316,6 +320,8 @@ function showNewPatientForm() {
     const docObj = (stateObj.users || []).find(u => u.id === assignedDoctorId);
     const assignedDoctorName = docObj ? docObj.name : 'Dr. Carlos Mendoza';
     
+    const consultReason = (document.getElementById('p-reason')?.value || '').trim();
+    
     const newId = 'p-' + (stateObj.patients.length + 1) + '-' + Math.random().toString(36).substr(2, 4);
     const newPatient = {
       id: newId,
@@ -328,6 +334,8 @@ function showNewPatientForm() {
       telephone: document.getElementById('p-telephone').value,
       address: document.getElementById('p-address').value,
       email: document.getElementById('p-email').value || 'No provisto',
+      currentReason: consultReason,
+      reasonForConsultation: consultReason,
       vitalSigns: [],
       consultations: [],
       labHistory: [],
@@ -410,6 +418,10 @@ function showEditPatientForm(patient) {
         <div class="form-group">
           <label for="ep-address">Dirección de Domicilio</label>
           <input type="text" id="ep-address" required value="${patient.address}">
+        </div>
+        <div class="form-group">
+          <label for="ep-reason">Motivo de la Consulta <small style="opacity: 0.7; font-weight: normal;">(Para la próxima o actual atención)</small></label>
+          <textarea id="ep-reason" placeholder="Ej. Cefalea intensa, dolor abdominal, fiebre de 3 días..." rows="2" style="width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 0.9rem; resize: vertical;">${patient.currentReason || patient.reasonForConsultation || ''}</textarea>
         </div>
         <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
           <button type="button" class="btn btn-secondary" id="btn-cancel-edit-patient">Cancelar</button>
@@ -518,6 +530,15 @@ function showEditPatientForm(patient) {
     pObj.email = document.getElementById('ep-email').value || 'No provisto';
     pObj.address = document.getElementById('ep-address').value;
 
+    const epReasonEl = document.getElementById('ep-reason');
+    if (epReasonEl) {
+      const epVal = epReasonEl.value.trim();
+      pObj.currentReason = epVal;
+      pObj.reasonForConsultation = epVal;
+      patient.currentReason = epVal;
+      patient.reasonForConsultation = epVal;
+    }
+
     saveAppState(stateObj);
     renderPatientList();
     renderPatientDetails();
@@ -586,6 +607,11 @@ function renderPatientDetails() {
             <span>📞 Tel: ${patient.telephone}</span> | 
             <span>📍 Dirección: ${patient.address}</span>
           </p>
+          ${(patient.currentReason || patient.reasonForConsultation) ? `
+          <p style="color: var(--accent-primary); font-size: 0.85rem; margin-top: 0.35rem; background: rgba(0, 242, 254, 0.08); padding: 4px 10px; border-radius: 4px; border-left: 3px solid var(--accent-primary); display: inline-block;">
+            <strong>Motivo de Consulta:</strong> ${patient.currentReason || patient.reasonForConsultation}
+          </p>
+          ` : ''}
         </div>
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
           <button class="btn btn-secondary" id="btn-edit-patient">
@@ -664,6 +690,10 @@ function renderPatientDetails() {
               <label for="v-glucose">Glucosa Capilar (GLT) (mg/dL)</label>
               <input type="number" id="v-glucose" placeholder="Ej. 95">
             </div>
+          </div>
+          <div class="form-group" style="margin-top: 0.5rem;">
+            <label for="v-reason">Motivo de la Consulta <small style="opacity: 0.7; font-weight: normal;">(Información para el médico tratante)</small></label>
+            <textarea id="v-reason" placeholder="Ej. Dolor abdominal agudo, fiebre de 3 días, cefalea, control de rutina..." rows="2" style="width: 100%; padding: 8px 12px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 0.9rem; resize: vertical;">${patient.currentReason || patient.reasonForConsultation || ''}</textarea>
           </div>
           <div style="display: flex; justify-content: flex-end; margin-top: 1rem;">
             <button type="submit" class="btn btn-primary">Grabar Signos Vitales</button>
@@ -1000,6 +1030,9 @@ function renderPatientDetails() {
     // Calcular IMC
     const bmi = parseFloat((weight / (height * height)).toFixed(1));
 
+    const vReasonEl = document.getElementById('v-reason');
+    const vReasonVal = vReasonEl ? vReasonEl.value.trim() : '';
+
     const newVitals = {
       date: new Date().toISOString(),
       temp,
@@ -1011,11 +1044,18 @@ function renderPatientDetails() {
       height,
       bmi,
       oxygen,
-      glucose
+      glucose,
+      reason: vReasonVal
     };
 
     const stateObj = getAppState();
     const patientObj = stateObj.patients.find(p => p.id === patient.id);
+    if (vReasonVal) {
+      patientObj.currentReason = vReasonVal;
+      patientObj.reasonForConsultation = vReasonVal;
+      patient.currentReason = vReasonVal;
+      patient.reasonForConsultation = vReasonVal;
+    }
     patientObj.vitalSigns.unshift(newVitals); // Agregar al inicio
     saveAppState(stateObj);
     
@@ -1034,6 +1074,12 @@ function renderPatientDetails() {
     const stateObj = getAppState();
     const patientObj = stateObj.patients.find(p => p.id === patient.id);
     patientObj.appointments.push(newApp);
+    if (notes && notes.trim()) {
+      patientObj.currentReason = notes.trim();
+      patientObj.reasonForConsultation = notes.trim();
+      patient.currentReason = notes.trim();
+      patient.reasonForConsultation = notes.trim();
+    }
     // Ordenar citas por fecha
     patientObj.appointments.sort((a,b) => new Date(a.date+'T'+a.time) - new Date(b.date+'T'+b.time));
     saveAppState(stateObj);
