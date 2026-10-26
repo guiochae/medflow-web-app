@@ -1,4 +1,4 @@
-import { getAppState, saveAppState, saveToFirestore, backfillEmployeeCodes, removeFromFirestore, purgeAndSanitizePayrolls, reconcileAndRecoverLiquidaciones, isEmployeeResignedOrLiquidated, parsePayrollMonth } from '../main.js';
+import { getAppState, saveAppState, saveToFirestore, backfillEmployeeCodes, removeFromFirestore, purgeAndSanitizePayrolls, reconcileAndRecoverLiquidaciones, isEmployeeResignedOrLiquidated, parsePayrollMonth, isPermanentlyExcludedEmployeeCode } from '../main.js';
 import { simulateOnPurchaseCreated, simulateOnPayrollGenerated } from '../utils/cloud_functions.js';
 import { notifyEmployeeWelcome } from '../utils/whatsapp.js';
 import { renderRrhhAsistencia } from './attendanceManager.js';
@@ -2507,6 +2507,9 @@ function renderRrhhNomina(container, state) {
     if (isDoctorOrPhysician(e)) {
       return false;
     }
+    if (isPermanentlyExcludedEmployeeCode(e.employee_code)) {
+      return false;
+    }
     if (isEmployeeResignedOrLiquidated(e, selectedPayrollMonth, state)) {
       return false;
     }
@@ -2750,7 +2753,10 @@ function renderRrhhNomina(container, state) {
       const month = document.getElementById('payroll-month').value;
 
       // Filtrar estrictamente solo colaboradores activos que no hayan renunciado ni tengan finiquito
-      const eligibleEmployees = employees.filter(emp => !isEmployeeResignedOrLiquidated(emp, month, state));
+      const eligibleEmployees = employees.filter(emp => 
+        !isPermanentlyExcludedEmployeeCode(emp.employee_code) &&
+        !isEmployeeResignedOrLiquidated(emp, month, state)
+      );
 
       if (eligibleEmployees.length === 0) {
         alert("No hay empleados activos en el listado para calcular la nómina.");

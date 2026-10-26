@@ -1675,6 +1675,30 @@ export function parsePayrollMonth(monthStr) {
   return { year: y, monthIndex: mIndex };
 }
 
+export const PERMANENTLY_EXCLUDED_PAYROLL_CODES = new Set([
+  'EMP-027', 'EMP-27',
+  'EMP-008', 'EMP-08', 'EMP-8',
+  'EMP-011', 'EMP-11',
+  'EMP-012', 'EMP-12',
+  'EMP-023', 'EMP-23',
+  'EMP-036', 'EMP-36',
+  'EMP-031', 'EMP-31',
+  'EMP-048', 'EMP-48'
+]);
+
+export function isPermanentlyExcludedEmployeeCode(code) {
+  if (!code) return false;
+  const clean = String(code).trim().toUpperCase();
+  if (PERMANENTLY_EXCLUDED_PAYROLL_CODES.has(clean)) return true;
+  const numMatch = clean.match(/^EMP-(\d+)$/i);
+  if (numMatch) {
+    const num = parseInt(numMatch[1], 10);
+    const targetNums = [8, 11, 12, 23, 27, 31, 36, 48];
+    if (targetNums.includes(num)) return true;
+  }
+  return false;
+}
+
 /**
  * Determina si un colaborador renunció, fue dado de baja o ya tiene finiquito generado
  * para el período de nómina indicado (o en general), por lo que ya se le pagaron los días
@@ -1693,6 +1717,12 @@ export function isEmployeeResignedOrLiquidated(emp, payrollMonthStr, state) {
     (empCode && e.employee_code && e.employee_code === empCode) ||
     (normEmpName && normalizePersonName(e.name) === normEmpName)
   ) || emp;
+
+  // Verificación directa de códigos permanentemente excluidos
+  const targetCode = empCode || fullEmp.employee_code || '';
+  if (isPermanentlyExcludedEmployeeCode(targetCode)) {
+    return true;
+  }
 
   const allLiquidaciones = (state && Array.isArray(state.administracion_liquidaciones)) ? state.administracion_liquidaciones : [];
   const empLiquidaciones = allLiquidaciones.filter(l => 
@@ -1804,6 +1834,10 @@ export function purgeAndSanitizePayrolls(state) {
         return false;
       }
       if (isDoctorOrPhysician(emp)) {
+        return false;
+      }
+      const code = emp.employee_code || emp.code;
+      if (isPermanentlyExcludedEmployeeCode(code)) {
         return false;
       }
       if (isEmployeeResignedOrLiquidated(emp, payroll.month, state)) {
@@ -2190,6 +2224,20 @@ export function reconcileAndRecoverLiquidaciones(state) {
       if (!emp.exitReason && liq.reason) emp.exitReason = liq.reason;
       if (!emp.liquidatedAt) emp.liquidatedAt = liq.createdAt || liq.exitDate || new Date().toISOString();
       if (liq.resignationDoc && !emp.resignationDoc) emp.resignationDoc = liq.resignationDoc;
+    }
+  });
+
+  // 6. Asegurar baja y finiquito para colaboradores con códigos expresamente excluidos de nómina
+  state.administracion_employees.forEach(emp => {
+    if (!emp) return;
+    if (isPermanentlyExcludedEmployeeCode(emp.employee_code)) {
+      if (emp.status !== 'Inactivo') {
+        emp.status = 'Inactivo';
+        recovered = true;
+      }
+      if (!emp.exitDate) emp.exitDate = '2026-10-01';
+      if (!emp.exitReason) emp.exitReason = 'Renuncia / Finiquito';
+      if (!emp.liquidatedAt) emp.liquidatedAt = new Date().toISOString();
     }
   });
 
