@@ -186,9 +186,9 @@ export function getAppState() {
 
     // Asegurar que todo el personal en memoria tenga siempre código asignado y nóminas depuradas
     backfillEmployeeCodes(firestoreState);
+    reconcileAndRecoverLiquidaciones(firestoreState);
     purgeAndSanitizePayrolls(firestoreState);
     reconcileAndRecoverConsultations(firestoreState);
-    reconcileAndRecoverLiquidaciones(firestoreState);
     deduplicateAndSanitizeNursingStaff(firestoreState);
 
     return firestoreState;
@@ -256,9 +256,9 @@ export function resetToOfficialDatabase() {
 export async function saveAppState(state) {
   migrateLaboratoryTestsCategories(state);
   backfillEmployeeCodes(state);
+  reconcileAndRecoverLiquidaciones(state);
   purgeAndSanitizePayrolls(state);
   reconcileAndRecoverConsultations(state);
-  reconcileAndRecoverLiquidaciones(state);
   deduplicateAndSanitizeNursingStaff(state);
   updateSidebarInfo(state);
 
@@ -1650,6 +1650,137 @@ export function isDoctorOrPhysician(emp) {
   return false;
 }
 
+export function normalizePersonName(str) {
+  return String(str || '')
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/^(a\.e\.|e\.|lic\.|dr\.|dra\.)\s+/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function parsePayrollMonth(monthStr) {
+  if (!monthStr || typeof monthStr !== 'string') return null;
+  const parts = monthStr.trim().split(/\s+/);
+  if (parts.length < 2) return null;
+  const monthMap = {
+    enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5,
+    julio: 6, agosto: 7, septiembre: 8, octubre: 9, noviembre: 10, diciembre: 11
+  };
+  const key = parts[0].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const mIndex = monthMap[key];
+  const y = parseInt(parts[1], 10);
+  if (mIndex === undefined || isNaN(y)) return null;
+  return { year: y, monthIndex: mIndex };
+}
+
+/**
+ * Determina si un colaborador renunció, fue dado de baja o ya tiene finiquito generado
+ * para el período de nómina indicado (o en general), por lo que ya se le pagaron los días
+ * trabajados en su liquidación y NO debe figurar en la nómina.
+ */
+export function isEmployeeResignedOrLiquidated(emp, payrollMonthStr, state) {
+  if (!emp) return false;
+
+  const empId = String(emp.id || '');
+  const empCode = String(emp.employee_code || emp.code || '');
+  const normEmpName = normalizePersonName(emp.name || '');
+
+  const allEmployees = (state && Array.isArray(state.administracion_employees)) ? state.administracion_employees : [];
+  const fullEmp = allEmployees.find(e => 
+    (empId && e.id === empId) ||
+    (empCode && e.employee_code && e.employee_code === empCode) ||
+    (normEmpName && normalizePersonName(e.name) === normEmpName)
+  ) || emp;
+
+  const allLiquidaciones = (state && Array.isArray(state.administracion_liquidaciones)) ? state.administracion_liquidaciones : [];
+  const empLiquidaciones = allLiquidaciones.filter(l => 
+    (empId && l.employeeId === empId) ||
+    (empCode && l.employeeCode && l.employeeCode === empCode) ||
+    (normEmpName && normalizePersonName(l.employeeName) === normEmpName)
+  );
+
+  const pMonth = parsePayrollMonth(payrollMonthStr);
+
+  // 1. Si tiene finiquito/liquidación registrada en administracion_liquidaciones
+  for (const liq of empLiquidaciones) {
+    if (!pMonth) return true;
+    let liqYear = null;
+    let liqMonthIdx = null;
+
+    if (liq.monthName) {
+      const pm = parsePayrollMonth(liq.monthName);
+      if (pm) {
+        liqYear = pm.year;
+        liqMonthIdx = pm.monthIndex;
+      }
+    }
+    if (liqYear === null && liq.exitDate) {
+      const d = new Date(liq.exitDate + 'T00:00:00');
+      if (!isNaN(d.getTime())) {
+        liqYear = d.getFullYear();
+        liqMonthIdx = d.getMonth();
+      }
+    }
+    if (liqYear === null && liq.createdAt) {
+      const d = new Date(liq.createdAt);
+      if (!isNaN(d.getTime())) {
+        liqYear = d.getFullYear();
+        liqMonthIdx = d.getMonth();
+      }
+    }
+
+    if (liqYear !== null && liqMonthIdx !== null) {
+      // Si la nómina es del mes del finiquito o posterior, no debe figurar en la nómina
+      // porque sus días laborados ya fueron pagados en su finiquito
+      if (pMonth.year > liqYear || (pMonth.year === liqYear && pMonth.monthIndex >= liqMonthIdx)) {
+        return true;
+      }
+    } else {
+      return true;
+    }
+  }
+
+  // 2. Si el registro del colaborador tiene fecha de egreso/baja (exitDate)
+  const exitDate = fullEmp.exitDate || emp.exitDate;
+  if (exitDate) {
+    if (!pMonth) return true;
+    const d = new Date(exitDate + 'T00:00:00');
+    if (!isNaN(d.getTime())) {
+      const exitYear = d.getFullYear();
+      const exitMonthIdx = d.getMonth();
+      if (pMonth.year > exitYear || (pMonth.year === exitYear && pMonth.monthIndex >= exitMonthIdx)) {
+        return true;
+      }
+    }
+  }
+
+  // 3. Si tiene fecha de liquidación registrada (liquidatedAt)
+  if (fullEmp.liquidatedAt) {
+    if (!pMonth) return true;
+    const d = new Date(fullEmp.liquidatedAt);
+    if (!isNaN(d.getTime())) {
+      const liqYear = d.getFullYear();
+      const liqMonthIdx = d.getMonth();
+      if (pMonth.year > liqYear || (pMonth.year === liqYear && pMonth.monthIndex >= liqMonthIdx)) {
+        return true;
+      }
+    }
+  }
+
+  // 4. Si el colaborador tiene estado Inactivo / Baja / Liquidado o motivo de salida/renuncia registrado
+  const statusStr = String(fullEmp.status || emp.status || '').toLowerCase();
+  const isInactive = statusStr.includes('inactiv') || statusStr.includes('baja') || statusStr.includes('liquid');
+  const hasExitReason = Boolean(fullEmp.exitReason || fullEmp.exitNotes);
+
+  if (isInactive || hasExitReason) {
+    return true;
+  }
+
+  return false;
+}
+
 export function purgeAndSanitizePayrolls(state) {
   if (!state || !state.administracion_nominas || !Array.isArray(state.administracion_nominas)) {
     return { modified: false, purgedCount: 0 };
@@ -1663,7 +1794,8 @@ export function purgeAndSanitizePayrolls(state) {
 
     const originalCount = payroll.employees.length;
     
-    // Filtrar colaboradores: eliminar médicos, administradores y cuentas directivas
+    // Filtrar colaboradores: eliminar médicos, administradores, cuentas directivas
+    // Y personas que renunciaron o tienen finiquito generado (días ya pagados en finiquito)
     payroll.employees = payroll.employees.filter(emp => {
       if (!emp) return false;
       const nameLower = String(emp.name || '').toLowerCase();
@@ -1672,6 +1804,9 @@ export function purgeAndSanitizePayrolls(state) {
         return false;
       }
       if (isDoctorOrPhysician(emp)) {
+        return false;
+      }
+      if (isEmployeeResignedOrLiquidated(emp, payroll.month, state)) {
         return false;
       }
       return true;
@@ -2035,6 +2170,26 @@ export function reconcileAndRecoverLiquidaciones(state) {
       existingEmployeeNames.add(normEmpName);
       state.administracion_liquidaciones.push(reconstructedLiq);
       recovered = true;
+    }
+  });
+
+  // 5. Sincronizar estado inactivo y datos de finiquito en administracion_employees
+  state.administracion_liquidaciones.forEach(liq => {
+    if (!liq) return;
+    const emp = (state.administracion_employees || []).find(e => 
+      (liq.employeeId && e.id === liq.employeeId) ||
+      (liq.employeeCode && e.employee_code && e.employee_code === liq.employeeCode) ||
+      (liq.employeeName && normalizePersonName(e.name) === normalizePersonName(liq.employeeName))
+    );
+    if (emp) {
+      if (emp.status !== 'Inactivo') {
+        emp.status = 'Inactivo';
+        recovered = true;
+      }
+      if (!emp.exitDate && liq.exitDate) emp.exitDate = liq.exitDate;
+      if (!emp.exitReason && liq.reason) emp.exitReason = liq.reason;
+      if (!emp.liquidatedAt) emp.liquidatedAt = liq.createdAt || liq.exitDate || new Date().toISOString();
+      if (liq.resignationDoc && !emp.resignationDoc) emp.resignationDoc = liq.resignationDoc;
     }
   });
 

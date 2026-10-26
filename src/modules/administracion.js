@@ -1,4 +1,4 @@
-import { getAppState, saveAppState, saveToFirestore, backfillEmployeeCodes, removeFromFirestore, purgeAndSanitizePayrolls, reconcileAndRecoverLiquidaciones } from '../main.js';
+import { getAppState, saveAppState, saveToFirestore, backfillEmployeeCodes, removeFromFirestore, purgeAndSanitizePayrolls, reconcileAndRecoverLiquidaciones, isEmployeeResignedOrLiquidated, parsePayrollMonth } from '../main.js';
 import { simulateOnPurchaseCreated, simulateOnPayrollGenerated } from '../utils/cloud_functions.js';
 import { notifyEmployeeWelcome } from '../utils/whatsapp.js';
 import { renderRrhhAsistencia } from './attendanceManager.js';
@@ -18,8 +18,9 @@ let activeRrhhSubTab = 'empleados'; // 'empleados', 'asistencia', 'reportes', 'n
 let activeRrhhReportSubTab = 'diario'; // 'diario', 'mensual', 'anual', 'empleado'
 let activeNominaSubTab = 'planilla'; // 'planilla', 'liquidaciones'
 let editingEmployeeId = null;
-let editingAttendanceId = null;
-let selectedPayrollMonth = 'Agosto 2026';
+const curMonthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const nowInit = new Date();
+let selectedPayrollMonth = `${curMonthNames[nowInit.getMonth()]} ${nowInit.getFullYear()}`;
 
 // Variables temporales para el creador de compras
 let tempPurchaseItems = [];
@@ -2483,9 +2484,9 @@ export function isDoctorOrPhysician(emp) {
 
 // Planilla / Nómina Mensual & Liquidaciones
 function renderRrhhNomina(container, state) {
-  // Asegurar depuración automática de nóminas archivadas existentes (ej. Septiembre)
-  purgeAndSanitizePayrolls(state);
+  // Asegurar recuperación de finiquitos y depuración automática de nóminas archivadas existentes
   reconcileAndRecoverLiquidaciones(state);
+  purgeAndSanitizePayrolls(state);
   state.administracion_liquidaciones = state.administracion_liquidaciones || [];
 
   if (activeNominaSubTab === 'liquidaciones') {
@@ -2494,7 +2495,8 @@ function renderRrhhNomina(container, state) {
   }
 
   // En la nómina únicamente figuran los colaboradores registrados y activos del submódulo de Gestión de Empleados
-  // Se excluyen directivos de sistema y todos los médicos/especialistas (ya que liquidan por honorarios/consultas)
+  // Se excluyen directivos de sistema, médicos/especialistas (liquidación por honorarios)
+  // Y SE EXCLUYEN colaboradores que hayan renunciado, recibido finiquito o hayan sido dados de baja
   const employees = (state.administracion_employees || []).filter(e => {
     if (!e || e.status !== 'Activo') return false;
     const nameLower = String(e.name || '').toLowerCase();
@@ -2503,6 +2505,9 @@ function renderRrhhNomina(container, state) {
       return false;
     }
     if (isDoctorOrPhysician(e)) {
+      return false;
+    }
+    if (isEmployeeResignedOrLiquidated(e, selectedPayrollMonth, state)) {
       return false;
     }
     return true;
@@ -2624,7 +2629,7 @@ function renderRrhhNomina(container, state) {
       <div class="glass-card" style="padding: 1.25rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 8px;">
           <h3 style="font-size: 1rem; color: var(--accent-primary); margin: 0;">Nóminas Cerradas y Emitidas</h3>
-          <button class="btn btn-secondary btn-small" id="btn-purge-nominas" style="font-size: 0.72rem; padding: 3px 8px; color: #38bdf8; border-color: rgba(56,189,248,0.3);" title="Depurar médicos y cuentas de nóminas archivadas">🧹 Depurar Nóminas de Septiembre</button>
+          <button class="btn btn-secondary btn-small" id="btn-purge-nominas" style="font-size: 0.72rem; padding: 3px 8px; color: #38bdf8; border-color: rgba(56,189,248,0.3);" title="Depurar médicos y colaboradores con finiquito de nóminas archivadas">🧹 Depurar Nóminas (Médicos y Finiquitos)</button>
         </div>
         
         <div style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
@@ -2675,12 +2680,13 @@ function renderRrhhNomina(container, state) {
   const btnPurge = document.getElementById('btn-purge-nominas');
   if (btnPurge) {
     btnPurge.addEventListener('click', async () => {
+      reconcileAndRecoverLiquidaciones(state);
       const result = purgeAndSanitizePayrolls(state);
       await saveAppState(state);
       if (result.purgedCount > 0) {
-        alert(`✅ Depuración completada con éxito.\n\nSe eliminaron ${result.purgedCount} registros de personal médico / no aplicables de las nóminas archivadas (incluyendo el mes de Septiembre), y se recalcularon los totales y partidas contables.`);
+        alert(`✅ Depuración completada con éxito.\n\nSe depuraron ${result.purgedCount} registros de personal médico / colaboradores con finiquito de las nóminas archivadas (incluyendo el mes de Octubre), y se recalcularon los totales y partidas contables.`);
       } else {
-        alert("ℹ️ Las nóminas archivadas (incluyendo Septiembre) ya se encuentran 100% depuradas y al día (no contienen médicos ni cuentas no autorizadas).");
+        alert("ℹ️ Las nóminas archivadas ya se encuentran 100% depuradas y al día (no contienen médicos ni colaboradores con finiquito o dados de baja).");
       }
       renderRrhhNomina(container, state);
     });
@@ -2741,12 +2747,15 @@ function renderRrhhNomina(container, state) {
   const btnGen = document.getElementById('btn-generate-payroll');
   if (btnGen) {
     btnGen.addEventListener('click', () => {
-      if (employees.length === 0) {
+      const month = document.getElementById('payroll-month').value;
+
+      // Filtrar estrictamente solo colaboradores activos que no hayan renunciado ni tengan finiquito
+      const eligibleEmployees = employees.filter(emp => !isEmployeeResignedOrLiquidated(emp, month, state));
+
+      if (eligibleEmployees.length === 0) {
         alert("No hay empleados activos en el listado para calcular la nómina.");
         return;
       }
-
-      const month = document.getElementById('payroll-month').value;
 
       // Verificar que la nómina de este mes no se haya generado ya
       const alreadyExists = state.administracion_nominas.some(n => n.month === month);
@@ -2758,7 +2767,7 @@ function renderRrhhNomina(container, state) {
       let totalGross = 0;
       let totalNet = 0;
       let totalDiscounts = 0;
-      const payrollEmployees = employees.map(emp => {
+      const payrollEmployees = eligibleEmployees.map(emp => {
         const proratedSalary = getProratedSalary(emp);
         const inputDisc = container.querySelector(`.payroll-discount-input[data-id="${emp.id}"]`);
         const discount = inputDisc ? (parseFloat(inputDisc.value) || 0) : 0;
@@ -3405,23 +3414,24 @@ function renderRrhhLiquidaciones(container, state) {
 
       state.administracion_liquidaciones.unshift(newLiq);
 
-      // 2. Dar de baja al empleado en la nómina y empleados si se seleccionó la opción
-      if (autoDeactivate) {
-        emp.status = 'Inactivo';
-        emp.exitDate = exitDateVal;
-        emp.exitReason = reasonVal;
-        emp.exitNotes = notes;
-        if (tempResignationDoc) {
-          emp.resignationDoc = tempResignationDoc;
-        }
-        emp.liquidatedAt = newLiq.createdAt;
-
-        // Sincronizar en Firestore catálogo individual
-        try {
-          const indRef = doc(db, 'multimedica', emp.id);
-          setDoc(indRef, { ...emp, _collectionType: 'administracion_employees' }, { merge: true }).catch(console.warn);
-        } catch (err) {}
+      // 2. Dar de baja al empleado en la nómina y colaboradores
+      emp.status = 'Inactivo';
+      emp.exitDate = exitDateVal;
+      emp.exitReason = reasonVal;
+      emp.exitNotes = notes;
+      if (tempResignationDoc) {
+        emp.resignationDoc = tempResignationDoc;
       }
+      emp.liquidatedAt = newLiq.createdAt;
+
+      // Sincronizar en Firestore catálogo individual
+      try {
+        const indRef = doc(db, 'administracion_employees', emp.id);
+        setDoc(indRef, { ...emp }, { merge: true }).catch(console.warn);
+      } catch (err) {}
+
+      // Depurar inmediatamente nóminas archivadas para excluirlo de la planilla de este mes y posteriores
+      purgeAndSanitizePayrolls(state);
 
       // 3. Registrar egreso en Caja y Bancos
       state.administracion_caja.unshift({
