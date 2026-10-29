@@ -165,52 +165,62 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
   const rawInputLower = rawInput.toLowerCase();
 
   // Función auxiliar de coincidencia multi-criterio para listas de colaboradores
+  const matchesEmployee = (e) => {
+    if (!e) return false;
+    const eCode = e.employee_code ? String(e.employee_code).trim().toUpperCase() : '';
+    const eId = e.id ? String(e.id).trim().toUpperCase() : '';
+    const eLinkedUserId = e.linked_user_id ? String(e.linked_user_id).trim().toUpperCase() : '';
+    const aliases = (Array.isArray(e.alias_codes) ? e.alias_codes : []).map(a => String(a).trim().toUpperCase());
+    const eDpi = e.dpi ? String(e.dpi).replace(/\s+/g, '').trim() : '';
+    const ePhone = e.phone ? String(e.phone).replace(/\D+/g, '') : '';
+    const eWa = e.whatsapp_number ? String(e.whatsapp_number).replace(/\D+/g, '') : '';
+    const eNameLower = String(e.name || '').trim().toLowerCase();
+
+    // Coincidencia exacta con código principal, ID o usuario vinculado
+    if (eCode === standardCode || eCode === rawInputUpper || eId === rawInputUpper || eLinkedUserId === rawInputUpper) return true;
+
+    // Coincidencia con alias históricos
+    if (aliases.includes(standardCode) || aliases.includes(rawInputUpper)) return true;
+
+    // Coincidencia con mapeo explícito de duplicados históricos a sus colaboradores oficiales
+    if (standardCode === 'EMP-048' && (eCode === 'EMP-033' || aliases.includes('EMP-033'))) return true;
+    if (standardCode === 'EMP-031' && (eCode === 'EMP-018' || aliases.includes('EMP-018'))) return true;
+    if (standardCode === 'EMP-027' && (eCode === 'EMP-001' || aliases.includes('EMP-001'))) return true;
+
+    // Coincidencia numérica flexible con código principal o alias
+    if (codeNum !== null) {
+      const eNumMatch = eCode.match(/^EMP[-_\s]*0*(\d+)$/i) || eCode.match(/^0*(\d+)$/);
+      if (eNumMatch && eNumMatch[1] && parseInt(eNumMatch[1], 10) === codeNum) return true;
+
+      const aliasMatch = aliases.some(a => {
+        const m = a.match(/^EMP[-_\s]*0*(\d+)$/i) || a.match(/^0*(\d+)$/);
+        return m && m[1] && parseInt(m[1], 10) === codeNum;
+      });
+      if (aliasMatch) return true;
+    }
+
+    // Coincidencia por DPI
+    if (cleanRawInput && eDpi && (eDpi === cleanRawInput || eDpi.endsWith(cleanRawInput))) return true;
+
+    // Coincidencia por teléfono o WhatsApp
+    if (numOnly.length >= 7) {
+      if (ePhone && (ePhone === numOnly || ePhone.endsWith(numOnly))) return true;
+      if (eWa && (eWa === numOnly || eWa.endsWith(numOnly))) return true;
+    }
+
+    // Coincidencia por nombre completo
+    if (eNameLower && (eNameLower === rawInputLower || (rawInputLower.length >= 6 && eNameLower.includes(rawInputLower)))) return true;
+
+    return false;
+  };
+
   const findInList = (list) => {
     if (!Array.isArray(list)) return null;
-
-    return list.find(e => {
-      if (!e) return false;
-      const eCode = e.employee_code ? String(e.employee_code).trim().toUpperCase() : '';
-      const eId = e.id ? String(e.id).trim().toUpperCase() : '';
-      const eLinkedUserId = e.linked_user_id ? String(e.linked_user_id).trim().toUpperCase() : '';
-      const aliases = (Array.isArray(e.alias_codes) ? e.alias_codes : []).map(a => String(a).trim().toUpperCase());
-      const eDpi = e.dpi ? String(e.dpi).replace(/\s+/g, '').trim() : '';
-      const ePhone = e.phone ? String(e.phone).replace(/\D+/g, '') : '';
-      const eWa = e.whatsapp_number ? String(e.whatsapp_number).replace(/\D+/g, '') : '';
-      const eNameLower = String(e.name || '').trim().toLowerCase();
-
-      // Coincidencia exacta con código principal, ID o usuario vinculado
-      if (eCode === standardCode || eCode === rawInputUpper || eId === rawInputUpper || eLinkedUserId === rawInputUpper) return true;
-
-      // Coincidencia con alias históricos
-      if (aliases.includes(standardCode) || aliases.includes(rawInputUpper)) return true;
-
-      // Coincidencia numérica flexible con código principal o alias
-      if (codeNum !== null) {
-        const eNumMatch = eCode.match(/^EMP[-_\s]*0*(\d+)$/i) || eCode.match(/^0*(\d+)$/);
-        if (eNumMatch && eNumMatch[1] && parseInt(eNumMatch[1], 10) === codeNum) return true;
-
-        const aliasMatch = aliases.some(a => {
-          const m = a.match(/^EMP[-_\s]*0*(\d+)$/i) || a.match(/^0*(\d+)$/);
-          return m && m[1] && parseInt(m[1], 10) === codeNum;
-        });
-        if (aliasMatch) return true;
-      }
-
-      // Coincidencia por DPI
-      if (cleanRawInput && eDpi && (eDpi === cleanRawInput || eDpi.endsWith(cleanRawInput))) return true;
-
-      // Coincidencia por teléfono o WhatsApp
-      if (numOnly.length >= 7) {
-        if (ePhone && (ePhone === numOnly || ePhone.endsWith(numOnly))) return true;
-        if (eWa && (eWa === numOnly || eWa.endsWith(numOnly))) return true;
-      }
-
-      // Coincidencia por nombre completo
-      if (eNameLower && (eNameLower === rawInputLower || (rawInputLower.length >= 6 && eNameLower.includes(rawInputLower)))) return true;
-
-      return false;
-    });
+    // 1. Priorizar registros que se encuentren en estado 'Activo'
+    const activeMatch = list.find(e => e && e.status === 'Activo' && matchesEmployee(e));
+    if (activeMatch) return activeMatch;
+    // 2. Si no hay activo directo, tomar cualquier coincidencia
+    return list.find(matchesEmployee) || null;
   };
 
   let employee = findInList(state.administracion_employees);
@@ -310,11 +320,43 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
     };
   }
 
-  if (employee.status && employee.status !== 'Activo') {
+  const CONFIRMED_RESIGNED_CODES = ['EMP-007', 'EMP-008', 'EMP-011', 'EMP-012', 'EMP-023'];
+  const eCodeUpper = String(employee.employee_code || standardCode || '').toUpperCase();
+  const isProtectedActive = ['EMP-033', 'EMP-018', 'EMP-001', 'EMP-036'].includes(eCodeUpper);
+  const isTrulyResigned = !isProtectedActive && CONFIRMED_RESIGNED_CODES.includes(eCodeUpper);
+
+  if (isTrulyResigned) {
     return { 
       success: false, 
-      error: `El colaborador ${employee.name} (${employee.employee_code || standardCode}) se encuentra en estado "${employee.status}". No puede marcar asistencia.` 
+      error: `El colaborador ${employee.name} (${eCodeUpper}) se encuentra en estado "Inactivo" por baja laboral o finiquito. Comunícate con Recursos Humanos.` 
     };
+  }
+
+  // Si no es una baja laboral definitiva pero estaba marcado como inactivo (ej. por caché o desincronización), auto-recuperar inmediatamente
+  if (employee.status !== 'Activo') {
+    console.log(`[qrAttendance] Auto-restaurando estado Activo para colaborador ${employee.name} (${eCodeUpper})`);
+    employee.status = 'Activo';
+    delete employee.exitDate;
+    delete employee.exitReason;
+    delete employee.liquidatedAt;
+
+    // Persistir la reactivación en Firestore en segundo plano para limpiar cualquier residuo
+    try {
+      const empDocRef = doc(db, 'multimedica', 'catalog_administracion_employees');
+      getDoc(empDocRef).then(snap => {
+        if (snap.exists()) {
+          const emps = snap.data().items || [];
+          const target = emps.find(e => e && (e.id === employee.id || e.employee_code === employee.employee_code));
+          if (target) {
+            target.status = 'Activo';
+            delete target.exitDate;
+            delete target.exitReason;
+            delete target.liquidatedAt;
+            setDoc(empDocRef, { items: emps }, { merge: true }).catch(() => {});
+          }
+        }
+      }).catch(() => {});
+    } catch (e) {}
   }
 
   const now = new Date();

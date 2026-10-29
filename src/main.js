@@ -1718,6 +1718,12 @@ export function isEmployeeResignedOrLiquidated(emp, payrollMonthStr, state) {
     (normEmpName && normalizePersonName(e.name) === normEmpName)
   ) || emp;
 
+  // Colaboradores de planta activos que nunca deben considerarse liquidados
+  const activeProtectedCodes = ['EMP-033', 'EMP-018', 'EMP-001'];
+  if (activeProtectedCodes.includes(empCode) || activeProtectedCodes.includes(fullEmp.employee_code)) {
+    return false;
+  }
+
   // Verificación directa de códigos permanentemente excluidos
   const targetCode = empCode || fullEmp.employee_code || '';
   if (isPermanentlyExcludedEmployeeCode(targetCode)) {
@@ -1727,8 +1733,7 @@ export function isEmployeeResignedOrLiquidated(emp, payrollMonthStr, state) {
   const allLiquidaciones = (state && Array.isArray(state.administracion_liquidaciones)) ? state.administracion_liquidaciones : [];
   const empLiquidaciones = allLiquidaciones.filter(l => 
     (empId && l.employeeId === empId) ||
-    (empCode && l.employeeCode && l.employeeCode === empCode) ||
-    (normEmpName && normalizePersonName(l.employeeName) === normEmpName)
+    (empCode && l.employeeCode && l.employeeCode === empCode)
   );
 
   const pMonth = parsePayrollMonth(payrollMonthStr);
@@ -2207,15 +2212,23 @@ export function reconcileAndRecoverLiquidaciones(state) {
     }
   });
 
-  // 5. Sincronizar estado inactivo y datos de finiquito en administracion_employees
+  // 5. Sincronizar estado inactivo y datos de finiquito en administracion_employees por ID o código exacto
   state.administracion_liquidaciones.forEach(liq => {
     if (!liq) return;
     const emp = (state.administracion_employees || []).find(e => 
       (liq.employeeId && e.id === liq.employeeId) ||
-      (liq.employeeCode && e.employee_code && e.employee_code === liq.employeeCode) ||
-      (liq.employeeName && normalizePersonName(e.name) === normalizePersonName(liq.employeeName))
+      (liq.employeeCode && e.employee_code && e.employee_code === liq.employeeCode)
     );
     if (emp) {
+      // Proteger colaboradores de planta activos
+      const activeProtectedCodes = ['EMP-033', 'EMP-018', 'EMP-001'];
+      if (activeProtectedCodes.includes(emp.employee_code)) {
+        emp.status = 'Activo';
+        delete emp.exitDate;
+        delete emp.exitReason;
+        delete emp.liquidatedAt;
+        return;
+      }
       if (emp.status !== 'Inactivo') {
         emp.status = 'Inactivo';
         recovered = true;
@@ -2227,17 +2240,17 @@ export function reconcileAndRecoverLiquidaciones(state) {
     }
   });
 
-  // 6. Asegurar baja y finiquito para colaboradores con códigos expresamente excluidos de nómina
-  state.administracion_employees.forEach(emp => {
-    if (!emp) return;
-    if (isPermanentlyExcludedEmployeeCode(emp.employee_code)) {
-      if (emp.status !== 'Inactivo') {
-        emp.status = 'Inactivo';
+  // Asegurar que colaboradores legítimos activos permanezcan en estado 'Activo'
+  const activeProtectedCodes = ['EMP-033', 'EMP-018', 'EMP-001'];
+  (state.administracion_employees || []).forEach(emp => {
+    if (emp && activeProtectedCodes.includes(emp.employee_code)) {
+      if (emp.status !== 'Activo') {
+        emp.status = 'Activo';
+        delete emp.exitDate;
+        delete emp.exitReason;
+        delete emp.liquidatedAt;
         recovered = true;
       }
-      if (!emp.exitDate) emp.exitDate = '2026-10-01';
-      if (!emp.exitReason) emp.exitReason = 'Renuncia / Finiquito';
-      if (!emp.liquidatedAt) emp.liquidatedAt = new Date().toISOString();
     }
   });
 
