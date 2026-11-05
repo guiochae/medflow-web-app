@@ -1,5 +1,6 @@
 // src/modules/emergencias.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId, router } from '../main.js';
+import { removeDocument, firestoreState } from '../firebase.js';
 import { renderAdmissionForm } from './encamamiento.js';
 import { showAdmissionReportsModal, generateAndPrintAdmissionReports } from './admissionReports.js';
 import logoUrl from '../assets/logo.jpg';
@@ -222,11 +223,18 @@ function renderEmergPatientList() {
     const statusDot = `<span style="width: 8px; height: 8px; border-radius: 50%; background: ${dotColor}; display: inline-block; margin-right: 8px;" title="${activeE ? 'En Emergencia / Obs (' + activeE.bedName + ')' : 'No registrado'}"></span>`;
 
     li.innerHTML = `
-      <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-        <div class="patient-item-name" style="display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px;">
-          ${statusDot} ${p.name}
+      <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 6px;">
+        <div class="patient-item-name" style="display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
+          ${statusDot} <span title="${p.name}">${p.name}</span>
         </div>
-        <span style="font-size: 0.72rem; opacity: 0.7;">${activeE ? activeE.bedName : ''}</span>
+        <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+          <span style="font-size: 0.72rem; opacity: 0.75; font-weight: 600;">${activeE ? activeE.bedName : ''}</span>
+          ${activeE ? `
+            <button type="button" class="btn-quick-delete-emerg" data-emerg-id="${activeE.id}" data-patient-name="${p.name}" data-bed="${activeE.bedName}" title="Eliminar ingreso de emergencia y liberar cama" style="background: transparent; border: none; color: #ef4444; cursor: pointer; padding: 2px 4px; font-size: 0.85rem; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; line-height: 1;">
+              🗑️
+            </button>
+          ` : ''}
+        </div>
       </div>
     `;
 
@@ -235,6 +243,19 @@ function renderEmergPatientList() {
       renderEmergPatientList();
       renderEmergDashboard();
     });
+
+    const quickDelBtn = li.querySelector('.btn-quick-delete-emerg');
+    if (quickDelBtn) {
+      quickDelBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const eId = quickDelBtn.getAttribute('data-emerg-id');
+        const patName = quickDelBtn.getAttribute('data-patient-name');
+        const bed = quickDelBtn.getAttribute('data-bed');
+        if (confirm(`¿Está seguro de que desea eliminar el ingreso a Emergencias del paciente ${patName} (${bed})?\n\nEsta acción liberará la ${bed} y anulará el registro clínico de urgencia.`)) {
+          deleteEmergencyAdmission(eId);
+        }
+      });
+    }
 
     listContainer.appendChild(li);
   });
@@ -332,9 +353,12 @@ function renderEmergDashboard() {
                         <span>Estado: <strong style="color: ${ep.status === 'Transferido' ? '#eab308' : 'var(--accent-success)'}">${ep.status}</strong></span>
                       </div>
                     </div>
-                    <div>
+                    <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
                       <button type="button" class="btn btn-secondary btn-small btn-print-episode-reports" data-emerg-id="${ep.id}" style="padding: 4px 10px; font-size: 0.78rem; font-weight: bold; display: flex; align-items: center; gap: 6px;">
                         <span>🖨️</span> Reportes de Ingreso
+                      </button>
+                      <button type="button" class="btn btn-danger btn-small btn-delete-history-episode" data-emerg-id="${ep.id}" data-patient-name="${patient.name}" data-bed="${ep.bedName || 'Emergencia'}" style="padding: 4px 10px; font-size: 0.78rem; font-weight: bold; display: flex; align-items: center; gap: 6px; background: #dc2626; border: none; color: white; cursor: pointer;" title="Eliminar este registro archivado de emergencias">
+                        <span>🗑️</span> Eliminar
                       </button>
                     </div>
                   </div>
@@ -450,6 +474,17 @@ function renderEmergDashboard() {
         });
       });
 
+      dashboardArea.querySelectorAll('.btn-delete-history-episode').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const epId = btn.getAttribute('data-emerg-id');
+          const patName = btn.getAttribute('data-patient-name');
+          const bed = btn.getAttribute('data-bed');
+          if (confirm(`¿Está seguro de que desea eliminar permanentemente este registro de atención de Emergencias de ${patName} (${bed})?\n\nEsta acción borrará el expediente de urgencia archivado.`)) {
+            deleteEmergencyAdmission(epId);
+          }
+        });
+      });
+
       document.getElementById('btn-start-emerg-direct').addEventListener('click', () => {
         renderEmergAdmissionForm(patient.id);
       });
@@ -503,9 +538,12 @@ function renderEmergDashboard() {
             <span><strong>Costo Estancia:</strong> Q${parseFloat(activeEmerg.stayCost || 0).toFixed(2)}</span>
           </div>
         </div>
-        <div style="display: flex; gap: 8px;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
           <button class="btn btn-secondary btn-small" id="btn-print-emerg-reports" style="display: flex; align-items: center; gap: 6px;">🖨️ Reportes de Ingreso</button>
           <button class="btn btn-danger btn-small" id="btn-trigger-discharge" style="background: var(--accent-danger); border: none;">🏥 Cierre / Alta / Traslado</button>
+          <button class="btn btn-small" id="btn-delete-active-emerg" style="background: #991b1b; color: #ffffff; border: 1px solid rgba(239,68,68,0.4); display: flex; align-items: center; gap: 6px; font-weight: bold; padding: 6px 12px; cursor: pointer; border-radius: var(--radius-sm);" title="Eliminar este ingreso de emergencias y liberar cama">
+            <span>🗑️</span> Eliminar Ingreso
+          </button>
         </div>
       </div>
     </div>
@@ -539,6 +577,15 @@ function renderEmergDashboard() {
   document.getElementById('btn-trigger-discharge').addEventListener('click', () => {
     renderDischargeForm(activeEmerg, patient);
   });
+
+  const btnDeleteActive = document.getElementById('btn-delete-active-emerg');
+  if (btnDeleteActive) {
+    btnDeleteActive.addEventListener('click', () => {
+      if (confirm(`¿Está seguro de que desea eliminar el ingreso activo a Emergencias de ${patient.name} (${activeEmerg.bedName})?\n\nEsta acción liberará la ${activeEmerg.bedName} y anulará este registro de atención.`)) {
+        deleteEmergencyAdmission(activeEmerg.id);
+      }
+    });
+  }
 
   // Render tab content
   if (activeTab === 'evolucion') renderEvolucionTab(activeEmerg, patient);
@@ -859,7 +906,10 @@ function renderEvolucionTab(activeEmerg, patient) {
               <div style="background: rgba(255,255,255,0.015); border: 1px solid var(--border-color); padding: 10px 14px; border-radius: 6px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 0.82rem;">
                   <span style="font-weight: bold; color: var(--text-primary);">Ingreso: ${new Date(prev.admissionDate).toLocaleString('es-GT')} (Cama: ${prev.bedName || 'N/A'})</span>
-                  <span style="color: var(--text-muted);">Egreso: ${prev.dischargeDate ? new Date(prev.dischargeDate).toLocaleString('es-GT') : 'Finalizado'} | Dr. ${prev.doctorName}</span>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="color: var(--text-muted);">Egreso: ${prev.dischargeDate ? new Date(prev.dischargeDate).toLocaleString('es-GT') : 'Finalizado'} | Dr. ${prev.doctorName}</span>
+                    <button type="button" class="btn btn-danger btn-small btn-delete-prev-emerg" data-emerg-id="${prev.id}" data-patient-name="${patient.name}" data-bed="${prev.bedName || 'Emergencia'}" style="padding: 2px 6px; font-size: 0.72rem; background: #dc2626; border: none; color: white; cursor: pointer; border-radius: 4px;" title="Eliminar este ingreso previo de emergencias">🗑️ Eliminar</button>
+                  </div>
                 </div>
                 <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
                   <strong>Motivo:</strong> ${prev.admissionReason || 'N/A'} | <strong>Epicrisis:</strong> ${prev.epicrisis || 'Alta médica completada'}
@@ -1019,6 +1069,18 @@ function renderEvolucionTab(activeEmerg, patient) {
       if (ep && ep.prescriptions) {
         const presc = ep.prescriptions.find(p => p.id === prescId);
         if (presc) printEvoOrPrescDocument(patient, presc, 'prescription', state);
+      }
+    });
+  });
+
+  // Bind Delete Previous Emergencies
+  container.querySelectorAll('.btn-delete-prev-emerg').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const epId = btn.getAttribute('data-emerg-id');
+      const patName = btn.getAttribute('data-patient-name');
+      const bed = btn.getAttribute('data-bed');
+      if (confirm(`¿Está seguro de que desea eliminar permanentemente este ingreso previo de Emergencias de ${patName} (${bed})?`)) {
+        deleteEmergencyAdmission(epId);
       }
     });
   });
@@ -2317,4 +2379,101 @@ function restoreChecklistModal() {
   if (btnCancel) {
     btnCancel.onclick = () => { modal.style.display = 'none'; };
   }
+}
+
+/**
+ * Elimina un registro de ingreso a Emergencias (activo o histórico),
+ * liberando la cama asignada, revirtiendo inventario si aplica y
+ * sincronizando los cambios con Cloud Firestore.
+ * @param {string} emergId - ID del registro de emergencia (ej. emerg-1793900917542)
+ */
+export async function deleteEmergencyAdmission(emergId) {
+  if (!emergId) return;
+
+  const state = getAppState();
+  const emergIndex = (state.emergencias || []).findIndex(e => e.id === emergId);
+
+  if (emergIndex === -1) {
+    alert("El ingreso a emergencias no fue encontrado o ya fue eliminado.");
+    return;
+  }
+
+  const emerg = state.emergencias[emergIndex];
+  const patientId = emerg.patientId;
+  const patient = (state.patients || []).find(p => p.id === patientId);
+
+  // 1. Revertir insumos de bodega/enfermería administrados si hubieren
+  if (Array.isArray(emerg.consumedSupplies) && emerg.consumedSupplies.length > 0) {
+    emerg.consumedSupplies.forEach(s => {
+      const med = (state.medications || []).find(m => m.id === s.id);
+      if (med && s.qty) {
+        med.stock = (parseInt(med.stock) || 0) + (parseInt(s.qty) || 0);
+      }
+    });
+  }
+
+  // 2. Revertir medicamentos si se hubiesen descontado
+  if (Array.isArray(emerg.consumedMedicines) && emerg.consumedMedicines.length > 0) {
+    emerg.consumedMedicines.forEach(m => {
+      const med = (state.medications || []).find(item => item.id === m.id);
+      if (med && m.qty) {
+        med.stock = (parseInt(med.stock) || 0) + (parseInt(m.qty) || 0);
+      }
+    });
+  }
+
+  // 3. Limpiar referencias del paciente asociadas a este ingreso
+  if (patient) {
+    if (Array.isArray(patient.emergencyPrescriptions)) {
+      patient.emergencyPrescriptions = patient.emergencyPrescriptions.filter(p => p.emergId !== emergId);
+    }
+    if (Array.isArray(patient.emergencyEvolutions)) {
+      patient.emergencyEvolutions = patient.emergencyEvolutions.filter(ev => ev.emergId !== emergId);
+    }
+    if (Array.isArray(patient.billingHistory)) {
+      // Si se había generado una prefactura para este folio de emergencia que siga pendiente, retirarla
+      patient.billingHistory = patient.billingHistory.filter(b => 
+        !(b.concept && b.concept.includes(emergId)) && !(b.id && b.id.includes(emergId))
+      );
+    }
+  }
+
+  // 4. Remover el registro de emergencias del estado en memoria
+  state.emergencias.splice(emergIndex, 1);
+  if (firestoreState && Array.isArray(firestoreState.emergencias)) {
+    firestoreState.emergencias = firestoreState.emergencias.filter(e => e.id !== emergId);
+  }
+
+  // 5. Eliminar el documento individual en Cloud Firestore
+  try {
+    await removeDocument('emergencias', emergId);
+  } catch (err) {
+    console.warn("Aviso al eliminar documento en Firestore:", err);
+  }
+
+  // 6. Si el paciente ya no tiene atenciones en emergencias y era el seleccionado, ajustar selección
+  if (getActivePatientId() === patientId) {
+    const remainingForPatient = (state.emergencias || []).filter(e => e.patientId === patientId);
+    if (remainingForPatient.length === 0) {
+      const remainingActives = (state.emergencias || []).filter(e => e.status === 'Activo');
+      if (remainingActives.length > 0) {
+        setActivePatientId(remainingActives[0].patientId);
+      } else {
+        setActivePatientId(null);
+      }
+    }
+  }
+
+  // 7. Guardar cambios en Firestore y caché local
+  try {
+    await saveAppState(state);
+  } catch (err) {
+    console.warn("Aviso al sincronizar appState tras eliminación:", err);
+  }
+
+  alert(`El ingreso a Emergencias de ${emerg.patientName} (${emerg.bedName || 'Emergencia'}) ha sido eliminado exitosamente.`);
+
+  // 8. Refrescar listado y consola
+  renderEmergPatientList();
+  renderEmergDashboard();
 }
