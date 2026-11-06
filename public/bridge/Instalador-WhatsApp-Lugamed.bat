@@ -58,7 +58,7 @@ if (-not $hasNode) {
 # 2. Descargar archivos del puente
 Write-Host "`n[2/5] Descargando archivos actualizados del puente..." -ForegroundColor Yellow
 $baseUrl = "https://gestion-consultorio-gules.vercel.app/bridge"
-$files = @("server.js", "package.json", "start-bridge.bat", "start-bridge-silent.vbs")
+$files = @("server.js", "package.json", "start-bridge.bat", "start-bridge-silent.vbs", "diagnostico-consola.bat")
 
 foreach ($f in $files) {
     $dest = Join-Path $targetDir $f
@@ -99,7 +99,7 @@ New-Item -Path "HKCU:\Software\Classes\lugamed-bridge\shell\open\command" -Force
 Set-ItemProperty -Path "HKCU:\Software\Classes\lugamed-bridge\shell\open\command" -Name "(Default)" -Value "wscript.exe `"$targetDir\start-bridge-silent.vbs`" `"%1`""
 Write-Host "      [OK] Protocolo de enlace web activado." -ForegroundColor Green
 
-# Acceso directo en el Escritorio
+# Accesos directos en el Escritorio
 $wsh = New-Object -ComObject WScript.Shell
 $shortcut = $wsh.CreateShortcut("$env:USERPROFILE\Desktop\Iniciar WhatsApp Bridge.lnk")
 $shortcut.TargetPath = "wscript.exe"
@@ -107,18 +107,46 @@ $shortcut.Arguments = "`"$targetDir\start-bridge-silent.vbs`""
 $shortcut.WorkingDirectory = $targetDir
 $shortcut.Description = "Iniciar Microservicio de WhatsApp Bridge Lugamed"
 $shortcut.Save()
-Write-Host "      [OK] Acceso directo creado en el Escritorio." -ForegroundColor Green
 
-# 5. Iniciar inmediatamente el servicio en segundo plano
-Write-Host "`n[5/5] Iniciando microservicio de WhatsApp en segundo plano..." -ForegroundColor Yellow
+$diagShortcut = $wsh.CreateShortcut("$env:USERPROFILE\Desktop\WhatsApp Bridge - Consola Diagnostico.lnk")
+$diagShortcut.TargetPath = "$targetDir\diagnostico-consola.bat"
+$diagShortcut.WorkingDirectory = $targetDir
+$diagShortcut.Description = "Consola de Diagnostico de WhatsApp Bridge Lugamed"
+$diagShortcut.Save()
+Write-Host "      [OK] Accesos directos creados en el Escritorio." -ForegroundColor Green
+
+# 5. Iniciar y verificar inmediatamente el servicio
+Write-Host "`n[5/5] Iniciando y verificando servicio de WhatsApp en segundo plano..." -ForegroundColor Yellow
 Start-Process -FilePath "wscript.exe" -ArgumentList "`"$targetDir\start-bridge-silent.vbs`"" -WorkingDirectory $targetDir
 
-Write-Host "`n================================================================" -ForegroundColor Green
-Write-Host "       ¡INSTALACION Y CONFIGURACION COMPLETADA CON EXITO!       " -ForegroundColor Green
-Write-Host "================================================================" -ForegroundColor Green
-Write-Host "El servicio ya esta activo en segundo plano.`n" -ForegroundColor White
-Write-Host "Regresa a la ventana de la clinica en tu navegador." -ForegroundColor Cyan
-Write-Host "La pantalla detectara automaticamente la conexion y te mostrara" -ForegroundColor Cyan
-Write-Host "el codigo QR para vincular WhatsApp en tu celular.`n" -ForegroundColor Cyan
-Write-Host "Esta ventana se cerrara en 8 segundos..." -ForegroundColor Gray
-Start-Sleep -Seconds 8
+$verified = $false
+for ($i = 0; $i -lt 15; $i++) {
+    Start-Sleep -Seconds 1
+    try {
+        $resp = Invoke-RestMethod -Uri "http://127.0.0.1:3001/api/status" -TimeoutSec 2 -ErrorAction Stop
+        if ($resp.online -or $resp.success) {
+            $verified = $true
+            break
+        }
+    } catch {}
+    Write-Host "." -NoNewline -ForegroundColor Gray
+}
+Write-Host ""
+
+if ($verified) {
+    Write-Host "      [OK] Microservicio verificado y respondiendo en http://127.0.0.1:3001." -ForegroundColor Green
+    Write-Host "`n================================================================" -ForegroundColor Green
+    Write-Host "       ¡INSTALACION Y CONFIGURACION COMPLETADA CON EXITO!       " -ForegroundColor Green
+    Write-Host "================================================================" -ForegroundColor Green
+    Write-Host "El servicio ya esta activo y funcionando en segundo plano.`n" -ForegroundColor White
+    Write-Host "Regresa a la ventana de la clinica en tu navegador." -ForegroundColor Cyan
+    Write-Host "La pantalla detectara automaticamente la conexion y te mostrara" -ForegroundColor Cyan
+    Write-Host "el codigo QR para vincular WhatsApp en tu celular.`n" -ForegroundColor Cyan
+    Write-Host "Esta ventana se cerrara en 8 segundos..." -ForegroundColor Gray
+    Start-Sleep -Seconds 8
+} else {
+    Write-Host "      [AVISO] El microservicio tardo en responder en segundo plano." -ForegroundColor Yellow
+    Write-Host "      Abriendo consola de diagnostico para verificar logs en pantalla..." -ForegroundColor Yellow
+    Start-Process -FilePath "$targetDir\diagnostico-consola.bat" -WorkingDirectory $targetDir
+    Start-Sleep -Seconds 4
+}

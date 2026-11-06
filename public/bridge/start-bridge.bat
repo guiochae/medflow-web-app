@@ -14,7 +14,7 @@ echo    LUGAMED - Microservicio WhatsApp Bridge
 echo ========================================================
 echo.
 
-netstat -ano | findstr /R /C:":3001 .*LISTENING" >nul 2>&1
+netstat -ano | findstr ":3001" | findstr /I "LISTENING ESCUCHANDO" >nul 2>&1
 if %errorlevel% equ 0 (
     exit /b 0
 )

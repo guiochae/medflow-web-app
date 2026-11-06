@@ -5,49 +5,75 @@ let bridgeStatusCache = {
   online: false,
   isReady: false,
   qr: null,
+  status: 'offline',
+  error: null,
   lastCheck: 0
 };
 
+let detectedWorkingBridgeUrl = null;
 let statusPollingInterval = null;
 
 /**
  * Consulta el estado actual del microservicio local de WhatsApp.
- * @returns {Promise<{online: boolean, isReady: boolean, qr: string|null}>}
+ * Prueba tanto 127.0.0.1 como localhost para compatibilidad IPv4/IPv6 en Windows.
+ * @returns {Promise<{online: boolean, isReady: boolean, qr: string|null, status?: string, error?: string|null, url?: string}>}
  */
 export async function checkWhatsAppBridgeStatus() {
   const state = getAppState();
-  const bridgeUrl = (state.clinicInfo && state.clinicInfo.whatsappBridgeUrl) || 'http://localhost:3001';
+  const configuredUrl = state.clinicInfo && state.clinicInfo.whatsappBridgeUrl;
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2500);
+  const candidateUrls = configuredUrl
+    ? [configuredUrl]
+    : (detectedWorkingBridgeUrl
+        ? [detectedWorkingBridgeUrl, 'http://127.0.0.1:3001', 'http://localhost:3001']
+        : ['http://127.0.0.1:3001', 'http://localhost:3001']);
 
-    const response = await fetch(`${bridgeUrl}/api/status`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json'
-      },
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
+  const uniqueUrls = [...new Set(candidateUrls)];
 
-    if (response.ok) {
-      const data = await response.json();
-      bridgeStatusCache = {
-        online: true,
-        isReady: !!data.isReady,
-        qr: data.qr || null,
-        lastCheck: Date.now()
-      };
-      return bridgeStatusCache;
-    } else {
-      bridgeStatusCache = { online: false, isReady: false, qr: null, lastCheck: Date.now() };
-      return bridgeStatusCache;
+  for (const url of uniqueUrls) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      const response = await fetch(`${url}/api/status`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        },
+        mode: 'cors',
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        detectedWorkingBridgeUrl = url;
+        bridgeStatusCache = {
+          online: true,
+          isReady: !!data.isReady,
+          qr: data.qr || null,
+          status: data.status || (data.isReady ? 'ready' : (data.qr ? 'qr_ready' : 'starting')),
+          error: data.error || null,
+          browser: data.browser || null,
+          url: url,
+          lastCheck: Date.now()
+        };
+        return bridgeStatusCache;
+      }
+    } catch (err) {
+      // Intentar la siguiente URL candidata
     }
-  } catch (err) {
-    bridgeStatusCache = { online: false, isReady: false, qr: null, lastCheck: Date.now() };
-    return bridgeStatusCache;
   }
+
+  bridgeStatusCache = {
+    online: false,
+    isReady: false,
+    qr: null,
+    status: 'offline',
+    error: null,
+    lastCheck: Date.now()
+  };
+  return bridgeStatusCache;
 }
 
 /**
@@ -120,7 +146,7 @@ export async function notifyDoctorViaWhatsApp(nombreMedico, telefonoMedico, nomb
   };
 
   const state = getAppState();
-  const bridgeUrl = (state.clinicInfo && state.clinicInfo.whatsappBridgeUrl) || 'http://localhost:3001';
+  const bridgeUrl = detectedWorkingBridgeUrl || (state.clinicInfo && state.clinicInfo.whatsappBridgeUrl) || 'http://127.0.0.1:3001';
 
   try {
     const response = await fetch(`${bridgeUrl}/api/notify-doctor`, {
@@ -412,9 +438,14 @@ export function showWhatsAppInstallationModal() {
         </div>
       </div>
 
-      <div id="wa-installer-live-indicator" style="background: rgba(234, 179, 8, 0.1); border: 1px dashed rgba(234, 179, 8, 0.4); border-radius: 8px; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.85rem; color: #eab308; margin-bottom: 18px;">
-        <span class="wa-indicator-dot connecting"></span>
-        <span id="wa-installer-status-text">Detectando microservicio en esta computadora...</span>
+      <div id="wa-installer-live-indicator" style="background: rgba(234, 179, 8, 0.1); border: 1px dashed rgba(234, 179, 8, 0.4); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: 0.85rem; color: #eab308; margin-bottom: 18px; text-align: center;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="wa-indicator-dot connecting"></span>
+          <span id="wa-installer-status-text">Detectando microservicio en esta computadora...</span>
+        </div>
+        <a href="http://127.0.0.1:3001/api/status" target="_blank" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline; opacity: 0.85;">
+          Probar conectividad local (127.0.0.1:3001)
+        </a>
       </div>
 
       <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -448,14 +479,29 @@ export function showWhatsAppInstallationModal() {
   if (closeX) closeX.onclick = () => closeModal(true);
   if (dismissBtn) dismissBtn.onclick = () => closeModal(true);
 
+  let pollAttempts = 0;
   const checkAndTransition = async () => {
+    pollAttempts++;
     const status = await checkWhatsAppBridgeStatus();
     if (status.online) {
       if (statusBox && statusText) {
         statusBox.style.background = 'rgba(34, 197, 94, 0.15)';
         statusBox.style.borderColor = 'rgba(34, 197, 94, 0.5)';
         statusBox.style.color = '#22c55e';
-        statusText.textContent = '✅ ¡Puente de WhatsApp detectado e iniciado!';
+        if (status.isReady) {
+          statusText.textContent = '✅ ¡Puente de WhatsApp listo y vinculado!';
+        } else if (status.qr) {
+          statusText.textContent = '📲 Microservicio conectado. Mostrando código QR...';
+        } else if (status.status === 'starting') {
+          statusText.textContent = '⏳ Microservicio activo en esta PC. Iniciando motor de WhatsApp...';
+        } else if (status.error) {
+          statusBox.style.background = 'rgba(239, 68, 68, 0.15)';
+          statusBox.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+          statusBox.style.color = '#ef4444';
+          statusText.textContent = `⚠️ Microservicio con alerta: ${status.error}`;
+        } else {
+          statusText.textContent = '✅ ¡Microservicio detectado en esta computadora!';
+        }
       }
       setTimeout(() => {
         closeModal(false);
@@ -463,8 +509,12 @@ export function showWhatsAppInstallationModal() {
         if (status.qr && !status.isReady) {
           showWhatsAppQrModal(status.qr);
         }
-      }, 1200);
+      }, 1000);
       return true;
+    } else {
+      if (pollAttempts >= 4 && statusText) {
+        statusText.innerHTML = '<span>🟡 Esperando microservicio... Si el instalador ya finalizó, abre el acceso directo <strong>"WhatsApp Bridge - Consola Diagnostico"</strong> en el Escritorio.</span>';
+      }
     }
     return false;
   };
@@ -673,7 +723,7 @@ export async function notifyEmployeeWelcome(employee) {
   };
 
   const state = getAppState();
-  const bridgeUrl = (state.clinicInfo && state.clinicInfo.whatsappBridgeUrl) || 'http://localhost:3001';
+  const bridgeUrl = detectedWorkingBridgeUrl || (state.clinicInfo && state.clinicInfo.whatsappBridgeUrl) || 'http://127.0.0.1:3001';
 
   fetch(`${bridgeUrl}/api/notify-employee`, {
     method: 'POST',

@@ -21,12 +21,55 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Headers', '*');
   res.setHeader('Access-Control-Allow-Private-Network', 'true');
   if (req.method === 'OPTIONS') {
-    return res.sendStatus(204);
+    return res.status(204).end();
   }
   next();
 });
 app.use(cors());
 app.use(express.json());
+
+let isReady = false;
+let latestQr = null;
+let clientStatus = 'starting'; // 'starting', 'qr_ready', 'ready', 'error'
+let clientError = null;
+let detectedBrowser = null;
+let client = null;
+
+// Endpoint GET /api/ping (Verificación rápida de conectividad)
+app.get('/api/ping', (req, res) => {
+  return res.status(200).json({ ok: true, isReady, status: clientStatus });
+});
+
+// Endpoint GET /api/status (Reporte completo del microservicio)
+app.get('/api/status', (req, res) => {
+  return res.status(200).json({
+    success: true,
+    online: true,
+    isReady: isReady,
+    qr: isReady ? null : latestQr,
+    status: isReady ? 'ready' : (latestQr ? 'qr_ready' : (clientError ? 'error' : 'starting')),
+    error: clientError,
+    browser: detectedBrowser
+  });
+});
+
+// Levantar el Servidor Express INMEDIATAMENTE para responder al instante
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Microservicio WhatsApp local escuchando en http://0.0.0.0:${PORT}`);
+});
+
+// Prevenir caídas del proceso por errores no controlados
+process.on('uncaughtException', (err) => {
+  console.error('❌ Excepción no capturada en microservicio:', err);
+  clientStatus = 'error';
+  clientError = err.message || String(err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('❌ Rechazo de promesa no controlado:', reason);
+  clientStatus = 'error';
+  clientError = (reason && reason.message) || String(reason);
+});
 
 const puppeteerOptions = {
   handleSIGINT: false,
@@ -41,22 +84,28 @@ const puppeteerOptions = {
   ]
 };
 
-// Auto-detección de navegador Chromium (Chrome, Edge o Brave) en Windows
+// Auto-detección amplia de navegadores Chromium (Chrome, Edge o Brave) en Windows
 if (process.platform === 'win32') {
   const possiblePaths = [
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'Application', 'chrome.exe') : null,
+    process.env.PROGRAMFILES ? path.join(process.env.PROGRAMFILES, 'Google', 'Chrome', 'Application', 'chrome.exe') : null,
+    process.env['PROGRAMFILES(X86)'] ? path.join(process.env['PROGRAMFILES(X86)'], 'Google', 'Chrome', 'Application', 'chrome.exe') : null,
     'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
     'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
     process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Microsoft', 'Edge', 'Application', 'msedge.exe') : null,
-    'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe'
+    process.env.PROGRAMFILES ? path.join(process.env.PROGRAMFILES, 'Microsoft', 'Edge', 'Application', 'msedge.exe') : null,
+    process.env['PROGRAMFILES(X86)'] ? path.join(process.env['PROGRAMFILES(X86)'], 'Microsoft', 'Edge', 'Application', 'msedge.exe') : null,
+    'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe',
+    'C:\\Program Files (x86)\\BraveSoftware\\Brave-Browser\\Application\\brave.exe'
   ].filter(Boolean);
 
   for (const p of possiblePaths) {
     if (fs.existsSync(p)) {
       console.log(`🧭 Navegador Chromium detectado en Windows: ${p}`);
       puppeteerOptions.executablePath = p;
+      detectedBrowser = p;
       break;
     }
   }
@@ -65,51 +114,67 @@ if (process.platform === 'win32') {
 // Permitir personalización mediante variable de entorno si se especifica
 if (process.env.PUPPETEER_EXECUTABLE_PATH) {
   puppeteerOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  detectedBrowser = process.env.PUPPETEER_EXECUTABLE_PATH;
 }
 
-// Inicializar el cliente de WhatsApp Web con ruta absoluta a la sesión guardada
-const client = new Client({
-  authStrategy: new LocalAuth({
-    dataPath: authPath
-  }),
-  puppeteer: puppeteerOptions
-});
+if (!puppeteerOptions.executablePath) {
+  console.warn("⚠️ No se encontró Chrome o Edge en las rutas estándar.");
+  clientStatus = 'error';
+  clientError = 'No se encontró Google Chrome ni Microsoft Edge instalado en esta máquina.';
+}
 
-let isReady = false;
-let latestQr = null;
+// Inicializar el cliente de WhatsApp Web con manejo robusto de excepciones
+try {
+  client = new Client({
+    authStrategy: new LocalAuth({
+      dataPath: authPath
+    }),
+    puppeteer: puppeteerOptions
+  });
 
-// Evento de generación del código QR en terminal
-client.on('qr', (qr) => {
-  latestQr = qr;
-  console.log('\n======================================================');
-  console.log('📌 ESCANEA ESTE CÓDIGO QR EN TU CELULAR PARA INICIAR SESIÓN:');
-  console.log('======================================================\n');
-  qrcode.generate(qr, { small: true });
-});
+  client.on('qr', (qr) => {
+    latestQr = qr;
+    clientStatus = 'qr_ready';
+    console.log('\n======================================================');
+    console.log('📌 ESCANEA ESTE CÓDIGO QR EN TU CELULAR PARA INICIAR SESIÓN:');
+    console.log('======================================================\n');
+    try { qrcode.generate(qr, { small: true }); } catch (e) {}
+  });
 
-// Evento de cliente listo
-client.on('ready', () => {
-  console.log('\n✅ ¡Cliente de WhatsApp Web listo y autenticado exitosamente!\n');
-  isReady = true;
-});
+  client.on('ready', () => {
+    console.log('\n✅ ¡Cliente de WhatsApp Web listo y autenticado exitosamente!\n');
+    isReady = true;
+    latestQr = null;
+    clientStatus = 'ready';
+    clientError = null;
+  });
 
-// Evento de fallo de autenticación
-client.on('auth_failure', (msg) => {
-  console.error('❌ Fallo de autenticación en WhatsApp:', msg);
-  isReady = false;
-});
+  client.on('auth_failure', (msg) => {
+    console.error('❌ Fallo de autenticación en WhatsApp:', msg);
+    isReady = false;
+    clientStatus = 'error';
+    clientError = 'Fallo de autenticación: ' + msg;
+  });
 
-// Evento de desconexión
-client.on('disconnected', (reason) => {
-  console.warn('⚠️ Sesión de WhatsApp desconectada:', reason);
-  isReady = false;
-  // Re-inicialización automática
-  client.initialize().catch(err => console.error("Error al re-inicializar:", err));
-});
+  client.on('disconnected', (reason) => {
+    console.warn('⚠️ Sesión de WhatsApp desconectada:', reason);
+    isReady = false;
+    clientStatus = 'disconnected';
+    setTimeout(() => {
+      client.initialize().catch(err => console.error("Error al re-inicializar:", err));
+    }, 3000);
+  });
 
-client.initialize().catch(err => {
-  console.error("Error inicial en client.initialize():", err);
-});
+  client.initialize().catch(err => {
+    console.error("Error inicial en client.initialize():", err);
+    clientStatus = 'error';
+    clientError = err.message || String(err);
+  });
+} catch (err) {
+  console.error("Error al crear instancia de WhatsApp Client:", err);
+  clientStatus = 'error';
+  clientError = err.message || String(err);
+}
 
 // Endpoint POST /api/notify-doctor
 app.post('/api/notify-doctor', async (req, res) => {
@@ -206,23 +271,4 @@ app.post('/api/notify-employee', async (req, res) => {
       details: error.message 
     });
   }
-});
-
-// Endpoint GET /api/ping (Verificación rápida de conectividad)
-app.get('/api/ping', (req, res) => {
-  return res.status(200).json({ ok: true, isReady });
-});
-
-// Endpoint GET /api/status
-app.get('/api/status', (req, res) => {
-  return res.status(200).json({
-    success: true,
-    isReady: isReady,
-    qr: isReady ? null : latestQr
-  });
-});
-
-// Levantar el Servidor Express
-app.listen(PORT, () => {
-  console.log(`🚀 Microservicio WhatsApp local escuchando en http://localhost:${PORT}`);
 });
