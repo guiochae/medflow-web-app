@@ -1,136 +1,124 @@
-﻿@echo off
-setlocal enabledelayedexpansion
+@echo off
+setlocal
 title Instalador de WhatsApp Bridge - LUGAMED
+cd /d "%~dp0"
+more +6 "%~f0" | powershell.exe -NoProfile -ExecutionPolicy Bypass -Command -
+exit /b %errorlevel%
+Write-Host "================================================================" -ForegroundColor Cyan
+Write-Host "       INSTALADOR AUTOMATICO - PUENTE DE WHATSAPP LUGAMED       " -ForegroundColor Cyan
+Write-Host "================================================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Configurando el servicio de WhatsApp para la recepcion..." -ForegroundColor White
 
-chcp 65001 >nul 2>&1
-color 0b
+$targetDir = "$env:USERPROFILE\LugamedWhatsAppBridge"
+if (-not (Test-Path $targetDir)) {
+    New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+}
 
-echo ================================================================
-echo        INSTALADOR AUTOMATICO - PUENTE DE WHATSAPP LUGAMED
-echo ================================================================
-echo.
-echo Este asistente configurara el puente automatico de WhatsApp
-echo en esta computadora para la recepcion de la clinica.
-echo.
-echo Presiona cualquier tecla para comenzar o espera 5 segundos...
-timeout /t 5 >nul
+# 1. Comprobar Node.js
+Write-Host "[1/5] Verificando entorno de ejecucion (Node.js)..." -ForegroundColor Yellow
+$hasNode = $false
+try {
+    $ver = & node -v 2>$null
+    if ($ver) {
+        $hasNode = $true
+        Write-Host "      [OK] Node.js detectado en el sistema: $ver" -ForegroundColor Green
+    }
+} catch {}
 
-set "TARGET_DIR=%USERPROFILE%\LugamedWhatsAppBridge"
-if not exist "%TARGET_DIR%" mkdir "%TARGET_DIR%"
-cd /d "%TARGET_DIR%"
+if (-not $hasNode -and (Test-Path "$targetDir\node\node.exe")) {
+    $hasNode = $true
+    $env:PATH = "$targetDir\node;$env:PATH"
+    Write-Host "      [OK] Node.js portatil detectado en $targetDir\node" -ForegroundColor Green
+}
 
-echo.
-echo [1/5] Verificando entorno de ejecucion (Node.js)...
+if (-not $hasNode) {
+    Write-Host "      [INFO] Node.js no encontrado. Descargando componentes portatiles..." -ForegroundColor Yellow
+    $zipPath = "$env:TEMP\node-portable.zip"
+    $nodeUrl = "https://nodejs.org/dist/v20.18.0/node-v20.18.0-win-x64.zip"
+    
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        (New-Object System.Net.WebClient).DownloadFile($nodeUrl, $zipPath)
+    } catch {
+        Invoke-WebRequest -Uri $nodeUrl -OutFile $zipPath
+    }
 
-set "HAS_NODE=0"
-where node >nul 2>&1
-if %errorlevel% equ 0 (
-    set "HAS_NODE=1"
-    echo       [OK] Node.js detectado en el sistema.
-) else if exist "%TARGET_DIR%\node\node.exe" (
-    set "HAS_NODE=1"
-    set "PATH=%TARGET_DIR%\node;%PATH%"
-    echo       [OK] Node.js portatil detectado en %TARGET_DIR%\node
-)
+    Write-Host "      [INFO] Descomprimiendo en $targetDir\node..." -ForegroundColor Yellow
+    Expand-Archive -Path $zipPath -DestinationPath $targetDir -Force
+    if (Test-Path "$targetDir\node-v20.18.0-win-x64") {
+        if (Test-Path "$targetDir\node") { Remove-Item -Path "$targetDir\node" -Recurse -Force }
+        Rename-Item -Path "$targetDir\node-v20.18.0-win-x64" -NewName "node"
+    }
+    Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue
+    $env:PATH = "$targetDir\node;$env:PATH"
+    Write-Host "      [OK] Node.js configurado exitosamente." -ForegroundColor Green
+}
 
-if "!HAS_NODE!"=="0" (
-    echo       [INFO] Node.js no encontrado. Descargando componentes portatiles...
-    echo       Descargando Node.js LTS oficial (esto solo se realiza la primera vez)...
-    curl.exe -fSL -# -o "%TEMP%\node-portable.zip" "https://nodejs.org/dist/v20.18.0/node-v20.18.0-win-x64.zip"
-    if %errorlevel% neq 0 (
-        echo       [ERROR] No se pudo descargar Node.js. Por favor verifica la conexion a Internet.
-        echo.
-        pause
-        exit /b 1
-    )
-    echo       [INFO] Descomprimiendo componentes en %TARGET_DIR%\node...
-    tar.exe -xf "%TEMP%\node-portable.zip" -C "%TARGET_DIR%"
-    if exist "%TARGET_DIR%\node-v20.18.0-win-x64" (
-        move /y "%TARGET_DIR%\node-v20.18.0-win-x64" "%TARGET_DIR%\node" >nul 2>&1
-    )
-    del "%TEMP%\node-portable.zip" >nul 2>&1
-    set "PATH=%TARGET_DIR%\node;%PATH%"
-    echo       [OK] Node.js portatil configurado exitosamente.
-)
+# 2. Descargar archivos del puente
+Write-Host "`n[2/5] Descargando archivos actualizados del puente..." -ForegroundColor Yellow
+$baseUrl = "https://gestion-consultorio-gules.vercel.app/bridge"
+$files = @("server.js", "package.json", "start-bridge.bat", "start-bridge-silent.vbs")
 
-echo.
-echo [2/5] Descargando componentes actualizados del puente...
-set "BASE_URL=https://gestion-consultorio-gules.vercel.app/bridge"
+foreach ($f in $files) {
+    $dest = Join-Path $targetDir $f
+    $url = "$baseUrl/$f"
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        (New-Object System.Net.WebClient).DownloadFile($url, $dest)
+    } catch {
+        Invoke-WebRequest -Uri $url -OutFile $dest
+    }
+}
+Write-Host "      [OK] Archivos del puente listos en: $targetDir" -ForegroundColor Green
 
-curl.exe -fsSL "%BASE_URL%/server.js" -o "%TARGET_DIR%\server.js"
-curl.exe -fsSL "%BASE_URL%/package.json" -o "%TARGET_DIR%\package.json"
-curl.exe -fsSL "%BASE_URL%/start-bridge.bat" -o "%TARGET_DIR%\start-bridge.bat"
-curl.exe -fsSL "%BASE_URL%/start-bridge-silent.vbs" -o "%TARGET_DIR%\start-bridge-silent.vbs"
+# 3. Instalar librerias de Node.js
+Write-Host "`n[3/5] Instalando librerias requeridas (esto toma ~20 segundos)..." -ForegroundColor Yellow
+$env:PUPPETEER_SKIP_DOWNLOAD = "true"
+$env:PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
+Set-Location -Path $targetDir
 
-if not exist "%TARGET_DIR%\server.js" (
-    echo [ERROR] No se pudieron descargar los archivos del puente. Verifica tu conexion a Internet.
-    echo.
-    pause
-    exit /b 1
-)
-echo       [OK] Componentes descargados correctamente en:
-echo            %TARGET_DIR%
+$npmCmd = if (Test-Path "$targetDir\node\npm.cmd") { "$targetDir\node\npm.cmd" } else { (Get-Command npm.cmd -ErrorAction SilentlyContinue).Source }
+if (-not $npmCmd) { $npmCmd = "npm.cmd" }
+& cmd.exe /c "cd /d `"$targetDir`" && `"$npmCmd`" install --omit=dev --no-audit --no-fund"
+Write-Host "      [OK] Librerias instaladas." -ForegroundColor Green
 
-echo.
-echo [3/5] Instalando librerias de comunicacion (esto tomara unos 20-40 segundos)...
-set PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-call npm install --omit=dev --no-audit --no-fund
-if %errorlevel% neq 0 (
-    if exist "%TARGET_DIR%\node\npm.cmd" (
-        call "%TARGET_DIR%\node\npm.cmd" install --omit=dev --no-audit --no-fund
-    )
-)
-echo       [OK] Librerias instaladas y listas.
+# 4. Configurar auto-inicio al encender Windows
+Write-Host "`n[4/5] Configurando auto-arranque silencioso al encender la PC..." -ForegroundColor Yellow
+$startupDir = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
+if (Test-Path $startupDir) {
+    Copy-Item -Path "$targetDir\start-bridge-silent.vbs" -Destination "$startupDir\Lugamed-WhatsApp-Bridge.vbs" -Force
+    Write-Host "      [OK] Configurado en Inicio de Windows (Startup)." -ForegroundColor Green
+}
 
-echo.
-echo [4/5] Configurando inicio automatico al encender la computadora...
+# Registrar protocolo lugamed-bridge:// en HKCU
+New-Item -Path "HKCU:\Software\Classes\lugamed-bridge" -Force | Out-Null
+Set-ItemProperty -Path "HKCU:\Software\Classes\lugamed-bridge" -Name "(Default)" -Value "URL:Lugamed Bridge Protocol"
+Set-ItemProperty -Path "HKCU:\Software\Classes\lugamed-bridge" -Name "URL Protocol" -Value ""
+New-Item -Path "HKCU:\Software\Classes\lugamed-bridge\shell\open\command" -Force | Out-Null
+Set-ItemProperty -Path "HKCU:\Software\Classes\lugamed-bridge\shell\open\command" -Name "(Default)" -Value "wscript.exe `"$targetDir\start-bridge-silent.vbs`" `"%1`""
+Write-Host "      [OK] Protocolo de enlace web activado." -ForegroundColor Green
 
-:: 1. Carpeta de Inicio de Windows (Startup)
-set "STARTUP_DIR=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
-if exist "%STARTUP_DIR%" (
-    copy /Y "%TARGET_DIR%\start-bridge-silent.vbs" "%STARTUP_DIR%\Lugamed-WhatsApp-Bridge.vbs" >nul
-    echo       [OK] Auto-inicio registrado en Inicio de Windows (Startup).
-)
+# Acceso directo en el Escritorio
+$wsh = New-Object -ComObject WScript.Shell
+$shortcut = $wsh.CreateShortcut("$env:USERPROFILE\Desktop\Iniciar WhatsApp Bridge.lnk")
+$shortcut.TargetPath = "wscript.exe"
+$shortcut.Arguments = "`"$targetDir\start-bridge-silent.vbs`""
+$shortcut.WorkingDirectory = $targetDir
+$shortcut.Description = "Iniciar Microservicio de WhatsApp Bridge Lugamed"
+$shortcut.Save()
+Write-Host "      [OK] Acceso directo creado en el Escritorio." -ForegroundColor Green
 
-:: 2. Protocolo de activacion instantanea lugamed-bridge://
-reg add "HKCU\Software\Classes\lugamed-bridge" /ve /d "URL:Lugamed Bridge Protocol" /f >nul 2>&1
-reg add "HKCU\Software\Classes\lugamed-bridge" /v "URL Protocol" /d "" /f >nul 2>&1
-reg add "HKCU\Software\Classes\lugamed-bridge\shell\open\command" /ve /d "wscript.exe \"%TARGET_DIR%\start-bridge-silent.vbs\" \"%%1\"" /f >nul 2>&1
-echo       [OK] Protocolo de enlace web activado.
+# 5. Iniciar inmediatamente el servicio en segundo plano
+Write-Host "`n[5/5] Iniciando microservicio de WhatsApp en segundo plano..." -ForegroundColor Yellow
+Start-Process -FilePath "wscript.exe" -ArgumentList "`"$targetDir\start-bridge-silent.vbs`"" -WorkingDirectory $targetDir
 
-:: 3. Acceso directo en el Escritorio
-set "SHORTCUT_VBS=%TEMP%\create_shortcut.vbs"
-(
-    echo Set oWS = WScript.CreateObject^("WScript.Shell"^)
-    echo sLinkFile = "%USERPROFILE%\Desktop\Iniciar WhatsApp Bridge.lnk"
-    echo Set oLink = oWS.CreateShortcut^(sLinkFile^)
-    echo oLink.TargetPath = "wscript.exe"
-    echo oLink.Arguments = """%TARGET_DIR%\start-bridge-silent.vbs"""
-    echo oLink.WorkingDirectory = "%TARGET_DIR%"
-    echo oLink.Description = "Iniciar Microservicio de WhatsApp Bridge Lugamed"
-    echo oLink.Save
-) > "%SHORTCUT_VBS%"
-cscript //nologo "%SHORTCUT_VBS%" >nul 2>&1
-del "%SHORTCUT_VBS%" >nul 2>&1
-echo       [OK] Acceso directo creado en el Escritorio.
-
-echo.
-echo [5/5] Iniciando microservicio de WhatsApp en segundo plano...
-wscript.exe "%TARGET_DIR%\start-bridge-silent.vbs"
-
-echo.
-color 0a
-echo ================================================================
-echo   ¡INSTALACION Y CONFIGURACION COMPLETADA CON EXITO!
-echo.
-echo   El puente ya se encuentra ejecutandose en segundo plano.
-echo.
-echo   Paso siguiente:
-echo   1. Regresa a la ventana de la clinica en tu navegador web.
-echo   2. La pantalla detectara automaticamente la conexion.
-echo   3. Escanea el codigo QR que aparecera en pantalla con tu celular.
-echo.
-echo   Esta ventana se cerrara automaticamente en 8 segundos...
-echo ================================================================
-timeout /t 8 >nul
-exit /b 0
+Write-Host "`n================================================================" -ForegroundColor Green
+Write-Host "       ¡INSTALACION Y CONFIGURACION COMPLETADA CON EXITO!       " -ForegroundColor Green
+Write-Host "================================================================" -ForegroundColor Green
+Write-Host "El servicio ya esta activo en segundo plano.`n" -ForegroundColor White
+Write-Host "Regresa a la ventana de la clinica en tu navegador." -ForegroundColor Cyan
+Write-Host "La pantalla detectara automaticamente la conexion y te mostrara" -ForegroundColor Cyan
+Write-Host "el codigo QR para vincular WhatsApp en tu celular.`n" -ForegroundColor Cyan
+Write-Host "Esta ventana se cerrara en 8 segundos..." -ForegroundColor Gray
+Start-Sleep -Seconds 8
