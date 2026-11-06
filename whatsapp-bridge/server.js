@@ -30,18 +30,39 @@ app.use(express.json());
 
 const puppeteerOptions = {
   handleSIGINT: false,
-  args: ['--no-sandbox', '--disable-setuid-sandbox']
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-accelerated-2d-canvas',
+    '--no-first-run',
+    '--no-zygote',
+    '--disable-gpu'
+  ]
 };
 
-// Fallback de ruta de Chrome en Windows
+// Auto-detección de navegador Chromium (Chrome, Edge o Brave) en Windows
 if (process.platform === 'win32') {
-  const defaultChromePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-  if (fs.existsSync(defaultChromePath)) {
-    puppeteerOptions.executablePath = defaultChromePath;
+  const possiblePaths = [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'Application', 'chrome.exe') : null,
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Microsoft', 'Edge', 'Application', 'msedge.exe') : null,
+    'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe'
+  ].filter(Boolean);
+
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      console.log(`🧭 Navegador Chromium detectado en Windows: ${p}`);
+      puppeteerOptions.executablePath = p;
+      break;
+    }
   }
 }
 
-// Permitir personalización mediante variable de entorno
+// Permitir personalización mediante variable de entorno si se especifica
 if (process.env.PUPPETEER_EXECUTABLE_PATH) {
   puppeteerOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
 }

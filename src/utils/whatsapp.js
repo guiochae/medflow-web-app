@@ -201,7 +201,7 @@ function showBridgeNotificationWarning(payload, errorDetails) {
     </p>
     <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; flex-wrap: wrap;">
       <button id="btn-close-bridge-warning" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-muted); padding: 6px 12px; border-radius: 4px; font-size: 0.75rem; cursor: pointer;">Cerrar</button>
-      <button id="btn-start-bridge-now" style="background: var(--accent-primary); border: none; color: white; padding: 6px 12px; border-radius: 4px; font-size: 0.75rem; cursor: pointer;">🚀 Iniciar Puente</button>
+      <button id="btn-open-installer" style="background: var(--accent-primary); border: none; color: white; padding: 6px 12px; border-radius: 4px; font-size: 0.75rem; cursor: pointer;">📥 Instalar / Iniciar Puente</button>
       <a href="${fallbackUrl}" target="_blank" id="btn-open-fallback-manual" style="background: var(--accent-danger); border: none; color: white; padding: 6px 12px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; text-decoration: none; display: inline-block; text-align: center;">Enviar Manual</a>
     </div>
   `;
@@ -227,7 +227,7 @@ function showBridgeNotificationWarning(payload, errorDetails) {
   // Asignar listeners para cerrar la alerta
   const closeBtn = warningDiv.querySelector('#btn-close-bridge-warning');
   const manualLink = warningDiv.querySelector('#btn-open-fallback-manual');
-  const startBridgeBtn = warningDiv.querySelector('#btn-start-bridge-now');
+  const openInstallerBtn = warningDiv.querySelector('#btn-open-installer');
 
   const removeWarning = () => {
     warningDiv.style.animation = 'slideIn 0.2s reverse ease-in';
@@ -239,14 +239,10 @@ function showBridgeNotificationWarning(payload, errorDetails) {
 
   closeBtn.addEventListener('click', removeWarning);
   manualLink.addEventListener('click', removeWarning);
-  if (startBridgeBtn) {
-    startBridgeBtn.addEventListener('click', async () => {
-      startBridgeBtn.disabled = true;
-      startBridgeBtn.textContent = 'Iniciando...';
-      triggerLaunchWhatsAppBridge();
-      await new Promise(r => setTimeout(r, 2500));
+  if (openInstallerBtn) {
+    openInstallerBtn.addEventListener('click', () => {
       removeWarning();
-      notifyDoctorViaWhatsApp(payload.nombreMedico, payload.telefonoMedico, payload.nombrePaciente);
+      showWhatsAppInstallationModal();
     });
   }
 
@@ -341,6 +337,166 @@ export function showWhatsAppQrModal(qrData) {
 }
 
 /**
+ * Muestra un modal interactivo con el instalador automático de WhatsApp
+ * para cualquier computadora de recepción donde el puente aún no esté instalado o ejecutándose.
+ */
+export function showWhatsAppInstallationModal() {
+  const existingModal = document.getElementById('whatsapp-install-modal');
+  if (existingModal) existingModal.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'whatsapp-install-modal';
+  modal.style.position = 'fixed';
+  modal.style.inset = '0';
+  modal.style.zIndex = '999998';
+  modal.style.display = 'flex';
+  modal.style.alignItems = 'center';
+  modal.style.justifyContent = 'center';
+  modal.style.background = 'rgba(0, 0, 0, 0.82)';
+  modal.style.backdropFilter = 'blur(8px)';
+  modal.style.padding = '16px';
+
+  modal.innerHTML = `
+    <div class="glass-card" style="background: #141422; border: 1px solid var(--accent-primary); border-radius: 14px; padding: 26px; max-width: 520px; width: 100%; box-shadow: 0 20px 45px rgba(0,0,0,0.8); animation: slideIn 0.3s ease-out; max-height: 90vh; overflow-y: auto;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.8rem;">📲</span>
+          <h3 style="margin: 0; color: var(--text-primary); font-family: var(--font-heading); font-size: 1.25rem;">
+            WhatsApp Automático para Recepción
+          </h3>
+        </div>
+        <button id="btn-close-wa-install-x" style="background: none; border: none; color: var(--text-muted); font-size: 1.4rem; cursor: pointer; padding: 4px 8px; border-radius: 4px;">&times;</button>
+      </div>
+
+      <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.5; margin: 0 0 16px 0;">
+        Para enviar automáticamente los mensajes a los médicos al ingresar o asignar pacientes, instala el puente oficial en esta computadora con un solo clic:
+      </p>
+
+      <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 16px; margin-bottom: 18px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: flex; gap: 12px; align-items: flex-start;">
+          <div style="background: var(--accent-primary); color: white; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.85rem; flex-shrink: 0;">1</div>
+          <div style="flex: 1;">
+            <strong style="color: var(--text-primary); font-size: 0.9rem; display: block; margin-bottom: 6px;">Descarga el instalador automático:</strong>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <a href="/bridge/Instalador-WhatsApp-Lugamed.bat" download="Instalador-WhatsApp-Lugamed.bat" style="background: #22c55e; color: #0f172a; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);">
+                <span>📥</span> Descargar Instalador (.BAT)
+              </a>
+              <a href="/bridge/Instalador-WhatsApp-Lugamed.zip" download="Instalador-WhatsApp-Lugamed.zip" style="background: rgba(255,255,255,0.08); color: var(--text-primary); text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: 600; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border-color);">
+                <span>📦</span> Opción ZIP
+              </a>
+            </div>
+            <span style="font-size: 0.74rem; color: var(--text-muted); display: block; margin-top: 6px;">
+              💡 Si el navegador muestra advertencia al descargar, selecciona "Conservar" o "Descargar de todos modos".
+            </span>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; align-items: flex-start;">
+          <div style="background: var(--accent-primary); color: white; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.85rem; flex-shrink: 0;">2</div>
+          <div style="flex: 1;">
+            <strong style="color: var(--text-primary); font-size: 0.9rem; display: block;">Ejecuta el archivo descargado (doble clic)</strong>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin: 4px 0 0 0; line-height: 1.4;">
+              El asistente configurará todo en segundo plano y activará el inicio automático al encender esta computadora.
+            </p>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; align-items: flex-start;">
+          <div style="background: var(--accent-primary); color: white; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.85rem; flex-shrink: 0;">3</div>
+          <div style="flex: 1;">
+            <strong style="color: var(--text-primary); font-size: 0.9rem; display: block;">Escanea el código QR de WhatsApp</strong>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin: 4px 0 0 0; line-height: 1.4;">
+              En cuanto el instalador inicie el puente, esta pantalla te mostrará automáticamente el código QR para vincular WhatsApp en tu celular.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div id="wa-installer-live-indicator" style="background: rgba(234, 179, 8, 0.1); border: 1px dashed rgba(234, 179, 8, 0.4); border-radius: 8px; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.85rem; color: #eab308; margin-bottom: 18px;">
+        <span class="wa-indicator-dot connecting"></span>
+        <span id="wa-installer-status-text">Detectando microservicio en esta computadora...</span>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <button id="btn-dismiss-wa-install" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-muted); padding: 8px 16px; border-radius: 6px; font-size: 0.82rem; cursor: pointer;">
+          Configurar más tarde
+        </button>
+        <button id="btn-recheck-wa-bridge" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border-color); color: var(--text-primary); padding: 8px 16px; border-radius: 6px; font-size: 0.82rem; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+          <span>🔄</span> Verificar Conexión
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const closeModal = (remember = false) => {
+    if (remember) {
+      sessionStorage.setItem('wa_install_modal_dismissed', 'true');
+    }
+    if (document.body.contains(modal)) {
+      modal.remove();
+    }
+  };
+
+  const closeX = modal.querySelector('#btn-close-wa-install-x');
+  const dismissBtn = modal.querySelector('#btn-dismiss-wa-install');
+  const recheckBtn = modal.querySelector('#btn-recheck-wa-bridge');
+  const statusBox = modal.querySelector('#wa-installer-live-indicator');
+  const statusText = modal.querySelector('#wa-installer-status-text');
+
+  if (closeX) closeX.onclick = () => closeModal(true);
+  if (dismissBtn) dismissBtn.onclick = () => closeModal(true);
+
+  const checkAndTransition = async () => {
+    const status = await checkWhatsAppBridgeStatus();
+    if (status.online) {
+      if (statusBox && statusText) {
+        statusBox.style.background = 'rgba(34, 197, 94, 0.15)';
+        statusBox.style.borderColor = 'rgba(34, 197, 94, 0.5)';
+        statusBox.style.color = '#22c55e';
+        statusText.textContent = '✅ ¡Puente de WhatsApp detectado e iniciado!';
+      }
+      setTimeout(() => {
+        closeModal(false);
+        updateWhatsAppPillUI(status);
+        if (status.qr && !status.isReady) {
+          showWhatsAppQrModal(status.qr);
+        }
+      }, 1200);
+      return true;
+    }
+    return false;
+  };
+
+  if (recheckBtn) {
+    recheckBtn.onclick = async () => {
+      recheckBtn.disabled = true;
+      recheckBtn.textContent = 'Verificando...';
+      triggerLaunchWhatsAppBridge();
+      await new Promise(r => setTimeout(r, 1500));
+      const online = await checkAndTransition();
+      if (!online) {
+        recheckBtn.disabled = false;
+        recheckBtn.innerHTML = '<span>🔄</span> Verificar Conexión';
+      }
+    };
+  }
+
+  // Polling automático mientras el modal esté visible
+  const installPollInterval = setInterval(async () => {
+    if (!document.body.contains(modal)) {
+      clearInterval(installPollInterval);
+      return;
+    }
+    const online = await checkAndTransition();
+    if (online) {
+      clearInterval(installPollInterval);
+    }
+  }, 2000);
+}
+
+/**
  * Inicializa el monitoreo y el indicador de estado de WhatsApp para el rol de RECEPCIONISTA.
  * @param {Object} currentUser - Usuario autenticado
  */
@@ -425,6 +581,14 @@ export function initWhatsAppReceptionistBridge(currentUser) {
   // 3. Iniciar comprobación y auto-arranque si está offline
   ensureWhatsAppBridgeRunning().then(status => {
     updateWhatsAppPillUI(status);
+    if (!status.online) {
+      const dismissed = sessionStorage.getItem('wa_install_modal_dismissed');
+      if (!dismissed) {
+        showWhatsAppInstallationModal();
+      }
+    } else if (status.qr && !status.isReady) {
+      showWhatsAppQrModal(status.qr);
+    }
   });
 
   // 4. Polling periódico cada 15 segundos
@@ -445,8 +609,8 @@ export function updateWhatsAppPillUI(status) {
 
   let stateClass = 'offline';
   let dotClass = 'offline';
-  let labelText = 'WhatsApp Inactivo (Iniciar)';
-  let tooltipText = 'El puente de WhatsApp no está activo. Haz clic para iniciarlo automáticamente.';
+  let labelText = 'WhatsApp Inactivo (Instalar)';
+  let tooltipText = 'El puente de WhatsApp no está instalado o activo en esta computadora. Haz clic para instalar o iniciar.';
 
   if (status.online) {
     if (status.isReady) {
@@ -483,20 +647,7 @@ export function updateWhatsAppPillUI(status) {
       if (status.online && status.qr && !status.isReady) {
         showWhatsAppQrModal(status.qr);
       } else if (!status.online) {
-        pill.className = 'whatsapp-status-pill connecting';
-        pill.innerHTML = `
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <span class="wa-indicator-dot connecting"></span>
-            <span>Iniciando puente...</span>
-          </div>
-        `;
-        triggerLaunchWhatsAppBridge();
-        await new Promise(r => setTimeout(r, 2000));
-        const newSt = await checkWhatsAppBridgeStatus();
-        updateWhatsAppPillUI(newSt);
-        if (newSt.online && newSt.qr && !newSt.isReady) {
-          showWhatsAppQrModal(newSt.qr);
-        }
+        showWhatsAppInstallationModal();
       } else if (status.isReady) {
         alert("✅ Microservicio de WhatsApp Bridge Activo y Conectado.\n\nLos mensajes automáticos a los médicos asignados se enviarán inmediatamente desde esta computadora.");
       }

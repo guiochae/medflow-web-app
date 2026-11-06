@@ -5,6 +5,10 @@ title Lugamed - WhatsApp Bridge
 set "SCRIPT_DIR=%~dp0"
 cd /d "%SCRIPT_DIR%"
 
+if exist "%SCRIPT_DIR%node\node.exe" (
+    set "PATH=%SCRIPT_DIR%node;%PATH%"
+)
+
 echo ========================================================
 echo    LUGAMED - Microservicio WhatsApp Bridge
 echo ========================================================

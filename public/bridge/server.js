@@ -1,0 +1,228 @@
+import express from 'express';
+import cors from 'cors';
+import qrcode from 'qrcode-terminal';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import pkg from 'whatsapp-web.js';
+const { Client, LocalAuth } = pkg;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const authPath = path.join(__dirname, '.wwebjs_auth');
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// Habilitar CORS y Private Network Access para permitir peticiones desde Vercel (HTTPS) hacia localhost (HTTP)
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+  res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
+app.use(cors());
+app.use(express.json());
+
+const puppeteerOptions = {
+  handleSIGINT: false,
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-accelerated-2d-canvas',
+    '--no-first-run',
+    '--no-zygote',
+    '--disable-gpu'
+  ]
+};
+
+// Auto-detección de navegador Chromium (Chrome, Edge o Brave) en Windows
+if (process.platform === 'win32') {
+  const possiblePaths = [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'Application', 'chrome.exe') : null,
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Microsoft', 'Edge', 'Application', 'msedge.exe') : null,
+    'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe'
+  ].filter(Boolean);
+
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      console.log(`🧭 Navegador Chromium detectado en Windows: ${p}`);
+      puppeteerOptions.executablePath = p;
+      break;
+    }
+  }
+}
+
+// Permitir personalización mediante variable de entorno si se especifica
+if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+  puppeteerOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+}
+
+// Inicializar el cliente de WhatsApp Web con ruta absoluta a la sesión guardada
+const client = new Client({
+  authStrategy: new LocalAuth({
+    dataPath: authPath
+  }),
+  puppeteer: puppeteerOptions
+});
+
+let isReady = false;
+let latestQr = null;
+
+// Evento de generación del código QR en terminal
+client.on('qr', (qr) => {
+  latestQr = qr;
+  console.log('\n======================================================');
+  console.log('📌 ESCANEA ESTE CÓDIGO QR EN TU CELULAR PARA INICIAR SESIÓN:');
+  console.log('======================================================\n');
+  qrcode.generate(qr, { small: true });
+});
+
+// Evento de cliente listo
+client.on('ready', () => {
+  console.log('\n✅ ¡Cliente de WhatsApp Web listo y autenticado exitosamente!\n');
+  isReady = true;
+});
+
+// Evento de fallo de autenticación
+client.on('auth_failure', (msg) => {
+  console.error('❌ Fallo de autenticación en WhatsApp:', msg);
+  isReady = false;
+});
+
+// Evento de desconexión
+client.on('disconnected', (reason) => {
+  console.warn('⚠️ Sesión de WhatsApp desconectada:', reason);
+  isReady = false;
+  // Re-inicialización automática
+  client.initialize().catch(err => console.error("Error al re-inicializar:", err));
+});
+
+client.initialize().catch(err => {
+  console.error("Error inicial en client.initialize():", err);
+});
+
+// Endpoint POST /api/notify-doctor
+app.post('/api/notify-doctor', async (req, res) => {
+  const { nombreMedico, telefonoMedico, nombrePaciente } = req.body;
+
+  if (!nombreMedico || !telefonoMedico || !nombrePaciente) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Faltan parámetros requeridos (nombreMedico, telefonoMedico, nombrePaciente).' 
+    });
+  }
+
+  if (!isReady) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'El bot de WhatsApp aún no está listo. Por favor escanea el código QR en la terminal.' 
+    });
+  }
+
+  try {
+    // 1. Limpieza de formato del número telefónico (remover espacios, guiones y caracteres no numéricos)
+    let cleanPhone = String(telefonoMedico).replace(/[^0-9]/g, '');
+
+    // Validación de código de área internacional (longitud de 8 dígitos para Guatemala)
+    if (cleanPhone.length === 8) {
+      cleanPhone = '502' + cleanPhone;
+    }
+
+    // 2. Construcción del identificador de chat requerido por whatsapp-web.js
+    const chatId = `${cleanPhone}@c.us`;
+
+    // 3. Template del mensaje solicitado al pie de la letra
+    const message = `Estimado ${nombreMedico}, el paciente ${nombrePaciente} espera por tu atencion en tu consultorio`;
+
+    // 4. Enviar el mensaje en segundo plano de forma invisible
+    await client.sendMessage(chatId, message);
+
+    console.log(`✉️ Notificación enviada a: ${nombreMedico} (Tel: ${cleanPhone}) | Paciente: ${nombrePaciente}`);
+    
+    return res.status(200).json({ 
+      success: true, 
+      message: 'Mensaje enviado de forma automatizada.' 
+    });
+
+  } catch (error) {
+    console.error('❌ Error al enviar mensaje a través del bot:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Error interno del servidor al procesar la notificación en WhatsApp.',
+      details: error.message 
+    });
+  }
+});
+
+// Endpoint POST /api/notify-employee
+app.post('/api/notify-employee', async (req, res) => {
+  const { employeeName, phoneNumber, employeeCode } = req.body;
+
+  if (!employeeName || !phoneNumber || !employeeCode) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Faltan parámetros requeridos (employeeName, phoneNumber, employeeCode).' 
+    });
+  }
+
+  if (!isReady) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'El bot de WhatsApp aún no está listo. Por favor escanea el código QR en la terminal.' 
+    });
+  }
+
+  try {
+    let cleanPhone = String(phoneNumber).replace(/[^0-9]/g, '');
+    if (cleanPhone.length === 8) {
+      cleanPhone = '502' + cleanPhone;
+    }
+
+    const chatId = `${cleanPhone}@c.us`;
+    const message = `🏥 *Hospital Privado Multimédica Sayaxché*\n\nEstimado(a) *${employeeName}*,\nBienvenido a LUGAMED. Tu código único de colaborador asignado para el control de asistencia es:\n\n🔑 *${employeeCode}*\n\nPor favor, ingresa este código cada vez que escanees el código QR dinámico de la clínica al iniciar o finalizar tu jornada.`;
+
+    await client.sendMessage(chatId, message);
+    console.log(`✉️ Código de asistencia enviado a: ${employeeName} (${cleanPhone}) | Código: ${employeeCode}`);
+
+    return res.status(200).json({ 
+      success: true, 
+      message: 'Código de colaborador enviado exitosamente.' 
+    });
+  } catch (error) {
+    console.error('❌ Error al enviar código a través del bot:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Error interno al enviar mensaje de empleado.',
+      details: error.message 
+    });
+  }
+});
+
+// Endpoint GET /api/ping (Verificación rápida de conectividad)
+app.get('/api/ping', (req, res) => {
+  return res.status(200).json({ ok: true, isReady });
+});
+
+// Endpoint GET /api/status
+app.get('/api/status', (req, res) => {
+  return res.status(200).json({
+    success: true,
+    isReady: isReady,
+    qr: isReady ? null : latestQr
+  });
+});
+
+// Levantar el Servidor Express
+app.listen(PORT, () => {
+  console.log(`🚀 Microservicio WhatsApp local escuchando en http://localhost:${PORT}`);
+});
