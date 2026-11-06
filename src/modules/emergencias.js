@@ -81,7 +81,231 @@ let tempNurseSupplies = [];
 // Pestaña activa en la consola ('evolucion', 'enfermeria', 'cuenta', 'egreso')
 let activeTab = 'evolucion';
 
+// Dictado por voz continuo en emergencias con control manual
+let activeEmergDictation = null;
+
+export function stopAnyActiveEmergDictation() {
+  if (activeEmergDictation) {
+    try {
+      activeEmergDictation.stop();
+    } catch (e) {
+      console.warn("Error stopping active dictation:", e);
+    }
+    activeEmergDictation = null;
+  }
+}
+
+function initEmergVoiceDictation(container = document) {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!document.getElementById('emerg-dictate-styles')) {
+    const style = document.createElement('style');
+    style.id = 'emerg-dictate-styles';
+    style.textContent = `
+      @keyframes emerg-pulse-mic {
+        0% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.22); opacity: 0.6; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      .btn-dictate-emerg {
+        transition: all 0.2s ease;
+      }
+      .btn-dictate-emerg:hover {
+        background: rgba(255, 255, 255, 0.12) !important;
+        border-color: var(--accent-primary) !important;
+        color: var(--text-primary) !important;
+      }
+      .btn-dictate-emerg.listening {
+        background: rgba(239, 68, 68, 0.18) !important;
+        border-color: #ef4444 !important;
+        color: #ef4444 !important;
+        box-shadow: 0 0 10px rgba(239, 68, 68, 0.45);
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  const buttons = container.querySelectorAll('.btn-dictate-emerg');
+  if (!buttons || buttons.length === 0) return;
+
+  if (!SpeechRecognition) {
+    console.warn("Speech Recognition API not supported in this browser.");
+    buttons.forEach(btn => {
+      btn.style.opacity = '0.5';
+      btn.title = "Dictado por voz no disponible en este navegador (se recomienda Chrome o Edge)";
+      btn.onclick = (e) => {
+        e.preventDefault();
+        alert("El dictado por voz no está soportado en este navegador. Le recomendamos utilizar Google Chrome o Microsoft Edge.");
+      };
+    });
+    return;
+  }
+
+  buttons.forEach(btn => {
+    if (btn.dataset.dictationBound === 'true') return;
+    btn.dataset.dictationBound = 'true';
+
+    const targetId = btn.getAttribute('data-target');
+    const targetEl = document.getElementById(targetId);
+    if (!targetEl) return;
+
+    let recognition = null;
+    let isManuallyActive = false;
+
+    function resetBtnState() {
+      isManuallyActive = false;
+      btn.classList.remove('listening');
+      btn.style.background = 'rgba(255, 255, 255, 0.05)';
+      btn.style.borderColor = 'var(--border-color)';
+      btn.style.color = 'var(--text-muted)';
+      btn.title = 'Dictado por voz continuo (Clic para activar / desactivar manualmente)';
+      const mic = btn.querySelector('.mic-icon');
+      if (mic) {
+        mic.textContent = '🎙️';
+        mic.style.animation = 'none';
+      }
+      const st = btn.querySelector('.dictate-status');
+      if (st) {
+        st.textContent = 'Dictar';
+        st.style.color = 'inherit';
+      }
+      if (activeEmergDictation && activeEmergDictation.btn === btn) {
+        activeEmergDictation = null;
+      }
+    }
+
+    function setActiveBtnState() {
+      btn.classList.add('listening');
+      btn.style.background = 'rgba(239, 68, 68, 0.18)';
+      btn.style.borderColor = '#ef4444';
+      btn.style.color = '#ef4444';
+      btn.title = 'Escuchando activamente... Clic para detener el dictado manualmente';
+      const mic = btn.querySelector('.mic-icon');
+      if (mic) {
+        mic.textContent = '🔴';
+        mic.style.animation = 'emerg-pulse-mic 1.2s infinite';
+      }
+      const st = btn.querySelector('.dictate-status');
+      if (st) {
+        st.textContent = 'Escuchando... (Detener)';
+        st.style.color = '#ef4444';
+      }
+    }
+
+    function stopListening() {
+      isManuallyActive = false;
+      if (recognition) {
+        try {
+          recognition.stop();
+        } catch (err) {
+          console.warn("Speech recognition stop error:", err);
+        }
+      }
+      resetBtnState();
+    }
+
+    function createAndStartRecognition() {
+      recognition = new SpeechRecognition();
+      recognition.lang = 'es-GT';
+      recognition.continuous = true;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        setActiveBtnState();
+      };
+
+      recognition.onresult = (event) => {
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            const transcript = event.results[i][0].transcript.trim();
+            if (transcript) {
+              const currentVal = targetEl.value;
+              if (currentVal && !currentVal.endsWith(' ') && !currentVal.endsWith('\n')) {
+                targetEl.value = currentVal + ' ' + transcript;
+              } else {
+                targetEl.value = (currentVal || '') + transcript;
+              }
+              targetEl.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          }
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.warn("Speech Recognition Error:", event.error);
+        if (event.error === 'not-allowed') {
+          isManuallyActive = false;
+          resetBtnState();
+          alert("Acceso denegado al micrófono. Habilite el permiso de micrófono en la configuración del navegador para usar el dictado por voz.");
+        } else if (event.error === 'audio-capture') {
+          isManuallyActive = false;
+          resetBtnState();
+          alert("No se encontró ningún micrófono conectado en este dispositivo.");
+        } else if (event.error === 'no-speech') {
+          // Pausa normal en el habla; no se desactiva hasta que el usuario haga clic para detener
+        } else if (event.error === 'aborted') {
+          // Detenido intencionalmente
+        }
+      };
+
+      recognition.onend = () => {
+        // La escucha solo termina cuando se desactive manualmente por el usuario.
+        // Si el motor del navegador detiene la sesión por silencio temporal, se reinicia de inmediato.
+        if (isManuallyActive) {
+          try {
+            recognition.start();
+          } catch (e) {
+            setTimeout(() => {
+              if (isManuallyActive) {
+                try {
+                  recognition.start();
+                } catch (err) {
+                  try {
+                    createAndStartRecognition();
+                  } catch (reErr) {
+                    console.error("Fallo al reiniciar el reconocimiento de voz:", reErr);
+                  }
+                }
+              }
+            }, 250);
+          }
+        } else {
+          resetBtnState();
+        }
+      };
+
+      try {
+        recognition.start();
+      } catch (err) {
+        console.warn("Error starting speech recognition:", err);
+      }
+    }
+
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (isManuallyActive) {
+        stopListening();
+        return;
+      }
+
+      // Detener cualquier otra casilla que estuviera escuchando
+      stopAnyActiveEmergDictation();
+
+      isManuallyActive = true;
+      activeEmergDictation = {
+        btn: btn,
+        stop: stopListening
+      };
+
+      createAndStartRecognition();
+    });
+  });
+}
+
 export function renderEmergencias(container) {
+  stopAnyActiveEmergDictation();
   const state = getAppState();
   const currentUser = state.currentUser;
 
@@ -263,6 +487,7 @@ function renderEmergPatientList() {
 
 // 4. Renderizar panel principal del dashboard
 function renderEmergDashboard() {
+  stopAnyActiveEmergDictation();
   const state = getAppState();
   const dashboardArea = document.getElementById('emerg-dashboard-area');
   if (!dashboardArea) return;
@@ -595,6 +820,7 @@ function renderEmergDashboard() {
 
 // 5. Formulario de Ingreso a Emergencias
 function renderEmergAdmissionForm(targetPatientId = null) {
+  stopAnyActiveEmergDictation();
   const state = getAppState();
   const dashboardArea = document.getElementById('emerg-dashboard-area');
   if (!dashboardArea) return;
@@ -649,13 +875,23 @@ function renderEmergAdmissionForm(targetPatientId = null) {
             <input type="number" id="adm-stay-cost" required min="0" step="0.01" value="150.00" style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
           </div>
           <div class="form-group">
-            <label>Motivo de Consulta (Triage Inicial)</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <label for="adm-reason-summary" style="margin-bottom: 0;">Motivo de Consulta (Triage Inicial)</label>
+              <button type="button" class="btn-dictate-emerg" data-target="adm-reason-summary" title="Dictado por voz continuo (Clic para activar / desactivar manualmente)" style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); font-size: 0.82rem; cursor: pointer; padding: 2px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; color: var(--text-muted); transition: all 0.2s;">
+                <span class="mic-icon">🎙️</span> <span class="dictate-status" style="font-size: 0.75rem; font-weight: bold;">Dictar</span>
+              </button>
+            </div>
             <input type="text" id="adm-reason-summary" required placeholder="Ej. Dolor abdominal agudo, traumatismo, fiebre alta..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
           </div>
         </div>
 
         <div class="form-group">
-          <label>Nota de Evaluación Física Inicial</label>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label for="adm-reason" style="margin-bottom: 0;">Nota de Evaluación Física Inicial</label>
+            <button type="button" class="btn-dictate-emerg" data-target="adm-reason" title="Dictado por voz continuo (Clic para activar / desactivar manualmente)" style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); font-size: 0.82rem; cursor: pointer; padding: 2px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; color: var(--text-muted); transition: all 0.2s;">
+              <span class="mic-icon">🎙️</span> <span class="dictate-status" style="font-size: 0.75rem; font-weight: bold;">Dictar</span>
+            </button>
+          </div>
           <textarea id="adm-reason" required rows="2" placeholder="Detalle los síntomas, examen físico inicial e indicaciones médicas de urgencia..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical;"></textarea>
         </div>
 
@@ -812,6 +1048,8 @@ function renderEmergAdmissionForm(targetPatientId = null) {
     alert(`Ingreso a Emergencia completado para el paciente ${patientObj.name} en la ${bedName}`);
     renderEmergencias(document.getElementById('module-container'));
   });
+
+  initEmergVoiceDictation(dashboardArea);
 }
 
 // 6. Renderizar pestaña de Evolución Médica
@@ -837,7 +1075,12 @@ function renderEvolucionTab(activeEmerg, patient) {
             </select>
           </div>
           <div class="form-group">
-            <label>Nota Clínico / Evolución Médica</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <label for="emerg-evo-note" style="margin-bottom: 0;">Nota Clínico / Evolución Médica</label>
+              <button type="button" class="btn-dictate-emerg" data-target="emerg-evo-note" title="Dictado por voz continuo (Clic para activar / desactivar manualmente)" style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); font-size: 0.82rem; cursor: pointer; padding: 2px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; color: var(--text-muted); transition: all 0.2s;">
+                <span class="mic-icon">🎙️</span> <span class="dictate-status" style="font-size: 0.75rem; font-weight: bold;">Dictar</span>
+              </button>
+            </div>
             <textarea id="emerg-evo-note" required rows="3" placeholder="Nota S.O.A.P., estado actual del paciente, cambios hemodinámicos, plan..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical; font-size: 0.88rem;"></textarea>
           </div>
           <button type="submit" class="btn btn-primary" style="width: 100%; font-size: 0.85rem; padding: 10px;">💾 Guardar Nota de Evolución</button>
@@ -872,7 +1115,12 @@ function renderEvolucionTab(activeEmerg, patient) {
             </select>
           </div>
           <div class="form-group">
-            <label>Indicaciones de la Prescripción / Órden:</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <label for="emerg-evo-orders-manual" style="margin-bottom: 0;">Indicaciones de la Prescripción / Órden:</label>
+              <button type="button" class="btn-dictate-emerg" data-target="emerg-evo-orders-manual" title="Dictado por voz continuo (Clic para activar / desactivar manualmente)" style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); font-size: 0.82rem; cursor: pointer; padding: 2px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; color: var(--text-muted); transition: all 0.2s;">
+                <span class="mic-icon">🎙️</span> <span class="dictate-status" style="font-size: 0.75rem; font-weight: bold;">Dictar</span>
+              </button>
+            </div>
             <textarea id="emerg-evo-orders-manual" rows="6" placeholder="Escriba aquí los medicamentos, dosis, laboratorios o estudios de imagenología que el paciente requiera..." style="width: 100%; padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical; font-size: 0.88rem; line-height: 1.4;" required></textarea>
           </div>
           <button type="submit" class="btn btn-secondary" style="width: 100%; font-size: 0.85rem; padding: 10px;">💾 Guardar Prescripción / Órdenes</button>
@@ -1084,6 +1332,8 @@ function renderEvolucionTab(activeEmerg, patient) {
       }
     });
   });
+
+  initEmergVoiceDictation(container);
 }
 
 // Función para imprimir nota de evolución o prescripción
@@ -1738,7 +1988,12 @@ function renderEnfermeriaTab(activeEmerg, patient) {
         
         <form id="emerg-nursing-form" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1.25rem;">
           <div class="form-group">
-            <label>Nota / Evolución de Enfermería</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <label for="emerg-nurse-note" style="margin-bottom: 0;">Nota / Evolución de Enfermería</label>
+              <button type="button" class="btn-dictate-emerg" data-target="emerg-nurse-note" title="Dictado por voz continuo (Clic para activar / desactivar manualmente)" style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); font-size: 0.82rem; cursor: pointer; padding: 2px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; color: var(--text-muted); transition: all 0.2s;">
+                <span class="mic-icon">🎙️</span> <span class="dictate-status" style="font-size: 0.75rem; font-weight: bold;">Dictar</span>
+              </button>
+            </div>
             <textarea id="emerg-nurse-note" required rows="2" placeholder="Describa la evolución del paciente, cuidados brindados, insumos administrados..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical; font-size: 0.85rem;"></textarea>
           </div>
 
@@ -1866,6 +2121,7 @@ function renderEnfermeriaTab(activeEmerg, patient) {
   });
 
   renderTempNurseSuppliesList();
+  initEmergVoiceDictation(container);
 }
 
 function renderTempNurseSuppliesList() {
@@ -2086,6 +2342,7 @@ function renderDischargeForm(activeEmerg, patient) {
     return;
   }
 
+  stopAnyActiveEmergDictation();
   const dashboardArea = document.getElementById('emerg-dashboard-area');
   if (!dashboardArea) return;
 
@@ -2106,7 +2363,12 @@ function renderDischargeForm(activeEmerg, patient) {
 
       <form id="emerg-discharge-form" style="display: flex; flex-direction: column; gap: 15px;">
         <div class="form-group">
-          <label>Nota / Epicrisis de Emergencia (Resumen de egreso)</label>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label for="dis-epicrisis" style="margin-bottom: 0;">Nota / Epicrisis de Emergencia (Resumen de egreso)</label>
+            <button type="button" class="btn-dictate-emerg" data-target="dis-epicrisis" title="Dictado por voz continuo (Clic para activar / desactivar manualmente)" style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); font-size: 0.82rem; cursor: pointer; padding: 2px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; color: var(--text-muted); transition: all 0.2s;">
+              <span class="mic-icon">🎙️</span> <span class="dictate-status" style="font-size: 0.75rem; font-weight: bold;">Dictar</span>
+            </button>
+          </div>
           <textarea id="dis-epicrisis" required rows="4" placeholder="Detalle las conclusiones clínicas, indicaciones de egreso para el hogar o indicaciones especiales de traslado..." style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); resize: vertical;"></textarea>
         </div>
 
@@ -2295,6 +2557,8 @@ function renderDischargeForm(activeEmerg, patient) {
     alert(`Alta autorizada para ${patient.name}. La pre-factura por valor de Q${grandTotal.toFixed(2)} ha sido enviada al módulo de Facturación.`);
     renderEmergencias(document.getElementById('module-container'));
   });
+
+  initEmergVoiceDictation(dashboardArea);
 }
 
 function hideChecklistDefaultElements(modal) {

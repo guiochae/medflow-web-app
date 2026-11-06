@@ -6,7 +6,7 @@ import { renderImagenologia } from './modules/imagenologia.js';
 import { renderConfiguracion } from './modules/configuracion.js';
 import { renderFarmacia } from './modules/farmacia.js';
 import { renderEncamamiento } from './modules/encamamiento.js';
-import { renderEmergencias } from './modules/emergencias.js';
+import { renderEmergencias, stopAnyActiveEmergDictation } from './modules/emergencias.js';
 import { renderQuirofano } from './modules/quirofano.js';
 import { renderAdministracion } from './modules/administracion.js';
 import { initQrWidget, removeQrWidget } from './modules/qrWidget.js';
@@ -916,6 +916,7 @@ export function router(route) {
   const container = document.getElementById('module-container') || document.getElementById('main-content-area');
   if (!container) return;
 
+  stopAnyActiveEmergDictation();
   container.innerHTML = '';
   
   switch(route) {
