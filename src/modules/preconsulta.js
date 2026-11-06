@@ -348,7 +348,7 @@ function showNewPatientForm() {
     saveAppState(stateObj);
 
     // Enviar notificación al médico asignado de forma asíncrona a través de WhatsApp local
-    const doctorPhone = docObj && docObj.phone ? docObj.phone : '';
+    const doctorPhone = (docObj && (docObj.phone || docObj.telefono || docObj.whatsapp_number)) || '';
     if (doctorPhone) {
       notifyDoctorViaWhatsApp(assignedDoctorName, doctorPhone, newPatient.name)
         .catch(err => console.error("Error al enviar notificación de WhatsApp:", err));
@@ -515,6 +515,7 @@ function showEditPatientForm(patient) {
       return;
     }
 
+    const prevDoctorId = pObj.assignedDoctorId;
     const docSelect = document.getElementById('ep-assigned-doctor');
     const assignedDoctorId = docSelect.value;
     const docObj = (stateObj.users || []).find(u => u.id === assignedDoctorId);
@@ -540,6 +541,16 @@ function showEditPatientForm(patient) {
     }
 
     saveAppState(stateObj);
+
+    // Si se asignó o modificó el médico asignado, enviar notificación automática por WhatsApp
+    if (assignedDoctorId && assignedDoctorId !== prevDoctorId) {
+      const doctorPhone = (docObj && (docObj.phone || docObj.telefono || docObj.whatsapp_number)) || '';
+      if (doctorPhone) {
+        notifyDoctorViaWhatsApp(assignedDoctorName, doctorPhone, pObj.name)
+          .catch(err => console.error("Error al enviar notificación de WhatsApp al editar paciente:", err));
+      }
+    }
+
     renderPatientList();
     renderPatientDetails();
   });

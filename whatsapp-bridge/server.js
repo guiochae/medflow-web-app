@@ -2,13 +2,29 @@ import express from 'express';
 import cors from 'cors';
 import qrcode from 'qrcode-terminal';
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth } = pkg;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const authPath = path.join(__dirname, '.wwebjs_auth');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Habilitar CORS para permitir peticiones desde la aplicación web (ej. Vercel o localhost)
+// Habilitar CORS y Private Network Access para permitir peticiones desde Vercel (HTTPS) hacia localhost (HTTP)
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+  res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
 app.use(cors());
 app.use(express.json());
 
@@ -30,10 +46,10 @@ if (process.env.PUPPETEER_EXECUTABLE_PATH) {
   puppeteerOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
 }
 
-// Inicializar el cliente de WhatsApp Web
+// Inicializar el cliente de WhatsApp Web con ruta absoluta a la sesión guardada
 const client = new Client({
   authStrategy: new LocalAuth({
-    dataPath: './.wwebjs_auth'
+    dataPath: authPath
   }),
   puppeteer: puppeteerOptions
 });
@@ -169,6 +185,11 @@ app.post('/api/notify-employee', async (req, res) => {
       details: error.message 
     });
   }
+});
+
+// Endpoint GET /api/ping (Verificación rápida de conectividad)
+app.get('/api/ping', (req, res) => {
+  return res.status(200).json({ ok: true, isReady });
 });
 
 // Endpoint GET /api/status

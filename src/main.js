@@ -13,6 +13,7 @@ import { initQrWidget, removeQrWidget } from './modules/qrWidget.js';
 import { renderAttendanceMobileView } from './modules/attendanceMobileView.js';
 import { renderAttendanceKioskView } from './modules/attendanceKioskView.js';
 import { deduplicateAndSanitizeNursingStaff } from './modules/enfermeriaDepartment.js';
+import { initWhatsAppReceptionistBridge } from './utils/whatsapp.js';
 import logoUrl from './assets/logo.jpg';
 import {
   db,
@@ -1070,7 +1071,18 @@ function renderLoginScreen() {
 
     if (isMatch) {
       sessionStorage.setItem('medflow_logged_user', JSON.stringify(user));
-      window.location.reload();
+      const roleNorm = String(user.role || '').toLowerCase();
+      if (roleNorm.includes('recepcionista') || roleNorm.includes('admin')) {
+        try {
+          const iframe = document.createElement('iframe');
+          iframe.style.display = 'none';
+          iframe.src = 'lugamed-bridge://start';
+          document.body.appendChild(iframe);
+        } catch (_) {}
+      }
+      setTimeout(() => {
+        window.location.reload();
+      }, 150);
     } else {
       alert("❌ Contraseña incorrecta. Por favor, intente de nuevo.");
       passwordInput.value = '';
@@ -1203,6 +1215,13 @@ function initializeSidebar(loggedUser) {
       sessionStorage.removeItem('medflow_logged_user');
       window.location.reload();
     });
+  }
+
+  // Inicializar Auto-Puente de WhatsApp para Recepcionista y Administrador
+  try {
+    initWhatsAppReceptionistBridge(userObj);
+  } catch (errBridge) {
+    console.warn("Aviso al inicializar auto-puente de WhatsApp:", errBridge);
   }
 
   // Configurar menú de navegación con filtrado de permisos por usuario

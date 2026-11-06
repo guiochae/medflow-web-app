@@ -1,1 +1,16 @@
-{"projectId":"prj_JvgvoHc29uIemuymYLpXktuGqgP7","orgId":"team_tcK6fZdqMvIw2U5LMJNsq5dW","projectName":"gestion-consultorio"}
+{
+  "projectId": "prj_JvgvoHc29uIemuymYLpXktuGqgP7",
+  "orgId": "team_tcK6fZdqMvIw2U5LMJNsq5dW",
+  "projectName": "gestion-consultorio",
+  "settings": {
+    "createdAt": 1784584467627,
+    "framework": "vite",
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": null,
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}
