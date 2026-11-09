@@ -53,6 +53,29 @@ app.get('/api/status', (req, res) => {
   });
 });
 
+// Endpoint POST /api/logout (Desvincular WhatsApp para permitir escanear un nuevo QR)
+app.post('/api/logout', async (req, res) => {
+  try {
+    if (client) {
+      isReady = false;
+      latestQr = null;
+      clientStatus = 'starting';
+      try {
+        await client.logout();
+      } catch (e) {
+        console.warn('Aviso en logout:', e.message);
+      }
+      setTimeout(() => {
+        client.initialize().catch(err => console.error("Error al re-inicializar:", err));
+      }, 1500);
+      return res.status(200).json({ success: true, message: 'Sesión desvinculada. Generando nuevo código QR...' });
+    }
+    return res.status(400).json({ success: false, error: 'Cliente de WhatsApp no disponible.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Levantar el Servidor Express INMEDIATAMENTE para responder al instante
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Microservicio WhatsApp local escuchando en http://0.0.0.0:${PORT}`);
