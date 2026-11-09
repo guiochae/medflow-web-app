@@ -124,14 +124,20 @@ export async function ensureWhatsAppBridgeRunning() {
 
 /**
  * Envía una notificación de WhatsApp al médico asignado de forma asíncrona.
- * Si el microservicio está apagado, intenta iniciarlo automáticamente y reintentar.
+ * Soporta indicar la prioridad de atención (triaje), signos vitales y motivo de consulta.
  * @param {string} nombreMedico - Nombre del médico
  * @param {string} telefonoMedico - Teléfono del médico
  * @param {string} nombrePaciente - Nombre del paciente
+ * @param {Object|boolean} options - Opciones adicionales ({ prioridad, signosVitales, motivo, customMessage }) o flag de reintento
  * @param {boolean} isRetry - Indica si ya es un reintento
  * @returns {Promise<boolean>} Retorna true de forma no bloqueante
  */
-export async function notifyDoctorViaWhatsApp(nombreMedico, telefonoMedico, nombrePaciente, isRetry = false) {
+export async function notifyDoctorViaWhatsApp(nombreMedico, telefonoMedico, nombrePaciente, options = {}, isRetry = false) {
+  if (typeof options === 'boolean') {
+    isRetry = options;
+    options = {};
+  }
+
   let doctorNameClean = nombreMedico;
   if (doctorNameClean.toLowerCase().startsWith('dr. ') || doctorNameClean.toLowerCase().startsWith('dra. ')) {
     doctorNameClean = doctorNameClean.substring(4);
@@ -139,10 +145,30 @@ export async function notifyDoctorViaWhatsApp(nombreMedico, telefonoMedico, nomb
     doctorNameClean = doctorNameClean.substring(3);
   }
 
+  const { prioridad, signosVitales, motivo, customMessage } = options || {};
+
+  // Para compatibilidad retroactiva con cualquier versión de puente local
+  let patientDisplayName = nombrePaciente;
+  if (prioridad) {
+    const pNorm = String(prioridad).toUpperCase();
+    if (pNorm.includes('EMERGENCIA') || pNorm.includes('CRITICA') || pNorm.includes('ALTA')) {
+      patientDisplayName = `${nombrePaciente} [🚨 PRIORIDAD: EMERGENCIA]`;
+    } else if (pNorm.includes('URGENCIA') || pNorm.includes('MODERADA') || pNorm.includes('MEDIA')) {
+      patientDisplayName = `${nombrePaciente} [⚠️ PRIORIDAD: URGENCIA]`;
+    } else {
+      patientDisplayName = `${nombrePaciente} [🟢 PRIORIDAD: NORMAL]`;
+    }
+  }
+
   const payload = {
     nombreMedico: doctorNameClean,
     telefonoMedico: telefonoMedico,
-    nombrePaciente: nombrePaciente
+    nombrePaciente: patientDisplayName,
+    patientNameClean: nombrePaciente,
+    prioridad: prioridad || null,
+    signosVitales: signosVitales || null,
+    motivo: motivo || null,
+    customMessage: customMessage || null
   };
 
   const state = getAppState();
@@ -173,7 +199,7 @@ export async function notifyDoctorViaWhatsApp(nombreMedico, telefonoMedico, nomb
       console.log('🔄 Intentando levantar el puente y reintentar envío...');
       triggerLaunchWhatsAppBridge();
       await new Promise(r => setTimeout(r, 2500));
-      return notifyDoctorViaWhatsApp(nombreMedico, telefonoMedico, nombrePaciente, true);
+      return notifyDoctorViaWhatsApp(nombreMedico, telefonoMedico, nombrePaciente, options, true);
     }
 
     // Si persiste el fallo, mostrar advertencia interactiva con opción de inicio manual

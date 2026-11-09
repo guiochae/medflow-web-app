@@ -273,8 +273,24 @@ function getPatientVitalsHeaderHtml(patient) {
     </div>
   `;
   
+  const curPriority = patient.priority || (latestVitals && latestVitals.priority) || 'Normal';
+  let priorityBadge = '';
+  if (curPriority.toUpperCase().includes('EMERGENCIA') || curPriority.toUpperCase().includes('CRITICA')) {
+    priorityBadge = `<span style="background: #ef4444; color: #fff; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 9999px; margin-left: 8px; box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);">🚨 EMERGENCIA</span>`;
+  } else if (curPriority.toUpperCase().includes('URGENCIA') || curPriority.toUpperCase().includes('MODERADA')) {
+    priorityBadge = `<span style="background: #f59e0b; color: #1e293b; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 9999px; margin-left: 8px;">⚠️ URGENCIA</span>`;
+  } else {
+    priorityBadge = `<span style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 9999px; margin-left: 8px;">🟢 Normal</span>`;
+  }
+
   if (latestVitals) {
     vitalsGridHtml = `
+      <div style="background: ${curPriority.toUpperCase().includes('EMERGENCIA') ? 'rgba(239, 68, 68, 0.15)' : (curPriority.toUpperCase().includes('URGENCIA') ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.08)')}; border: 1px solid ${curPriority.toUpperCase().includes('EMERGENCIA') ? '#ef4444' : (curPriority.toUpperCase().includes('URGENCIA') ? '#f59e0b' : 'rgba(16, 185, 129, 0.3)')}; padding: 8px 12px; border-radius: var(--radius-sm); text-align: center;">
+        <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Prioridad Triaje</div>
+        <div style="font-size: 1.05rem; font-weight: bold; color: ${curPriority.toUpperCase().includes('EMERGENCIA') ? '#ef4444' : (curPriority.toUpperCase().includes('URGENCIA') ? '#f59e0b' : '#10b981')}; margin-top: 2px;">
+          ${curPriority.toUpperCase().includes('EMERGENCIA') ? '🚨 Emergencia' : (curPriority.toUpperCase().includes('URGENCIA') ? '⚠️ Urgencia' : '🟢 Normal')}
+        </div>
+      </div>
       <div style="background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.15); padding: 8px 12px; border-radius: var(--radius-sm); text-align: center;">
         <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Presión Arterial</div>
         <div style="font-size: 1.1rem; font-weight: bold; color: var(--accent-primary); margin-top: 2px;">💓 ${latestVitals.bp_systolic}/${latestVitals.bp_diastolic} <span style="font-size: 0.7rem; font-weight: normal; color: var(--text-muted);">mmHg</span></div>
@@ -317,7 +333,7 @@ function getPatientVitalsHeaderHtml(patient) {
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 8px; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
         <div style="display: flex; align-items: center; gap: 10px;">
           <span style="font-size: 1.3rem; line-height: 1;">👤</span>
-          <span style="font-family: var(--font-heading); font-size: 1.1rem; font-weight: 700; color: var(--text-primary);">${patient.name}</span>
+          <span style="font-family: var(--font-heading); font-size: 1.1rem; font-weight: 700; color: var(--text-primary);">${patient.name}</span>${priorityBadge}
           <span style="font-size: 0.8rem; color: var(--text-muted);">| Edad: ${ageText} | Sexo: ${String(patient.gender || '').toUpperCase().startsWith('F') ? 'FEMENINO' : 'MASCULINO'}</span>
         </div>
         <div style="font-size: 0.8rem; color: var(--text-muted);">

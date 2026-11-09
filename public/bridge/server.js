@@ -201,9 +201,9 @@ try {
 
 // Endpoint POST /api/notify-doctor
 app.post('/api/notify-doctor', async (req, res) => {
-  const { nombreMedico, telefonoMedico, nombrePaciente } = req.body;
+  const { nombreMedico, telefonoMedico, nombrePaciente, patientNameClean, prioridad, signosVitales, motivo, customMessage } = req.body;
 
-  if (!nombreMedico || !telefonoMedico || !nombrePaciente) {
+  if (!nombreMedico || !telefonoMedico || (!nombrePaciente && !patientNameClean)) {
     return res.status(400).json({ 
       success: false, 
       error: 'Faltan parámetros requeridos (nombreMedico, telefonoMedico, nombrePaciente).' 
@@ -228,14 +228,49 @@ app.post('/api/notify-doctor', async (req, res) => {
 
     // 2. Construcción del identificador de chat requerido por whatsapp-web.js
     const chatId = `${cleanPhone}@c.us`;
+    const patientName = patientNameClean || nombrePaciente;
 
-    // 3. Template del mensaje solicitado al pie de la letra
-    const message = `Estimado ${nombreMedico}, el paciente ${nombrePaciente} espera por tu atencion en tu consultorio`;
+    // 3. Template del mensaje adaptado a la prioridad de atención / triaje
+    let message = '';
+    if (customMessage) {
+      message = customMessage;
+    } else if (prioridad) {
+      let pIcon = '🟢';
+      let pLabel = 'NORMAL / RUTINA';
+      const pNorm = String(prioridad).toUpperCase();
+      if (pNorm.includes('EMERGENCIA') || pNorm.includes('CRITICA') || pNorm.includes('ALTA') || pNorm.includes('ROJO')) {
+        pIcon = '🚨';
+        pLabel = 'EMERGENCIA (ATENCIÓN INMEDIATA)';
+      } else if (pNorm.includes('URGENCIA') || pNorm.includes('MODERADA') || pNorm.includes('MEDIA') || pNorm.includes('AMARILLO')) {
+        pIcon = '⚠️';
+        pLabel = 'URGENCIA';
+      }
+
+      message = `${pIcon} *PRIORIDAD DE ATENCIÓN: ${pLabel}*\n\n` +
+                `Estimado(a) *${nombreMedico}*,\n` +
+                `El paciente *${patientName}* espera por tu atención en tu consultorio.`;
+
+      if (motivo) {
+        message += `\n\n📝 *Motivo de Consulta:* ${motivo}`;
+      }
+
+      if (signosVitales) {
+        message += `\n\n📊 *Signos Vitales Tomados:*`;
+        if (signosVitales.bp_systolic && signosVitales.bp_diastolic) message += `\n• Presión Arterial: *${signosVitales.bp_systolic}/${signosVitales.bp_diastolic} mmHg*`;
+        if (signosVitales.temp) message += `\n• Temperatura: *${signosVitales.temp} °C*`;
+        if (signosVitales.heart_rate) message += `\n• Frec. Cardíaca: *${signosVitales.heart_rate} lpm*`;
+        if (signosVitales.resp_rate) message += `\n• Frec. Respiratoria: *${signosVitales.resp_rate} rpm*`;
+        if (signosVitales.oxygen) message += `\n• Saturación O2: *${signosVitales.oxygen}%*`;
+        if (signosVitales.glucose) message += `\n• Glucosa Capilar: *${signosVitales.glucose} mg/dL*`;
+      }
+    } else {
+      message = `Estimado ${nombreMedico}, el paciente ${nombrePaciente} espera por tu atencion en tu consultorio`;
+    }
 
     // 4. Enviar el mensaje en segundo plano de forma invisible
     await client.sendMessage(chatId, message);
 
-    console.log(`✉️ Notificación enviada a: ${nombreMedico} (Tel: ${cleanPhone}) | Paciente: ${nombrePaciente}`);
+    console.log(`✉️ Notificación enviada a: ${nombreMedico} (Tel: ${cleanPhone}) | Paciente: ${patientName} | Prioridad: ${prioridad || 'Normal'}`);
     
     return res.status(200).json({ 
       success: true, 

@@ -143,9 +143,16 @@ function renderPatientList(query = '') {
     // Obtener últimos signos vitales
     const lastVitals = p.vitalSigns && p.vitalSigns.length > 0 ? p.vitalSigns[0] : null;
     const bpText = lastVitals ? `${lastVitals.bp_systolic}/${lastVitals.bp_diastolic} mmHg` : 'Sin registros';
+    const pPriority = p.priority || (lastVitals && lastVitals.priority) || 'Normal';
+    let pPriorityBadge = '';
+    if (pPriority.toUpperCase().includes('EMERGENCIA') || pPriority.toUpperCase().includes('CRITICA')) {
+      pPriorityBadge = ` <span style="background: #ef4444; color: #fff; padding: 1px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: 700; vertical-align: middle; margin-left: 4px; box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);">🚨 EMERGENCIA</span>`;
+    } else if (pPriority.toUpperCase().includes('URGENCIA') || pPriority.toUpperCase().includes('MODERADA')) {
+      pPriorityBadge = ` <span style="background: #f59e0b; color: #1e293b; padding: 1px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: 700; vertical-align: middle; margin-left: 4px;">⚠️ URGENCIA</span>`;
+    }
     
     li.innerHTML = `
-      <div class="patient-item-name">${p.name}</div>
+      <div class="patient-item-name">${p.name}${pPriorityBadge}</div>
       <div class="patient-item-meta">Tel: ${p.telephone} | P.A: ${bpText}</div>
     `;
     
@@ -607,7 +614,18 @@ function renderPatientDetails() {
     <div class="glass-card" style="margin-bottom: 2rem;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
         <div>
-          <h2 style="font-family: var(--font-heading); color: var(--accent-primary); font-size: 1.8rem; margin-bottom: 0.3rem;">${patient.name}</h2>
+          ${(() => {
+            const curP = patient.priority || (patient.vitalSigns && patient.vitalSigns[0]?.priority) || 'Normal';
+            let bHtml = '';
+            if (curP.toUpperCase().includes('EMERGENCIA') || curP.toUpperCase().includes('CRITICA')) {
+              bHtml = `<span style="background: #ef4444; color: #fff; padding: 3px 10px; border-radius: 9999px; font-size: 0.8rem; font-weight: 700; margin-left: 0.75rem; vertical-align: middle; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);">🚨 PRIORIDAD: EMERGENCIA</span>`;
+            } else if (curP.toUpperCase().includes('URGENCIA') || curP.toUpperCase().includes('MODERADA')) {
+              bHtml = `<span style="background: #f59e0b; color: #1e293b; padding: 3px 10px; border-radius: 9999px; font-size: 0.8rem; font-weight: 700; margin-left: 0.75rem; vertical-align: middle; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);">⚠️ PRIORIDAD: URGENCIA</span>`;
+            } else {
+              bHtml = `<span style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); padding: 3px 10px; border-radius: 9999px; font-size: 0.8rem; font-weight: 600; margin-left: 0.75rem; vertical-align: middle; display: inline-flex; align-items: center; gap: 4px;">🟢 PRIORIDAD: NORMAL</span>`;
+            }
+            return `<h2 style="font-family: var(--font-heading); color: var(--accent-primary); font-size: 1.8rem; margin-bottom: 0.3rem;">${patient.name}${bHtml}</h2>`;
+          })()}
           <p style="color: var(--text-muted); font-size: 0.9rem;">
             <span>🆔 DPI: <strong>${patient.dpi || (age < 18 ? 'Menor de Edad' : 'No Presenta Documento')}</strong></span> | 
             <span>🎂 Edad: ${age} años (${patient.birthdate})</span> | 
@@ -706,8 +724,30 @@ function renderPatientDetails() {
             <label for="v-reason">Motivo de la Consulta <small style="opacity: 0.7; font-weight: normal;">(Información para el médico tratante)</small></label>
             <textarea id="v-reason" placeholder="Ej. Dolor abdominal agudo, fiebre de 3 días, cefalea, control de rutina..." rows="2" style="width: 100%; padding: 8px 12px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 0.9rem; resize: vertical;">${patient.currentReason || patient.reasonForConsultation || ''}</textarea>
           </div>
+
+          <div class="form-group" style="margin-top: 1rem; background: rgba(255, 255, 255, 0.03); padding: 12px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            <label style="font-weight: 600; display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; font-size: 0.95rem;">
+              <span>🚨 Prioridad de Atención / Triaje:</span>
+              <small style="opacity: 0.8; font-weight: normal; color: var(--accent-secondary);">El médico asignado recibirá alerta inmediata vía WhatsApp</small>
+            </label>
+            <input type="hidden" id="v-priority" value="${patient.priority || 'Normal'}">
+            <div id="v-priority-btn-group" style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+              <button type="button" class="btn-priority ${(!patient.priority || patient.priority === 'Normal' || patient.priority === 'Rutina') ? 'active' : ''}" data-priority="Normal" style="flex: 1; min-width: 120px; padding: 10px 14px; border-radius: 8px; border: 2px solid #10b981; background: ${(!patient.priority || patient.priority === 'Normal' || patient.priority === 'Rutina') ? 'rgba(16, 185, 129, 0.25)' : 'transparent'}; color: var(--text-primary); font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s ease;">
+                <span>🟢</span> Normal / Rutina
+              </button>
+              <button type="button" class="btn-priority ${(patient.priority === 'Urgencia' || patient.priority === 'Moderada') ? 'active' : ''}" data-priority="Urgencia" style="flex: 1; min-width: 120px; padding: 10px 14px; border-radius: 8px; border: 2px solid #f59e0b; background: ${(patient.priority === 'Urgencia' || patient.priority === 'Moderada') ? 'rgba(245, 158, 11, 0.25)' : 'transparent'}; color: var(--text-primary); font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s ease;">
+                <span>⚠️</span> Urgencia
+              </button>
+              <button type="button" class="btn-priority ${(patient.priority === 'Emergencia' || patient.priority === 'Critica') ? 'active' : ''}" data-priority="Emergencia" style="flex: 1; min-width: 120px; padding: 10px 14px; border-radius: 8px; border: 2px solid #ef4444; background: ${(patient.priority === 'Emergencia' || patient.priority === 'Critica') ? 'rgba(239, 68, 68, 0.35)' : 'transparent'}; color: var(--text-primary); font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s ease; ${(patient.priority === 'Emergencia' || patient.priority === 'Critica') ? 'box-shadow: 0 0 12px rgba(239,68,68,0.5);' : ''}">
+                <span>🚨</span> Emergencia
+              </button>
+            </div>
+          </div>
+
           <div style="display: flex; justify-content: flex-end; margin-top: 1rem;">
-            <button type="submit" class="btn btn-primary">Grabar Signos Vitales</button>
+            <button type="submit" class="btn btn-primary" id="btn-submit-vitals">
+              <span>🩺</span> Grabar Signos Vitales y Notificar
+            </button>
           </div>
         </form>
 
@@ -717,6 +757,7 @@ function renderPatientDetails() {
             <thead>
               <tr>
                 <th>Fecha/Hora</th>
+                <th>Prioridad</th>
                 <th>Temp</th>
                 <th>Presión Art.</th>
                 <th>Frec. Card.</th>
@@ -1044,6 +1085,9 @@ function renderPatientDetails() {
     const vReasonEl = document.getElementById('v-reason');
     const vReasonVal = vReasonEl ? vReasonEl.value.trim() : '';
 
+    const priorityEl = document.getElementById('v-priority');
+    const priorityVal = priorityEl ? priorityEl.value : 'Normal';
+
     const newVitals = {
       date: new Date().toISOString(),
       temp,
@@ -1056,7 +1100,8 @@ function renderPatientDetails() {
       bmi,
       oxygen,
       glucose,
-      reason: vReasonVal
+      reason: vReasonVal,
+      priority: priorityVal
     };
 
     const stateObj = getAppState();
@@ -1067,10 +1112,43 @@ function renderPatientDetails() {
       patient.currentReason = vReasonVal;
       patient.reasonForConsultation = vReasonVal;
     }
+    patientObj.priority = priorityVal;
+    patientObj.triagePriority = priorityVal;
+    patient.priority = priorityVal;
+    patient.triagePriority = priorityVal;
+
     patientObj.vitalSigns.unshift(newVitals); // Agregar al inicio
     saveAppState(stateObj);
-    
+
+    // Enviar notificación al médico tratante vía WhatsApp con la prioridad de atención y signos vitales
+    const assignedDoctorName = patientObj.assignedDoctorName || 'Dr. Carlos Mendoza';
+    const docObj = (stateObj.users || []).find(u => u.name === assignedDoctorName);
+    const doctorPhone = (docObj && (docObj.phone || docObj.telefono || docObj.whatsapp_number)) || '';
+    if (doctorPhone) {
+      notifyDoctorViaWhatsApp(assignedDoctorName, doctorPhone, patientObj.name, {
+        prioridad: priorityVal,
+        signosVitales: newVitals,
+        motivo: vReasonVal
+      }).then(() => {
+        console.log(`[Preconsulta] Notificación enviada al ${assignedDoctorName} (${doctorPhone}) con prioridad ${priorityVal}`);
+      }).catch(err => {
+        console.error("Error al notificar al médico por WhatsApp:", err);
+      });
+    }
+
+    // Feedback al usuario con confirmación de triaje
+    let feedbackMsg = `✅ Signos vitales registrados con éxito para ${patientObj.name}.`;
+    if (priorityVal.toUpperCase().includes('EMERGENCIA')) {
+      feedbackMsg += `\n\n🚨 ¡ALERTA DE EMERGENCIA ACTIVADA!\nSe despachó notificación prioritaria por WhatsApp al médico tratante (${assignedDoctorName}).`;
+    } else if (priorityVal.toUpperCase().includes('URGENCIA')) {
+      feedbackMsg += `\n\n⚠️ ¡PRIORIDAD DE URGENCIA!\nSe notificó al médico tratante (${assignedDoctorName}) vía WhatsApp.`;
+    } else if (doctorPhone) {
+      feedbackMsg += `\n\nNotificación enviada al médico tratante (${assignedDoctorName}) vía WhatsApp.`;
+    }
+    alert(feedbackMsg);
+
     renderPatientDetails(); // Recargar datos
+    renderPatientList(); // Actualizar lista lateral
   });
 
   // Bind Appointment Form Submit
@@ -1196,6 +1274,7 @@ function renderPatientDetails() {
 
   // Render initial components of patient details
   renderVitals(patient);
+  setupPriorityButtonGroup();
   renderAppointments(patient);
   renderStudies(patient);
   initScheduleManager(patient);
@@ -1219,7 +1298,7 @@ function renderVitals(patient) {
         No se han tomado signos vitales para este paciente todavía.
       </div>
     `;
-    tableBody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Sin registros históricos</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="11" style="text-align: center; color: var(--text-muted);">Sin registros históricos</td></tr>';
     return;
   }
 
@@ -1239,7 +1318,29 @@ function renderVitals(patient) {
   else if (latest.bmi >= 25) { bmiClass = 'warning'; bmiDesc = 'Sobrepeso'; }
   else if (latest.bmi < 18.5) { bmiClass = 'warning'; bmiDesc = 'Bajo peso'; }
 
+  // Triaje / Prioridad
+  const vitalsPriority = latest.priority || patient.priority || 'Normal';
+  let pCardIcon = '🟢';
+  let pCardClass = '';
+  let pCardTitle = 'Normal / Rutina';
+  let pBorderColor = 'var(--border-color)';
+  if (vitalsPriority.toUpperCase().includes('EMERGENCIA') || vitalsPriority.toUpperCase().includes('CRITICA')) {
+    pCardIcon = '🚨';
+    pCardClass = 'danger';
+    pCardTitle = 'EMERGENCIA';
+    pBorderColor = '#ef4444';
+  } else if (vitalsPriority.toUpperCase().includes('URGENCIA') || vitalsPriority.toUpperCase().includes('MODERADA')) {
+    pCardIcon = '⚠️';
+    pCardClass = 'warning';
+    pCardTitle = 'URGENCIA';
+    pBorderColor = '#f59e0b';
+  }
+
   cardsContainer.innerHTML = `
+    <div class="vital-card" style="border: 2px solid ${pBorderColor};">
+      <div class="vital-title">${pCardIcon} Prioridad Triaje</div>
+      <div class="vital-value ${pCardClass}" style="font-size: 1.15rem;">${pCardTitle}</div>
+    </div>
     <div class="vital-card">
       <div class="vital-title">🌡️ Temperatura</div>
       <div class="vital-value ${tempClass}">${latest.temp}<span class="vital-unit"> °C</span></div>
@@ -1291,12 +1392,45 @@ function renderVitals(patient) {
     glucoseInput.value = (latest.glucose !== undefined && latest.glucose !== null) ? latest.glucose : '';
   }
 
+  // Preseleccionar prioridad en los botones
+  const priorityInput = document.getElementById('v-priority');
+  if (priorityInput) {
+    priorityInput.value = vitalsPriority;
+    const priorityGroup = document.getElementById('v-priority-btn-group');
+    if (priorityGroup) {
+      priorityGroup.querySelectorAll('.btn-priority').forEach(b => {
+        const bp = b.getAttribute('data-priority');
+        const isActive = (bp === vitalsPriority) || (!vitalsPriority && bp === 'Normal');
+        b.classList.toggle('active', isActive);
+        if (bp === 'Normal') {
+          b.style.background = isActive ? 'rgba(16, 185, 129, 0.25)' : 'transparent';
+          b.style.boxShadow = 'none';
+        } else if (bp === 'Urgencia') {
+          b.style.background = isActive ? 'rgba(245, 158, 11, 0.25)' : 'transparent';
+          b.style.boxShadow = isActive ? '0 0 10px rgba(245, 158, 11, 0.3)' : 'none';
+        } else if (bp === 'Emergencia') {
+          b.style.background = isActive ? 'rgba(239, 68, 68, 0.35)' : 'transparent';
+          b.style.boxShadow = isActive ? '0 0 12px rgba(239, 68, 68, 0.5)' : 'none';
+        }
+      });
+    }
+  }
+
   // Llenar tabla
   vitals.forEach(v => {
     const row = document.createElement('tr');
     const dateFormatted = new Date(v.date).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' });
+    const pVal = v.priority || 'Normal';
+    let pBadge = `<span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);">Normal</span>`;
+    if (pVal.toUpperCase().includes('EMERGENCIA') || pVal.toUpperCase().includes('CRITICA')) {
+      pBadge = `<span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; background: #ef4444; color: #fff; box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);">🚨 Emergencia</span>`;
+    } else if (pVal.toUpperCase().includes('URGENCIA') || pVal.toUpperCase().includes('MODERADA')) {
+      pBadge = `<span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; background: #f59e0b; color: #1e293b; box-shadow: 0 0 6px rgba(245, 158, 11, 0.3);">⚠️ Urgencia</span>`;
+    }
+
     row.innerHTML = `
       <td>${dateFormatted}</td>
+      <td>${pBadge}</td>
       <td>${v.temp} °C</td>
       <td>${v.bp_systolic}/${v.bp_diastolic}</td>
       <td>${v.heart_rate} lpm</td>
@@ -4057,5 +4191,37 @@ export function renderAppointmentsAgenda(docId = null, year = null, month = null
         renderPatientDetails();
       }
     });
+  });
+}
+
+
+// Configurar botones de prioridad / triaje
+function setupPriorityButtonGroup() {
+  const container = document.getElementById('v-priority-btn-group');
+  const input = document.getElementById('v-priority');
+  if (!container || !input) return;
+
+  const buttons = container.querySelectorAll('.btn-priority');
+  buttons.forEach(btn => {
+    btn.onclick = (e) => {
+      e.preventDefault();
+      const p = btn.getAttribute('data-priority');
+      input.value = p;
+      buttons.forEach(b => {
+        b.classList.remove('active');
+        b.style.background = 'transparent';
+        b.style.boxShadow = 'none';
+      });
+      btn.classList.add('active');
+      if (p === 'Normal') {
+        btn.style.background = 'rgba(16, 185, 129, 0.25)';
+      } else if (p === 'Urgencia') {
+        btn.style.background = 'rgba(245, 158, 11, 0.25)';
+        btn.style.boxShadow = '0 0 10px rgba(245, 158, 11, 0.3)';
+      } else if (p === 'Emergencia') {
+        btn.style.background = 'rgba(239, 68, 68, 0.35)';
+        btn.style.boxShadow = '0 0 12px rgba(239, 68, 68, 0.5)';
+      }
+    };
   });
 }
