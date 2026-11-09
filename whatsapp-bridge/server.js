@@ -330,3 +330,90 @@ app.post('/api/notify-employee', async (req, res) => {
     });
   }
 });
+
+// Endpoint POST /api/send-message (Envío genérico de WhatsApp)
+app.post('/api/send-message', async (req, res) => {
+  const { phoneNumber, message } = req.body;
+
+  if (!phoneNumber || !message) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Faltan parámetros requeridos (phoneNumber, message).' 
+    });
+  }
+
+  if (!isReady) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'El bot de WhatsApp aún no está listo. Por favor escanea el código QR en la terminal.' 
+    });
+  }
+
+  try {
+    let cleanPhone = String(phoneNumber).replace(/[^0-9]/g, '');
+    if (cleanPhone.length === 8) {
+      cleanPhone = '502' + cleanPhone;
+    }
+
+    const chatId = `${cleanPhone}@c.us`;
+    await client.sendMessage(chatId, message);
+    console.log(`✉️ Mensaje enviado a: ${cleanPhone}`);
+
+    return res.status(200).json({ 
+      success: true, 
+      message: 'Mensaje enviado exitosamente.' 
+    });
+  } catch (error) {
+    console.error('❌ Error al enviar mensaje:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Error interno al enviar mensaje.',
+      details: error.message 
+    });
+  }
+});
+
+// Endpoint POST /api/notify-patient-reminder (Recordatorio de cita 48 horas antes)
+app.post('/api/notify-patient-reminder', async (req, res) => {
+  const { patientName, phoneNumber, appointmentDate, appointmentTime, doctorName, customMessage } = req.body;
+
+  if (!patientName || !phoneNumber) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Faltan parámetros requeridos (patientName, phoneNumber).' 
+    });
+  }
+
+  if (!isReady) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'El bot de WhatsApp aún no está listo. Por favor escanea el código QR en la terminal.' 
+    });
+  }
+
+  try {
+    let cleanPhone = String(phoneNumber).replace(/[^0-9]/g, '');
+    if (cleanPhone.length === 8) {
+      cleanPhone = '502' + cleanPhone;
+    }
+
+    const chatId = `${cleanPhone}@c.us`;
+    const message = customMessage || `Hola ${patientName}, Te saludamos de HOSPITAL MULTIMECA SAYAXCHÉ, te recordamos que tienes una cita con el ${doctorName || 'Médico Tratante'} el ${appointmentDate} a las ${appointmentTime}.`;
+
+    await client.sendMessage(chatId, message);
+    console.log(`✉️ Recordatorio de cita 48h enviado a: ${patientName} (${cleanPhone})`);
+
+    return res.status(200).json({ 
+      success: true, 
+      message: 'Recordatorio enviado exitosamente.' 
+    });
+  } catch (error) {
+    console.error('❌ Error al enviar recordatorio a paciente:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Error interno al enviar recordatorio.',
+      details: error.message 
+    });
+  }
+});
+

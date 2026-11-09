@@ -1,7 +1,13 @@
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
 import { showLocalLabReportPrintWindow } from './laboratorio.js';
 import { initPartogramaChart } from './partogramaChart.js';
-import { notifyDoctorViaWhatsApp } from '../utils/whatsapp.js';
+import { 
+  notifyDoctorViaWhatsApp, 
+  formatAppointmentReminderMessage, 
+  getAppointmentTimeDiffHours, 
+  sendSingleAppointmentReminder, 
+  checkAndSend48hAppointmentReminders 
+} from '../utils/whatsapp.js';
 import { findExistingPatientByDpi, showDuplicatePatientModal } from '../utils/patientDpiValidator.js';
 import { isPatientAccessibleByDoctor } from './consulta.js';
 
@@ -861,7 +867,12 @@ function renderPatientDetails() {
           </div>
         </div>
 
-        <h4 style="margin-top: 2.5rem; margin-bottom: 1rem; color: var(--accent-primary);">Citas Programadas</h4>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2.5rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 10px;">
+          <h4 style="margin: 0; color: var(--accent-primary);">Citas Programadas</h4>
+          <button type="button" class="btn btn-secondary btn-small" id="btn-trigger-48h-reminders" style="display: flex; align-items: center; gap: 6px; font-weight: 600;">
+            <span>📲</span> Enviar Recordatorios 48h Pendientes
+          </button>
+        </div>
         <div style="overflow-x: auto;">
           <table>
             <thead>
@@ -869,6 +880,7 @@ function renderPatientDetails() {
                 <th>Fecha</th>
                 <th>Hora</th>
                 <th>Detalles / Motivo</th>
+                <th>Recordatorio WhatsApp (48h)</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -876,6 +888,19 @@ function renderPatientDetails() {
               <!-- Cargar citas -->
             </tbody>
           </table>
+        </div>
+
+        <!-- Registro de Mensajes de WhatsApp Enviados al Paciente -->
+        <div style="margin-top: 2.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 10px;">
+            <h4 style="margin: 0; color: var(--accent-secondary); display: flex; align-items: center; gap: 8px;">
+              <span>📜</span> Registro de Mensajes de WhatsApp Enviados al Paciente
+            </h4>
+            <span id="patient-wa-log-badge" style="font-size: 0.8rem; color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 9999px;">0 mensajes</span>
+          </div>
+          <div id="patient-whatsapp-log-container" style="overflow-x: auto;">
+            <!-- Cargar historial de mensajes -->
+          </div>
         </div>
       </div>
 
@@ -1158,7 +1183,15 @@ function renderPatientDetails() {
     const time = document.getElementById('app-time').value;
     const notes = document.getElementById('app-notes').value;
 
-    const newApp = { date, time, notes };
+    const diffHours = getAppointmentTimeDiffHours(date, time);
+    const newApp = { 
+      id: `apt-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      date, 
+      time, 
+      notes,
+      reminder48hSent: false,
+      reminder48hSentAt: null
+    };
 
     const stateObj = getAppState();
     const patientObj = stateObj.patients.find(p => p.id === patient.id);
@@ -1453,25 +1486,139 @@ function renderAppointments(patient) {
   tableBody.innerHTML = '';
   const appointments = patient.appointments || [];
 
+  // Siempre renderizar el historial de WhatsApp del paciente
+  renderPatientWhatsAppLog(patient);
+
+  // Vincular botón global de comprobación de recordatorios de 48h
+  const triggerBtn = document.getElementById('btn-trigger-48h-reminders');
+  if (triggerBtn && !triggerBtn.dataset.bound) {
+    triggerBtn.dataset.bound = 'true';
+    triggerBtn.onclick = async () => {
+      triggerBtn.disabled = true;
+      triggerBtn.innerHTML = '<span>⏳</span> Comprobando citas...';
+      try {
+        const res = await checkAndSend48hAppointmentReminders();
+        alert(`✅ Comprobación de citas de 48 horas completada:\n\n• Total citas evaluadas: ${res.checked}\n• Recordatorios de WhatsApp enviados: ${res.sent}`);
+        const curState = getAppState();
+        const curPat = curState.patients.find(p => p.id === patient.id) || patient;
+        renderAppointments(curPat);
+      } catch (err) {
+        alert('Aviso al procesar recordatorios: ' + err.message);
+      } finally {
+        triggerBtn.disabled = false;
+        triggerBtn.innerHTML = '<span>📲</span> Enviar Recordatorios 48h Pendientes';
+      }
+    };
+  }
+
   if (appointments.length === 0) {
-    tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No hay citas agendadas</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No hay citas agendadas para este paciente.</td></tr>';
     return;
   }
 
   appointments.forEach((app, idx) => {
     const row = document.createElement('tr');
+    const diffHours = getAppointmentTimeDiffHours(app.date, app.time);
+
+    let reminderColHtml = '';
+    if (app.reminder48hSent) {
+      const sentTimeStr = app.reminder48hSentAt 
+        ? new Date(app.reminder48hSentAt).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' })
+        : 'Enviado';
+      reminderColHtml = `
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3);">
+            <span>✅</span> Enviado (${sentTimeStr})
+          </span>
+          <button class="btn btn-secondary btn-small btn-view-wa-msg" data-idx="${idx}" style="padding: 2px 8px; font-size: 0.72rem;">
+            👁️ Ver
+          </button>
+        </div>
+      `;
+    } else if (diffHours !== null && diffHours > 0 && diffHours <= 48) {
+      reminderColHtml = `
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3);">
+            <span>⏳</span> En ventana 48h (${diffHours.toFixed(1)}h)
+          </span>
+          <button class="btn btn-primary btn-small btn-send-wa-reminder" data-idx="${idx}" style="padding: 2px 8px; font-size: 0.72rem; font-weight: 600;">
+            📲 Enviar Recordatorio
+          </button>
+        </div>
+      `;
+    } else if (diffHours !== null && diffHours > 48) {
+      reminderColHtml = `
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 500; background: rgba(0, 242, 254, 0.08); color: var(--accent-primary); border: 1px solid rgba(0, 242, 254, 0.2);">
+            <span>🕒</span> Programado (>48h)
+          </span>
+          <button class="btn btn-secondary btn-small btn-send-wa-reminder" data-idx="${idx}" style="padding: 2px 8px; font-size: 0.72rem;" title="Enviar recordatorio ahora por adelantado">
+            📲 Enviar Ahora
+          </button>
+        </div>
+      `;
+    } else {
+      reminderColHtml = `
+        <span style="color: var(--text-muted); font-size: 0.75rem;">Cita Pasada</span>
+      `;
+    }
+
     row.innerHTML = `
       <td>${app.date}</td>
-      <td>${app.time}</td>
-      <td>${app.notes}</td>
+      <td><strong>${app.time}</strong></td>
+      <td>${app.notes || '-'}</td>
+      <td>${reminderColHtml}</td>
       <td>
-        <button class="btn btn-danger btn-small" data-idx="${idx}">Cancelar</button>
+        <button class="btn btn-danger btn-small btn-cancel-appointment" data-idx="${idx}">Cancelar</button>
       </td>
     `;
-    
+
+    // Bind Enviar Recordatorio WhatsApp
+    const sendBtn = row.querySelector('.btn-send-wa-reminder');
+    if (sendBtn) {
+      sendBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const index = parseInt(sendBtn.getAttribute('data-idx'));
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Enviando...';
+        try {
+          const res = await sendSingleAppointmentReminder(patient.id, index);
+          alert(`✅ Recordatorio de WhatsApp enviado exitosamente:\n\n"${res.message}"`);
+          const curState = getAppState();
+          const curPat = curState.patients.find(p => p.id === patient.id);
+          renderAppointments(curPat);
+        } catch (err) {
+          alert('Error al enviar recordatorio: ' + err.message);
+          sendBtn.disabled = false;
+          sendBtn.textContent = '📲 Reintentar';
+        }
+      });
+    }
+
+    // Bind Ver Mensaje
+    const viewBtn = row.querySelector('.btn-view-wa-msg');
+    if (viewBtn) {
+      viewBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const index = parseInt(viewBtn.getAttribute('data-idx'));
+        const targetApp = appointments[index];
+        const log = (patient.whatsappMessagesLog || []).find(l => l.appointmentDate === targetApp.date && l.appointmentTime === targetApp.time) || (patient.whatsappMessagesLog || [])[0];
+        const docName = targetApp.doctorName || patient.assignedDoctorName || 'Dr. Carlos Mendoza';
+        const msgText = log ? log.message : formatAppointmentReminderMessage(patient.name, targetApp.date, targetApp.time, docName);
+        showWhatsAppMessageDetailModal(msgText, {
+          recipientName: patient.name,
+          recipientPhone: patient.telephone || patient.phone || patient.whatsapp_number,
+          sentAt: targetApp.reminder48hSentAt,
+          appointmentDate: targetApp.date,
+          appointmentTime: targetApp.time
+        });
+      });
+    }
+
     // Bind Cancel Button
-    row.querySelector('.btn-danger').addEventListener('click', (e) => {
+    row.querySelector('.btn-cancel-appointment').addEventListener('click', (e) => {
       const index = parseInt(e.target.getAttribute('data-idx'));
+      if (!confirm('¿Seguro que deseas cancelar esta cita?')) return;
       const stateObj = getAppState();
       const patientObj = stateObj.patients.find(p => p.id === patient.id);
       patientObj.appointments.splice(index, 1);
@@ -1481,6 +1628,130 @@ function renderAppointments(patient) {
 
     tableBody.appendChild(row);
   });
+}
+
+// Renderiza el historial de mensajes de WhatsApp enviados al paciente
+function renderPatientWhatsAppLog(patient) {
+  const container = document.getElementById('patient-whatsapp-log-container');
+  const badge = document.getElementById('patient-wa-log-badge');
+  if (!container) return;
+
+  const logs = patient.whatsappMessagesLog || [];
+  if (badge) {
+    badge.textContent = `${logs.length} ${logs.length === 1 ? 'mensaje enviado' : 'mensajes enviados'}`;
+  }
+
+  if (logs.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; color: var(--text-muted); padding: 1.5rem; background: rgba(255,255,255,0.02); border-radius: var(--radius-sm); border: 1px dashed var(--border-color); font-size: 0.85rem;">
+        No se han enviado mensajes de WhatsApp a este paciente todavía.
+      </div>
+    `;
+    return;
+  }
+
+  let rowsHtml = logs.map(item => {
+    const dateFormatted = item.sentAt 
+      ? new Date(item.sentAt).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' })
+      : 'Fecha N/D';
+
+    const typeLabel = item.type === 'RECORDATORIO_CITA_48H' 
+      ? '📅 Recordatorio Cita 48h' 
+      : (item.type || 'Notificación General');
+
+    return `
+      <tr>
+        <td style="white-space: nowrap; font-size: 0.8rem; color: var(--text-muted);">${dateFormatted}</td>
+        <td>
+          <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 600; background: rgba(0, 242, 254, 0.1); color: var(--accent-primary); border: 1px solid rgba(0, 242, 254, 0.25);">
+            ${typeLabel}
+          </span>
+        </td>
+        <td style="font-family: monospace; font-size: 0.82rem;">${item.recipientPhone || '-'}</td>
+        <td style="font-size: 0.8rem; max-width: 420px;">
+          <div style="background: rgba(0,0,0,0.25); border-left: 3px solid #22c55e; padding: 8px 12px; border-radius: 4px; font-style: normal; line-height: 1.45; white-space: pre-wrap; word-break: break-word;">
+            ${item.message}
+          </div>
+        </td>
+        <td>
+          <span style="display: inline-flex; align-items: center; gap: 4px; color: #22c55e; font-size: 0.75rem; font-weight: 700;">
+            <span>✅</span> Enviado
+          </span>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  container.innerHTML = `
+    <table style="width: 100%; border-collapse: collapse;">
+      <thead>
+        <tr>
+          <th>Fecha/Hora Envío</th>
+          <th>Tipo</th>
+          <th>Teléfono Destino</th>
+          <th>Mensaje Enviado</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+  `;
+}
+
+// Modal informativo para ver el contenido completo de un mensaje de WhatsApp enviado
+function showWhatsAppMessageDetailModal(messageText, metadata = {}) {
+  const existing = document.getElementById('wa-msg-detail-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'wa-msg-detail-modal';
+  modal.style.position = 'fixed';
+  modal.style.inset = '0';
+  modal.style.zIndex = '999999';
+  modal.style.display = 'flex';
+  modal.style.alignItems = 'center';
+  modal.style.justifyContent = 'center';
+  modal.style.background = 'rgba(0, 0, 0, 0.75)';
+  modal.style.backdropFilter = 'blur(4px)';
+  modal.style.padding = '16px';
+
+  modal.innerHTML = `
+    <div class="glass-card" style="background: #181826; border: 1px solid var(--accent-primary); border-radius: 12px; padding: 22px; max-width: 480px; width: 92%; box-shadow: 0 15px 35px rgba(0,0,0,0.6); position: relative;">
+      <button id="btn-close-msg-detail-x" style="position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--text-muted); font-size: 1.4rem; cursor: pointer;">&times;</button>
+      
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+        <span style="font-size: 1.5rem;">📲</span>
+        <h3 style="margin: 0; color: var(--text-primary); font-family: var(--font-heading); font-size: 1.15rem;">
+          Detalle del Mensaje Enviado por WhatsApp
+        </h3>
+      </div>
+
+      <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px; line-height: 1.5;">
+        ${metadata.recipientName ? `<div><strong>Destinatario:</strong> ${metadata.recipientName}</div>` : ''}
+        ${metadata.recipientPhone ? `<div><strong>Teléfono:</strong> ${metadata.recipientPhone}</div>` : ''}
+        ${metadata.sentAt ? `<div><strong>Fecha/Hora de Envío:</strong> ${new Date(metadata.sentAt).toLocaleString('es-GT')}</div>` : ''}
+        ${metadata.appointmentDate ? `<div><strong>Cita Programada:</strong> ${metadata.appointmentDate} a las ${metadata.appointmentTime || ''}</div>` : ''}
+      </div>
+
+      <div style="background: #0f172a; border: 1px solid rgba(34, 197, 94, 0.3); border-left: 4px solid #22c55e; border-radius: 8px; padding: 14px; font-size: 0.85rem; color: #e2e8f0; line-height: 1.5; white-space: pre-wrap; word-break: break-word; margin-bottom: 16px;">
+        ${messageText}
+      </div>
+
+      <div style="display: flex; justify-content: flex-end;">
+        <button id="btn-close-msg-detail" class="btn btn-secondary btn-small">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const close = () => modal.remove();
+  modal.querySelector('#btn-close-msg-detail-x').onclick = close;
+  modal.querySelector('#btn-close-msg-detail').onclick = close;
 }
 
 // Renderizar listas de archivos de laboratorios y estudios cargados

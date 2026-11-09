@@ -1,5 +1,5 @@
 import QRCode from 'qrcode';
-import { getAppState } from '../main.js';
+import { getAppState, saveAppState } from '../main.js';
 
 let bridgeStatusCache = {
   online: false,
@@ -880,6 +880,16 @@ export function initWhatsAppReceptionistBridge(currentUser) {
     const status = await checkWhatsAppBridgeStatus();
     updateWhatsAppPillUI(status);
   }, 15000);
+
+  // 7. Comprobación y envío automático de recordatorios de citas de 48 horas
+  setTimeout(() => {
+    checkAndSend48hAppointmentReminders().catch(() => {});
+  }, 3500);
+
+  if (window._waRemindersInterval) clearInterval(window._waRemindersInterval);
+  window._waRemindersInterval = setInterval(() => {
+    checkAndSend48hAppointmentReminders().catch(() => {});
+  }, 15 * 60 * 1000); // Revisar automáticamente cada 15 minutos
 }
 
 /**
@@ -996,5 +1006,257 @@ export async function notifyEmployeeWelcome(employee) {
   });
 
   return true;
+}
+
+/**
+ * Formatea el mensaje oficial de recordatorio de cita 48 horas antes.
+ * Template requerido al pie de la letra:
+ * "Hola 'NOMBRE DEL PACIENTE', Te saludamos de HOSPITAL MULTIMECA SAYAXCHÉ, te recordamos que tienes una cita el 'nombre del dia' 'dia' de 'nombre del mes' con el  'nombre del medico' a las 'hora'."
+ * @param {string} patientName - Nombre completo del paciente
+ * @param {string} appDateStr - Fecha en formato YYYY-MM-DD
+ * @param {string} appTimeStr - Hora en formato HH:MM
+ * @param {string} doctorName - Nombre del médico tratante
+ * @returns {string} Mensaje formateado
+ */
+export function formatAppointmentReminderMessage(patientName, appDateStr, appTimeStr, doctorName) {
+  const parts = String(appDateStr || '').split('-');
+  let dayOfWeek = 'el día agendado';
+  let dayOfMonth = '';
+  let monthName = '';
+
+  if (parts.length === 3) {
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    // Mediodía local para evitar desfases de huso horario
+    const dt = new Date(y, m, d, 12, 0, 0);
+
+    const dayNames = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+    const monthNames = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+    dayOfWeek = dayNames[dt.getDay()] || '';
+    monthName = monthNames[dt.getMonth()] || '';
+    dayOfMonth = dt.getDate();
+  }
+
+  // Formato de hora (ej. 14:00 -> 2:00 PM, 09:30 -> 9:30 AM)
+  let formattedTime = appTimeStr || 'la hora programada';
+  if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(appTimeStr)) {
+    const [hh, mm] = appTimeStr.split(':').map(n => parseInt(n, 10));
+    const period = hh >= 12 ? 'PM' : 'AM';
+    const hour12 = hh % 12 === 0 ? 12 : hh % 12;
+    formattedTime = `${hour12}:${mm.toString().padStart(2, '0')} ${period}`;
+  }
+
+  let docClean = doctorName || 'Médico Tratante';
+  if (!docClean.toLowerCase().startsWith('dr') && !docClean.toLowerCase().startsWith('médic')) {
+    docClean = `Dr. ${docClean}`;
+  }
+
+  return `Hola ${patientName}, Te saludamos de HOSPITAL MULTIMECA SAYAXCHÉ, te recordamos que tienes una cita el ${dayOfWeek} ${dayOfMonth} de ${monthName} con el  ${docClean} a las ${formattedTime}.`;
+}
+
+/**
+ * Calcula la diferencia en horas entre el momento actual y la cita programada.
+ * Retorna número positivo si la cita está en el futuro, o negativo si ya pasó.
+ * @param {string} appDateStr - Fecha YYYY-MM-DD
+ * @param {string} appTimeStr - Hora HH:MM
+ * @returns {number|null} Diferencia en horas
+ */
+export function getAppointmentTimeDiffHours(appDateStr, appTimeStr) {
+  if (!appDateStr) return null;
+  const timePart = appTimeStr || '08:00';
+  const parts = String(appDateStr).split('-');
+  if (parts.length !== 3) return null;
+
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10) - 1;
+  const d = parseInt(parts[2], 10);
+
+  let hh = 8, mm = 0;
+  if (timePart.includes(':')) {
+    const [h, min] = timePart.split(':');
+    hh = parseInt(h, 10) || 0;
+    mm = parseInt(min, 10) || 0;
+  }
+
+  const appDate = new Date(y, m, d, hh, mm, 0);
+  const now = new Date();
+
+  return (appDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+}
+
+/**
+ * Envía un mensaje genérico de WhatsApp al paciente utilizando el microservicio local,
+ * con fallback retroactivo en caso de que el puente local aún tenga la versión anterior.
+ * @param {string} phoneNumber - Teléfono del paciente
+ * @param {string} message - Texto del mensaje
+ * @returns {Promise<boolean>} Retorna true si se entregó al microservicio
+ */
+export async function sendWhatsAppMessageToPatient(phoneNumber, message) {
+  if (!phoneNumber || !message) return false;
+
+  const cleanPhone = String(phoneNumber).replace(/[^0-9]/g, '');
+  if (!cleanPhone) return false;
+
+  const state = getAppState();
+  const bridgeUrl = detectedWorkingBridgeUrl || (state.clinicInfo && state.clinicInfo.whatsappBridgeUrl) || 'http://127.0.0.1:3001';
+
+  // Intento 1: Endpoint directo /api/send-message
+  try {
+    const res = await fetch(`${bridgeUrl}/api/send-message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phoneNumber: cleanPhone, message })
+    });
+    if (res.ok) {
+      return true;
+    }
+  } catch (_) {
+    // Si falla o la ruta no existe en el puente local anterior, probar fallback
+  }
+
+  // Intento 2: Fallback retroactivo usando /api/notify-doctor con customMessage
+  try {
+    const fallbackRes = await fetch(`${bridgeUrl}/api/notify-doctor`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nombreMedico: 'HOSPITAL MULTIMECA SAYAXCHÉ',
+        telefonoMedico: cleanPhone,
+        nombrePaciente: 'Paciente',
+        customMessage: message
+      })
+    });
+    return fallbackRes.ok;
+  } catch (err) {
+    console.warn('Fallo al enviar mensaje a paciente vía WhatsApp Bridge:', err.message);
+    return false;
+  }
+}
+
+/**
+ * Envía el recordatorio oficial de una cita específica de un paciente y guarda el registro en su historial.
+ * @param {string} patientId - ID del paciente
+ * @param {number} appointmentIndex - Índice de la cita en patient.appointments
+ * @returns {Promise<{success: boolean, message: string, logEntry: object}>}
+ */
+export async function sendSingleAppointmentReminder(patientId, appointmentIndex) {
+  const state = getAppState();
+  const patient = (state.patients || []).find(p => p.id === patientId);
+  if (!patient || !Array.isArray(patient.appointments) || !patient.appointments[appointmentIndex]) {
+    throw new Error('Paciente o cita no encontrada.');
+  }
+
+  const app = patient.appointments[appointmentIndex];
+  const patientPhone = patient.telephone || patient.phone || patient.whatsapp_number;
+  if (!patientPhone) {
+    throw new Error(`El paciente ${patient.name} no tiene número de teléfono registrado.`);
+  }
+
+  const doctorName = app.doctorName || patient.assignedDoctorName || 'Dr. Carlos Mendoza';
+  const reminderMessage = formatAppointmentReminderMessage(patient.name, app.date, app.time, doctorName);
+
+  const ok = await sendWhatsAppMessageToPatient(patientPhone, reminderMessage);
+  if (!ok) {
+    throw new Error('No se pudo enviar el mensaje a través de WhatsApp Web. Verifica que el microservicio esté activo y vinculado.');
+  }
+
+  const sentAt = new Date().toISOString();
+  app.reminder48hSent = true;
+  app.reminder48hSentAt = sentAt;
+
+  if (!Array.isArray(patient.whatsappMessagesLog)) {
+    patient.whatsappMessagesLog = [];
+  }
+
+  const logEntry = {
+    id: `wamsg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+    type: 'RECORDATORIO_CITA_48H',
+    sentAt: sentAt,
+    recipientName: patient.name,
+    recipientPhone: patientPhone,
+    appointmentDate: app.date,
+    appointmentTime: app.time,
+    doctorName: doctorName,
+    message: reminderMessage,
+    status: 'ENVIADO'
+  };
+
+  patient.whatsappMessagesLog.unshift(logEntry);
+  saveAppState(state);
+
+  return { success: true, message: reminderMessage, logEntry };
+}
+
+/**
+ * Revisa todas las citas de todos los pacientes en la ventana de 48 horas previas y envía recordatorios automáticos.
+ * Lleva un registro en patient.whatsappMessagesLog y marca app.reminder48hSent.
+ * @returns {Promise<{sent: number, checked: number}>}
+ */
+export async function checkAndSend48hAppointmentReminders() {
+  const state = getAppState();
+  if (!state || !Array.isArray(state.patients)) return { sent: 0, checked: 0 };
+
+  let sentCount = 0;
+  let checkedCount = 0;
+  let modified = false;
+
+  for (const patient of state.patients) {
+    if (!Array.isArray(patient.appointments)) continue;
+
+    for (const app of patient.appointments) {
+      checkedCount++;
+      if (app.reminder48hSent) continue;
+
+      const diffHours = getAppointmentTimeDiffHours(app.date, app.time);
+      // Ventana de 48 horas (entre 0 y 48 horas hacia el futuro)
+      if (diffHours !== null && diffHours > 0 && diffHours <= 48) {
+        const patientPhone = patient.telephone || patient.phone || patient.whatsapp_number;
+        if (!patientPhone) continue;
+
+        const doctorName = app.doctorName || patient.assignedDoctorName || 'Dr. Carlos Mendoza';
+        const reminderText = formatAppointmentReminderMessage(patient.name, app.date, app.time, doctorName);
+
+        try {
+          const success = await sendWhatsAppMessageToPatient(patientPhone, reminderText);
+          if (success) {
+            const sentAt = new Date().toISOString();
+            app.reminder48hSent = true;
+            app.reminder48hSentAt = sentAt;
+
+            if (!Array.isArray(patient.whatsappMessagesLog)) {
+              patient.whatsappMessagesLog = [];
+            }
+
+            patient.whatsappMessagesLog.unshift({
+              id: `wamsg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+              type: 'RECORDATORIO_CITA_48H',
+              sentAt: sentAt,
+              recipientName: patient.name,
+              recipientPhone: patientPhone,
+              appointmentDate: app.date,
+              appointmentTime: app.time,
+              doctorName: doctorName,
+              message: reminderText,
+              status: 'ENVIADO'
+            });
+
+            sentCount++;
+            modified = true;
+            console.log(`✅ [Recordatorio 48h] Enviado a ${patient.name} (${patientPhone}) para cita del ${app.date} ${app.time}`);
+          }
+        } catch (err) {
+          console.warn(`Error al enviar recordatorio a ${patient.name}:`, err.message);
+        }
+      }
+    }
+  }
+
+  if (modified) {
+    saveAppState(state);
+  }
+
+  return { sent: sentCount, checked: checkedCount };
 }
 
