@@ -1053,7 +1053,7 @@ export function formatAppointmentReminderMessage(patientName, appDateStr, appTim
     docClean = `Dr. ${docClean}`;
   }
 
-  return `Hola ${patientName}, Te saludamos de HOSPITAL MULTIMECA SAYAXCHÉ, te recordamos que tienes una cita el ${dayOfWeek} ${dayOfMonth} de ${monthName} con el  ${docClean} a las ${formattedTime}.`;
+  return `Hola ${patientName}, Te saludamos de HOSPITAL MULTIMECA SAYAXCHÉ, te recordamos que tienes una cita el ${dayOfWeek} ${dayOfMonth} de ${monthName} con el  ${docClean} a las ${formattedTime}. Te Esperamos, saludos cordiales.`;
 }
 
 /**

@@ -398,7 +398,7 @@ app.post('/api/notify-patient-reminder', async (req, res) => {
     }
 
     const chatId = `${cleanPhone}@c.us`;
-    const message = customMessage || `Hola ${patientName}, Te saludamos de HOSPITAL MULTIMECA SAYAXCHÉ, te recordamos que tienes una cita con el ${doctorName || 'Médico Tratante'} el ${appointmentDate} a las ${appointmentTime}.`;
+    const message = customMessage || `Hola ${patientName}, Te saludamos de HOSPITAL MULTIMECA SAYAXCHÉ, te recordamos que tienes una cita con el ${doctorName || 'Médico Tratante'} el ${appointmentDate} a las ${appointmentTime}. Te Esperamos, saludos cordiales.`;
 
     await client.sendMessage(chatId, message);
     console.log(`✉️ Recordatorio de cita 48h enviado a: ${patientName} (${cleanPhone})`);
