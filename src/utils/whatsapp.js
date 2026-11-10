@@ -418,38 +418,38 @@ export async function showWhatsAppQrModal(qrData = null) {
     return `
       <div style="font-size: 2.2rem; margin-bottom: 6px;">💻</div>
       <h3 style="margin: 0 0 6px 0; color: var(--text-primary); font-family: var(--font-heading); font-size: 1.3rem;">
-        Iniciar Servicio de WhatsApp en esta PC
+        Activar WhatsApp en esta Computadora
       </h3>
       <p style="font-size: 0.83rem; color: var(--text-muted); line-height: 1.4; margin: 0 0 16px 0;">
-        El microservicio local no está activo en esta computadora. Presiona el botón verde para iniciarlo y ver el código QR de inmediato:
+        Para mostrar el código QR y enviar mensajes automáticos a médicos y pacientes, abre el puente de WhatsApp en esta PC:
       </p>
 
-      <!-- Botón de acción directa con protocolo registrado -->
-      <a href="lugamed-bridge://start" id="btn-direct-launch-bridge" style="display: flex; align-items: center; justify-content: center; gap: 10px; background: #22c55e; color: #052e16; font-weight: 700; padding: 13px 20px; border-radius: 8px; text-decoration: none; font-size: 0.96rem; box-shadow: 0 4px 16px rgba(34, 197, 94, 0.4); margin-bottom: 14px; transition: transform 0.15s ease;">
-        <span style="font-size: 1.2rem;">🚀</span>
-        <span>Iniciar WhatsApp Bridge Ahora</span>
+      <!-- Botón Principal: Descargar y Ejecutar el lanzador garantizado -->
+      <a href="/bridge/INICIAR-WHATSAPP.bat" download="INICIAR-WHATSAPP.bat" id="btn-download-start-bridge" style="display: flex; align-items: center; justify-content: center; gap: 10px; background: #2563eb; color: white; font-weight: 700; padding: 13px 20px; border-radius: 8px; text-decoration: none; font-size: 0.96rem; box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4); margin-bottom: 12px; transition: transform 0.15s ease;">
+        <span style="font-size: 1.25rem;">⚡</span>
+        <span>1. Descargar y Abrir: INICIAR-WHATSAPP.bat</span>
       </a>
 
-      <!-- Guía clara de confirmación -->
-      <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; text-align: left; font-size: 0.79rem; color: var(--text-muted); line-height: 1.5;">
-        <strong style="color: var(--text-primary); display: block; margin-bottom: 4px;">Instrucciones para iniciar:</strong>
-        • Haz clic en el botón verde <strong>Iniciar WhatsApp Bridge</strong> (o abre el acceso directo <em>"Iniciar WhatsApp Bridge"</em> en tu Escritorio de Windows).<br>
-        • Si el navegador te pregunta: <em>"¿Abrir Lugamed Bridge Protocol?"</em>, marca <strong>"Permitir siempre"</strong> y haz clic en <strong>"Abrir"</strong>.<br>
-        • En cuanto inicie el servicio, esta ventana detectará la conexión automáticamente y te mostrará el código QR.
+      <!-- Pasos sencillos -->
+      <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; text-align: left; font-size: 0.8rem; color: var(--text-muted); line-height: 1.5;">
+        <strong style="color: var(--text-primary); display: block; margin-bottom: 4px;">Pasos para activar el servicio:</strong>
+        1. Haz clic en el botón azul para descargar <strong>INICIAR-WHATSAPP.bat</strong>.<br>
+        2. Abre el archivo descargado (doble clic). Se abrirá una ventana que iniciará el puente.<br>
+        3. ¡Listo! Esta pantalla detectará la conexión automáticamente y te mostrará el Código QR aquí mismo.
+      </div>
+
+      <!-- Opción secundaria para quienes ya tienen el acceso directo o el protocolo registrado -->
+      <div style="margin-bottom: 14px;">
+        <span style="font-size: 0.78rem; color: var(--text-muted);">¿Ya lo habías configurado antes en esta PC?</span><br>
+        <a href="lugamed-bridge://start" id="btn-direct-launch-bridge" style="display: inline-flex; align-items: center; gap: 6px; color: #4ade80; text-decoration: underline; font-weight: 600; font-size: 0.82rem; margin-top: 4px;">
+          <span>🚀</span> Clic aquí para abrirlo directamente (o abre el acceso de tu Escritorio)
+        </a>
       </div>
 
       <!-- Barra de estado interactiva -->
       <div id="wa-qr-status" style="font-size: 0.82rem; color: #eab308; margin-bottom: 14px; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600;">
         <span class="wa-indicator-dot connecting" style="width: 10px; height: 10px;"></span>
         <span id="wa-qr-status-msg">Esperando inicio del microservicio en segundo plano...</span>
-      </div>
-
-      <!-- Instalador de 1 Clic si no lo tienen instalado aún -->
-      <div style="border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 12px; margin-bottom: 14px; font-size: 0.78rem; color: var(--text-muted);">
-        ¿Es la primera vez que se usa en esta computadora?<br>
-        <a href="/bridge/Instalador-WhatsApp-Lugamed.bat" download="Instalador-WhatsApp-Lugamed.bat" style="color: #38bdf8; font-weight: 700; text-decoration: underline; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px;">
-          <span>📥</span> Descargar Instalador Oficial de 1 Clic (.bat)
-        </a>
       </div>
 
       <div style="display: flex; gap: 10px; justify-content: center;">
@@ -486,12 +486,28 @@ export async function showWhatsAppQrModal(qrData = null) {
     if (closeDoneBtn) closeDoneBtn.onclick = closeModal;
     if (closeX) closeX.onclick = closeModal;
 
+    const downloadBtn = modal.querySelector('#btn-download-start-bridge');
+    if (downloadBtn) {
+      downloadBtn.onclick = () => {
+        const msg = modal.querySelector('#wa-qr-status-msg');
+        if (msg) msg.textContent = '📥 Archivo descargado. Ábrelo en tu PC para ver el código QR aquí...';
+      };
+    }
+
     const directLaunchBtn = modal.querySelector('#btn-direct-launch-bridge');
     if (directLaunchBtn) {
       directLaunchBtn.onclick = () => {
         triggerLaunchWhatsAppBridge();
         const msg = modal.querySelector('#wa-qr-status-msg');
-        if (msg) msg.textContent = '🚀 Abriendo microservicio... Detectando conexión...';
+        if (msg) msg.textContent = '🚀 Solicitando apertura a Windows... Esperando 6 segundos...';
+        setTimeout(async () => {
+          if (!status || !status.online) {
+            const check = await checkWhatsAppBridgeStatus();
+            if (!check.online && msg) {
+              msg.textContent = '⚠️ Si la ventana no abrió, descarga y abre INICIAR-WHATSAPP.bat arriba.';
+            }
+          }
+        }, 6000);
       };
     }
 
@@ -627,8 +643,11 @@ export function showWhatsAppInstallationModal() {
           <div style="flex: 1;">
             <strong style="color: var(--text-primary); font-size: 0.9rem; display: block; margin-bottom: 6px;">Descarga el instalador automático:</strong>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <a href="/bridge/Instalador-WhatsApp-Lugamed.bat" download="Instalador-WhatsApp-Lugamed.bat" style="background: #22c55e; color: #0f172a; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);">
-                <span>📥</span> Descargar Instalador (.BAT)
+              <a href="/bridge/INICIAR-WHATSAPP.bat" download="INICIAR-WHATSAPP.bat" style="background: #2563eb; color: white; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);">
+                <span>⚡</span> Descargar INICIAR-WHATSAPP.bat
+              </a>
+              <a href="/bridge/Instalador-WhatsApp-Lugamed.bat" download="Instalador-WhatsApp-Lugamed.bat" style="background: #22c55e; color: #0f172a; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: 700; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 6px;">
+                <span>📥</span> Instalador (.BAT)
               </a>
               <a href="/bridge/Instalador-WhatsApp-Lugamed.zip" download="Instalador-WhatsApp-Lugamed.zip" style="background: rgba(255,255,255,0.08); color: var(--text-primary); text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: 600; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border-color);">
                 <span>📦</span> Opción ZIP
