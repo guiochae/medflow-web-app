@@ -81,56 +81,24 @@ export async function checkWhatsAppBridgeStatus() {
  * iniciar silenciosamente el microservicio de WhatsApp si no estaba corriendo.
  */
 export function triggerLaunchWhatsAppBridge() {
-  console.log("🚀 Disparando inicio automático de WhatsApp Bridge vía protocolo Windows...");
-  // 1. Enlace directo simulando click (muy eficaz en Chrome/Edge bajo interacción de usuario)
+  console.log("🚀 Invocando protocolo de WhatsApp Bridge...");
   try {
-    const a = document.createElement('a');
-    a.href = 'lugamed-bridge://start';
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      try { a.remove(); } catch (_) {}
-    }, 1500);
+    window.location.assign('lugamed-bridge://start');
   } catch (err) {
     console.warn("Aviso al invocar enlace lugamed-bridge:", err);
   }
-
-  // 2. Iframe oculto como método complementario
-  try {
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = 'lugamed-bridge://start';
-    document.body.appendChild(iframe);
-    setTimeout(() => {
-      try { iframe.remove(); } catch (_) {}
-    }, 2500);
-  } catch (_) {}
 }
 
 /**
  * Asegura que el microservicio de WhatsApp esté en ejecución.
- * Si está offline, invoca el inicio automático y sondea hasta que responda.
+ * Si está offline, consulta el estado actual.
  */
 export async function ensureWhatsAppBridgeRunning() {
   const initial = await checkWhatsAppBridgeStatus();
   if (initial.online) {
     return initial;
   }
-
-  // Activar mediante protocolo
-  triggerLaunchWhatsAppBridge();
-
-  // Sondeo durante 6 segundos (4 intentos)
-  for (let i = 0; i < 4; i++) {
-    await new Promise(r => setTimeout(r, 1500));
-    const status = await checkWhatsAppBridgeStatus();
-    if (status.online) {
-      return status;
-    }
-  }
-
-  return { online: false, isReady: false, qr: null };
+  return initial;
 }
 
 /**
@@ -348,7 +316,7 @@ export async function showWhatsAppQrModal(qrData = null) {
   const existingModal = document.getElementById('whatsapp-qr-modal');
   if (existingModal) existingModal.remove();
 
-  // Iniciar automáticamente el microservicio local de inmediato
+  // Intentar invocación del protocolo local
   triggerLaunchWhatsAppBridge();
 
   const modal = document.createElement('div');
@@ -359,19 +327,53 @@ export async function showWhatsAppQrModal(qrData = null) {
   modal.style.display = 'flex';
   modal.style.alignItems = 'center';
   modal.style.justifyContent = 'center';
-  modal.style.background = 'rgba(0, 0, 0, 0.78)';
-  modal.style.backdropFilter = 'blur(6px)';
+  modal.style.background = 'rgba(0, 0, 0, 0.82)';
+  modal.style.backdropFilter = 'blur(8px)';
   modal.style.padding = '16px';
 
   let currentQr = qrData;
   let status = bridgeStatusCache || { online: false, isReady: false, qr: qrData };
 
-  // Renderizar directamente la vista del código QR
-  modal.innerHTML = `
-    <div class="glass-card" style="background: #181826; border: 1px solid var(--accent-primary); border-radius: 14px; padding: 24px; max-width: 440px; width: 92%; text-align: center; box-shadow: 0 15px 40px rgba(0,0,0,0.65); position: relative;">
-      <button id="btn-close-wa-qr-x" style="position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; line-height: 1;">&times;</button>
-      
-      <div id="wa-qr-modal-body">
+  // Consultar estado inicial real de inmediato
+  try {
+    const liveStatus = await checkWhatsAppBridgeStatus();
+    if (liveStatus) {
+      status = liveStatus;
+      if (liveStatus.qr) currentQr = liveStatus.qr;
+    }
+  } catch (_) {}
+
+  // Generador de vistas internas según el estado actual
+  const renderModalContent = () => {
+    // CASO 1: YA ESTÁ VINCULADO Y ACTIVO
+    if (status.online && status.isReady) {
+      return `
+        <div style="font-size: 2.8rem; margin-bottom: 8px;">✅</div>
+        <h3 style="margin: 0 0 8px 0; color: #22c55e; font-family: var(--font-heading); font-size: 1.35rem;">
+          ¡WhatsApp Vinculado y Activo!
+        </h3>
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin: 0 0 18px 0;">
+          El microservicio local está conectado exitosamente a WhatsApp Web.<br>
+          Las notificaciones de citas y preconsulta se enviarán de forma automática.
+        </p>
+        <div style="background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.35); border-radius: 8px; padding: 12px; margin-bottom: 20px; font-size: 0.82rem; color: #22c55e; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600;">
+          <span class="wa-indicator-dot online"></span>
+          <span>Sesión activa y lista en esta computadora</span>
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+          <button id="btn-relink-wa-session" style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); color: #f87171; padding: 8px 14px; border-radius: 6px; font-size: 0.82rem; cursor: pointer;">
+            🔄 Cambiar Celular / Desvincular
+          </button>
+          <button id="btn-close-wa-done" style="background: var(--accent-primary); border: none; color: white; padding: 8px 24px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer;">
+            Listo
+          </button>
+        </div>
+      `;
+    }
+
+    // CASO 2: SERVICIO LOCAL DETECTADO (ONLINE) CON CÓDIGO QR O CARGANDO QR
+    if (status.online) {
+      return `
         <div style="font-size: 2.2rem; margin-bottom: 6px;">📲</div>
         <h3 style="margin: 0 0 6px 0; color: var(--text-primary); font-family: var(--font-heading); font-size: 1.3rem;">
           Código QR de WhatsApp
@@ -385,31 +387,23 @@ export async function showWhatsAppQrModal(qrData = null) {
           <canvas id="wa-qr-canvas" style="display: ${currentQr ? 'block' : 'none'}; width: 220px; height: 220px;"></canvas>
           <div id="wa-qr-placeholder" style="display: ${currentQr ? 'none' : 'flex'}; flex-direction: column; align-items: center; justify-content: center; height: 220px; width: 220px; color: #1e293b; gap: 10px; text-align: center; padding: 10px;">
             <div style="width: 38px; height: 38px; border: 3px solid rgba(0, 242, 254, 0.2); border-top-color: #00f2fe; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
-            <span style="font-size: 0.88rem; font-weight: 700; color: #0f172a;" id="wa-placeholder-title">Iniciando WhatsApp...</span>
-            <span style="font-size: 0.75rem; color: #64748b; line-height: 1.3;" id="wa-placeholder-subtitle">Levantando el puente y generando código QR automáticamente...</span>
+            <span style="font-size: 0.88rem; font-weight: 700; color: #0f172a;" id="wa-placeholder-title">Conectando WhatsApp...</span>
+            <span style="font-size: 0.75rem; color: #64748b; line-height: 1.3;" id="wa-placeholder-subtitle">Generando código QR seguro (tomará unos 5 segundos)...</span>
           </div>
         </div>
 
         <!-- Estado interactivo en vivo -->
         <div id="wa-qr-status" style="font-size: 0.82rem; color: #38bdf8; margin-bottom: 14px; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600;">
-          <span class="wa-indicator-dot connecting" style="width: 10px; height: 10px;"></span>
-          <span id="wa-qr-status-msg">${currentQr ? '¡Código QR listo! Esperando escaneo...' : 'Iniciando WhatsApp Bridge en segundo plano...'}</span>
+          <span class="wa-indicator-dot ${currentQr ? 'qr-needed' : 'connecting'}" style="width: 10px; height: 10px;"></span>
+          <span id="wa-qr-status-msg">${currentQr ? '¡Código QR listo! Esperando escaneo...' : 'Generando código QR...'}</span>
         </div>
 
         <!-- Instrucciones paso a paso -->
         <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; text-align: left; font-size: 0.78rem; color: var(--text-muted); line-height: 1.5;">
           <strong style="color: var(--text-primary); display: block; margin-bottom: 3px;">Cómo escanear en tu celular:</strong>
-          1. Abre <strong>WhatsApp</strong> en el teléfono.<br>
+          1. Abre <strong>WhatsApp</strong> en el teléfono de la clínica.<br>
           2. Ve a <strong>Ajustes / Menú (⋮) ➔ Dispositivos vinculados</strong>.<br>
-          3. Toca <strong>Vincular un dispositivo</strong> y apunta tu cámara a la pantalla.
-        </div>
-
-        <!-- Ayuda alternativa (solo visible si tras 15 segundos no responde) -->
-        <div id="wa-qr-delayed-help" style="display: none; background: rgba(234, 179, 8, 0.08); border: 1px solid rgba(234, 179, 8, 0.25); border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; font-size: 0.78rem; color: var(--text-muted);">
-          ¿El servicio no inicia? Si es la primera vez que se usa en esta PC:<br>
-          <a href="/bridge/Instalador-WhatsApp-Lugamed.bat" download style="color: #fbbf24; font-weight: 700; text-decoration: underline; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px;">
-            <span>📥</span> Descargar Instalador de 1 Clic (.bat)
-          </a>
+          3. Toca <strong>Vincular un dispositivo</strong> y apunta tu cámara a este código QR.
         </div>
 
         <div style="display: flex; gap: 10px; justify-content: center;">
@@ -417,35 +411,155 @@ export async function showWhatsAppQrModal(qrData = null) {
             Cerrar
           </button>
         </div>
+      `;
+    }
+
+    // CASO 3: SERVICIO LOCAL OFFLINE (AÚN NO INICIADO EN ESTA COMPUTADORA)
+    return `
+      <div style="font-size: 2.2rem; margin-bottom: 6px;">💻</div>
+      <h3 style="margin: 0 0 6px 0; color: var(--text-primary); font-family: var(--font-heading); font-size: 1.3rem;">
+        Iniciar Servicio de WhatsApp en esta PC
+      </h3>
+      <p style="font-size: 0.83rem; color: var(--text-muted); line-height: 1.4; margin: 0 0 16px 0;">
+        El microservicio local no está activo en esta computadora. Presiona el botón verde para iniciarlo y ver el código QR de inmediato:
+      </p>
+
+      <!-- Botón de acción directa con protocolo registrado -->
+      <a href="lugamed-bridge://start" id="btn-direct-launch-bridge" style="display: flex; align-items: center; justify-content: center; gap: 10px; background: #22c55e; color: #052e16; font-weight: 700; padding: 13px 20px; border-radius: 8px; text-decoration: none; font-size: 0.96rem; box-shadow: 0 4px 16px rgba(34, 197, 94, 0.4); margin-bottom: 14px; transition: transform 0.15s ease;">
+        <span style="font-size: 1.2rem;">🚀</span>
+        <span>Iniciar WhatsApp Bridge Ahora</span>
+      </a>
+
+      <!-- Guía clara de confirmación -->
+      <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; text-align: left; font-size: 0.79rem; color: var(--text-muted); line-height: 1.5;">
+        <strong style="color: var(--text-primary); display: block; margin-bottom: 4px;">Instrucciones para iniciar:</strong>
+        • Haz clic en el botón verde <strong>Iniciar WhatsApp Bridge</strong> (o abre el acceso directo <em>"Iniciar WhatsApp Bridge"</em> en tu Escritorio de Windows).<br>
+        • Si el navegador te pregunta: <em>"¿Abrir Lugamed Bridge Protocol?"</em>, marca <strong>"Permitir siempre"</strong> y haz clic en <strong>"Abrir"</strong>.<br>
+        • En cuanto inicie el servicio, esta ventana detectará la conexión automáticamente y te mostrará el código QR.
+      </div>
+
+      <!-- Barra de estado interactiva -->
+      <div id="wa-qr-status" style="font-size: 0.82rem; color: #eab308; margin-bottom: 14px; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600;">
+        <span class="wa-indicator-dot connecting" style="width: 10px; height: 10px;"></span>
+        <span id="wa-qr-status-msg">Esperando inicio del microservicio en segundo plano...</span>
+      </div>
+
+      <!-- Instalador de 1 Clic si no lo tienen instalado aún -->
+      <div style="border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 12px; margin-bottom: 14px; font-size: 0.78rem; color: var(--text-muted);">
+        ¿Es la primera vez que se usa en esta computadora?<br>
+        <a href="/bridge/Instalador-WhatsApp-Lugamed.bat" download="Instalador-WhatsApp-Lugamed.bat" style="color: #38bdf8; font-weight: 700; text-decoration: underline; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px;">
+          <span>📥</span> Descargar Instalador Oficial de 1 Clic (.bat)
+        </a>
+      </div>
+
+      <div style="display: flex; gap: 10px; justify-content: center;">
+        <button id="btn-force-check-bridge" style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; padding: 8px 16px; border-radius: 6px; font-size: 0.82rem; cursor: pointer;">
+          🔍 Comprobar Ahora
+        </button>
+        <button id="btn-close-wa-qr" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border-color); color: var(--text-muted); padding: 8px 22px; border-radius: 6px; font-size: 0.85rem; cursor: pointer;">
+          Cerrar
+        </button>
+      </div>
+    `;
+  };
+
+  modal.innerHTML = `
+    <div class="glass-card" style="background: #181826; border: 1px solid var(--accent-primary); border-radius: 14px; padding: 24px; max-width: 450px; width: 92%; text-align: center; box-shadow: 0 15px 40px rgba(0,0,0,0.65); position: relative;">
+      <button id="btn-close-wa-qr-x" style="position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; line-height: 1;">&times;</button>
+      <div id="wa-qr-modal-body">
+        ${renderModalContent()}
       </div>
     </div>
   `;
 
   document.body.appendChild(modal);
 
-  const canvas = modal.querySelector('#wa-qr-canvas');
-  const placeholder = modal.querySelector('#wa-qr-placeholder');
-  const statusMsg = modal.querySelector('#wa-qr-status-msg');
-  const statusDot = modal.querySelector('#wa-qr-status .wa-indicator-dot');
-  const closeBtn = modal.querySelector('#btn-close-wa-qr');
-  const closeX = modal.querySelector('#btn-close-wa-qr-x');
-  const delayedHelp = modal.querySelector('#wa-qr-delayed-help');
+  const bindModalEvents = () => {
+    const closeBtn = modal.querySelector('#btn-close-wa-qr');
+    const closeDoneBtn = modal.querySelector('#btn-close-wa-done');
+    const closeX = modal.querySelector('#btn-close-wa-qr-x');
+    const closeModal = () => {
+      clearInterval(qrCheckInterval);
+      modal.remove();
+    };
+    if (closeBtn) closeBtn.onclick = closeModal;
+    if (closeDoneBtn) closeDoneBtn.onclick = closeModal;
+    if (closeX) closeX.onclick = closeModal;
 
-  const closeModal = () => {
-    clearInterval(qrCheckInterval);
-    modal.remove();
+    const directLaunchBtn = modal.querySelector('#btn-direct-launch-bridge');
+    if (directLaunchBtn) {
+      directLaunchBtn.onclick = () => {
+        triggerLaunchWhatsAppBridge();
+        const msg = modal.querySelector('#wa-qr-status-msg');
+        if (msg) msg.textContent = '🚀 Abriendo microservicio... Detectando conexión...';
+      };
+    }
+
+    const forceCheckBtn = modal.querySelector('#btn-force-check-bridge');
+    if (forceCheckBtn) {
+      forceCheckBtn.onclick = async () => {
+        forceCheckBtn.disabled = true;
+        forceCheckBtn.textContent = 'Verificando...';
+        status = await checkWhatsAppBridgeStatus();
+        updateWhatsAppPillUI(status);
+        updateModalView();
+        forceCheckBtn.disabled = false;
+        forceCheckBtn.textContent = '🔍 Comprobar Ahora';
+      };
+    }
+
+    const relinkBtn = modal.querySelector('#btn-relink-wa-session');
+    if (relinkBtn) {
+      relinkBtn.onclick = async () => {
+        if (!confirm("¿Deseas desvincular la sesión actual para escanear un nuevo código QR?")) return;
+        relinkBtn.disabled = true;
+        relinkBtn.textContent = "Desvinculando...";
+        await logoutWhatsAppBridge();
+        status = await checkWhatsAppBridgeStatus();
+        updateModalView();
+      };
+    }
+
+    // Dibujar QR si la vista actual tiene canvas y ya tenemos QR
+    const canvas = modal.querySelector('#wa-qr-canvas');
+    const placeholder = modal.querySelector('#wa-qr-placeholder');
+    if (canvas && currentQr) {
+      canvas.style.display = 'block';
+      if (placeholder) placeholder.style.display = 'none';
+      QRCode.toCanvas(canvas, currentQr, { width: 220, margin: 1 }, (err) => {
+        if (err) console.error("Error al renderizar QR en canvas:", err);
+      });
+    }
   };
-  if (closeBtn) closeBtn.onclick = closeModal;
-  if (closeX) closeX.onclick = closeModal;
 
-  // Si ya tenemos QR previo, dibujarlo de inmediato
-  if (canvas && currentQr) {
-    canvas.style.display = 'block';
-    if (placeholder) placeholder.style.display = 'none';
-    QRCode.toCanvas(canvas, currentQr, { width: 220, margin: 1 }, (err) => {
-      if (err) console.error("Error al renderizar QR en canvas:", err);
-    });
-  }
+  let lastRenderedState = status.online ? (status.isReady ? 'ready' : (currentQr ? 'qr' : 'starting')) : 'offline';
+
+  const updateModalView = () => {
+    const currentState = status.online ? (status.isReady ? 'ready' : (status.qr ? 'qr' : 'starting')) : 'offline';
+    const body = modal.querySelector('#wa-qr-modal-body');
+    if (!body) return;
+
+    if (currentState !== lastRenderedState) {
+      lastRenderedState = currentState;
+      body.innerHTML = renderModalContent();
+      bindModalEvents();
+      return;
+    }
+
+    // Si ya estamos en la vista de QR y cambió el string del QR
+    if (status.qr && status.qr !== currentQr) {
+      currentQr = status.qr;
+      const canvas = modal.querySelector('#wa-qr-canvas');
+      const placeholder = modal.querySelector('#wa-qr-placeholder');
+      if (canvas) {
+        canvas.style.display = 'block';
+        if (placeholder) placeholder.style.display = 'none';
+        QRCode.toCanvas(canvas, currentQr, { width: 220, margin: 1 });
+      }
+    }
+  };
+
+  bindModalEvents();
 
   let attempts = 0;
   // Bucle de sondeo constante cada 1.2 segundos
@@ -457,92 +571,13 @@ export async function showWhatsAppQrModal(qrData = null) {
 
     attempts++;
 
-    // Re-disparar el protocolo cada 5 segundos si sigue offline
-    if (attempts % 4 === 0 && (!status || !status.online)) {
-      triggerLaunchWhatsAppBridge();
-    }
-
-    // Mostrar enlace de descarga tras 15 segundos si no ha levantado
-    if (attempts >= 12 && (!status || !status.online)) {
-      if (delayedHelp) delayedHelp.style.display = 'block';
-    }
-
     try {
       status = await checkWhatsAppBridgeStatus();
       updateWhatsAppPillUI(status);
+      updateModalView();
 
       if (status.online && status.isReady) {
         clearInterval(qrCheckInterval);
-        const body = modal.querySelector('#wa-qr-modal-body');
-        if (body) {
-          body.innerHTML = `
-            <div style="font-size: 2.8rem; margin-bottom: 8px;">✅</div>
-            <h3 style="margin: 0 0 8px 0; color: #22c55e; font-family: var(--font-heading); font-size: 1.35rem;">
-              ¡WhatsApp Vinculado y Activo!
-            </h3>
-            <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin: 0 0 18px 0;">
-              El microservicio local está conectado exitosamente a WhatsApp Web.<br>
-              Las notificaciones de pacientes y prioridad se enviarán de forma automática.
-            </p>
-            <div style="background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.35); border-radius: 8px; padding: 12px; margin-bottom: 20px; font-size: 0.82rem; color: #22c55e; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600;">
-              <span class="wa-indicator-dot online"></span>
-              <span>Sesión activa y lista en esta computadora</span>
-            </div>
-            <div style="display: flex; gap: 10px; justify-content: center;">
-              <button id="btn-relink-wa-session" style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); color: #f87171; padding: 8px 14px; border-radius: 6px; font-size: 0.82rem; cursor: pointer;">
-                🔄 Cambiar Celular / Desvincular
-              </button>
-              <button id="btn-close-wa-done" style="background: var(--accent-primary); border: none; color: white; padding: 8px 22px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer;">
-                Listo
-              </button>
-            </div>
-          `;
-          const relinkBtn = body.querySelector('#btn-relink-wa-session');
-          if (relinkBtn) {
-            relinkBtn.onclick = async () => {
-              if (!confirm("¿Deseas desvincular la sesión actual para escanear un nuevo código QR?")) return;
-              relinkBtn.disabled = true;
-              relinkBtn.textContent = "Desvinculando...";
-              await logoutWhatsAppBridge();
-              showWhatsAppQrModal();
-            };
-          }
-          const doneBtn = body.querySelector('#btn-close-wa-done');
-          if (doneBtn) doneBtn.onclick = closeModal;
-        }
-        return;
-      }
-
-      if (status.qr) {
-        if (delayedHelp) delayedHelp.style.display = 'none';
-        if (currentQr !== status.qr) {
-          currentQr = status.qr;
-          if (canvas) {
-            canvas.style.display = 'block';
-            if (placeholder) placeholder.style.display = 'none';
-            QRCode.toCanvas(canvas, currentQr, { width: 220, margin: 1 });
-          }
-        }
-        if (statusMsg) {
-          statusMsg.textContent = '¡Código QR listo! Esperando escaneo con tu celular...';
-        }
-        if (statusDot) {
-          statusDot.className = 'wa-indicator-dot qr-needed';
-        }
-      } else if (status.online) {
-        if (statusMsg) {
-          statusMsg.textContent = 'Conectando con WhatsApp Web... Generando código QR...';
-        }
-        if (statusDot) {
-          statusDot.className = 'wa-indicator-dot connecting';
-        }
-      } else {
-        if (statusMsg) {
-          statusMsg.textContent = `Iniciando servicio de WhatsApp automáticamente (${attempts}s)...`;
-        }
-        if (statusDot) {
-          statusDot.className = 'wa-indicator-dot connecting';
-        }
       }
     } catch (err) {
       console.warn("Sondeo WhatsApp Qr:", err);
