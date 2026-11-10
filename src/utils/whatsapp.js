@@ -418,43 +418,38 @@ export async function showWhatsAppQrModal(qrData = null) {
     return `
       <div style="font-size: 2.2rem; margin-bottom: 6px;">💻</div>
       <h3 style="margin: 0 0 6px 0; color: var(--text-primary); font-family: var(--font-heading); font-size: 1.3rem;">
-        Activar WhatsApp en esta Computadora
+        Vincular WhatsApp en esta Computadora
       </h3>
-      <p style="font-size: 0.83rem; color: var(--text-muted); line-height: 1.4; margin: 0 0 16px 0;">
-        Para mostrar el código QR y enviar mensajes automáticos a médicos y pacientes, abre el puente de WhatsApp en esta PC:
+      <p style="font-size: 0.84rem; color: var(--text-muted); line-height: 1.4; margin: 0 0 16px 0;">
+        Para mostrar el código QR y enviar notificaciones automáticas, inicia el puente oficial de WhatsApp en esta PC:
       </p>
 
-      <!-- Botón Principal: Descargar y Ejecutar el lanzador garantizado -->
-      <a href="/bridge/INICIAR-WHATSAPP.bat" download="INICIAR-WHATSAPP.bat" id="btn-download-start-bridge" style="display: flex; align-items: center; justify-content: center; gap: 10px; background: #2563eb; color: white; font-weight: 700; padding: 13px 20px; border-radius: 8px; text-decoration: none; font-size: 0.96rem; box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4); margin-bottom: 12px; transition: transform 0.15s ease;">
-        <span style="font-size: 1.25rem;">⚡</span>
-        <span>1. Descargar y Abrir: INICIAR-WHATSAPP.bat</span>
+      <!-- Botón Principal: Descargar paquete portátil completo y listo -->
+      <a href="/bridge/Puente-WhatsApp-Sayaxche.zip" download="Puente-WhatsApp-Sayaxche.zip" id="btn-download-portable-zip" style="display: flex; align-items: center; justify-content: center; gap: 10px; background: #22c55e; color: #022c22; font-weight: 700; padding: 14px 20px; border-radius: 8px; text-decoration: none; font-size: 0.98rem; box-shadow: 0 4px 16px rgba(34, 197, 94, 0.4); margin-bottom: 14px; transition: transform 0.15s ease;">
+        <span style="font-size: 1.3rem;">📦</span>
+        <span>Descargar Puente WhatsApp Portable (.ZIP)</span>
       </a>
 
-      <!-- Pasos sencillos -->
-      <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; text-align: left; font-size: 0.8rem; color: var(--text-muted); line-height: 1.5;">
-        <strong style="color: var(--text-primary); display: block; margin-bottom: 4px;">Pasos para activar el servicio:</strong>
-        1. Haz clic en el botón azul para descargar <strong>INICIAR-WHATSAPP.bat</strong>.<br>
-        2. Abre el archivo descargado (doble clic). Se abrirá una ventana que iniciará el puente.<br>
-        3. ¡Listo! Esta pantalla detectará la conexión automáticamente y te mostrará el Código QR aquí mismo.
-      </div>
-
-      <!-- Opción secundaria para quienes ya tienen el acceso directo o el protocolo registrado -->
-      <div style="margin-bottom: 14px;">
-        <span style="font-size: 0.78rem; color: var(--text-muted);">¿Ya lo habías configurado antes en esta PC?</span><br>
-        <a href="lugamed-bridge://start" id="btn-direct-launch-bridge" style="display: inline-flex; align-items: center; gap: 6px; color: #4ade80; text-decoration: underline; font-weight: 600; font-size: 0.82rem; margin-top: 4px;">
-          <span>🚀</span> Clic aquí para abrirlo directamente (o abre el acceso de tu Escritorio)
-        </a>
+      <!-- Guía de 3 pasos numerados muy claros -->
+      <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; text-align: left; font-size: 0.82rem; color: var(--text-muted); line-height: 1.55;">
+        <strong style="color: var(--text-primary); display: block; margin-bottom: 6px;">Pasos para activar (Solo toma 1 minuto):</strong>
+        1. Haz clic en el botón verde para descargar <strong>Puente-WhatsApp-Sayaxche.zip</strong>.<br>
+        2. Haz clic derecho sobre el archivo descargado y selecciona <strong>"Extraer todo"</strong>.<br>
+        3. Abre la carpeta y haz doble clic en <strong>INICIAR-WHATSAPP.bat</strong>.<br>
+        <span style="color: #4ade80; font-weight: 600; display: block; margin-top: 6px;">
+          ✅ En cuanto se abra la ventana, esta pantalla detectará la conexión automáticamente y te mostrará el Código QR de inmediato.
+        </span>
       </div>
 
       <!-- Barra de estado interactiva -->
-      <div id="wa-qr-status" style="font-size: 0.82rem; color: #eab308; margin-bottom: 14px; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600;">
+      <div id="wa-qr-status" style="font-size: 0.82rem; color: #38bdf8; margin-bottom: 14px; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600;">
         <span class="wa-indicator-dot connecting" style="width: 10px; height: 10px;"></span>
-        <span id="wa-qr-status-msg">Esperando inicio del microservicio en segundo plano...</span>
+        <span id="wa-qr-status-msg">Esperando inicio de INICIAR-WHATSAPP.bat en esta PC...</span>
       </div>
 
       <div style="display: flex; gap: 10px; justify-content: center;">
-        <button id="btn-force-check-bridge" style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; padding: 8px 16px; border-radius: 6px; font-size: 0.82rem; cursor: pointer;">
-          🔍 Comprobar Ahora
+        <button id="btn-force-check-bridge" style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; padding: 8px 18px; border-radius: 6px; font-size: 0.82rem; cursor: pointer;">
+          🔍 Comprobar Conexión Ahora
         </button>
         <button id="btn-close-wa-qr" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border-color); color: var(--text-muted); padding: 8px 22px; border-radius: 6px; font-size: 0.85rem; cursor: pointer;">
           Cerrar
@@ -464,7 +459,7 @@ export async function showWhatsAppQrModal(qrData = null) {
   };
 
   modal.innerHTML = `
-    <div class="glass-card" style="background: #181826; border: 1px solid var(--accent-primary); border-radius: 14px; padding: 24px; max-width: 450px; width: 92%; text-align: center; box-shadow: 0 15px 40px rgba(0,0,0,0.65); position: relative;">
+    <div class="glass-card" style="background: #181826; border: 1px solid var(--accent-primary); border-radius: 14px; padding: 24px; max-width: 460px; width: 92%; text-align: center; box-shadow: 0 15px 40px rgba(0,0,0,0.65); position: relative;">
       <button id="btn-close-wa-qr-x" style="position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; line-height: 1;">&times;</button>
       <div id="wa-qr-modal-body">
         ${renderModalContent()}
@@ -486,28 +481,11 @@ export async function showWhatsAppQrModal(qrData = null) {
     if (closeDoneBtn) closeDoneBtn.onclick = closeModal;
     if (closeX) closeX.onclick = closeModal;
 
-    const downloadBtn = modal.querySelector('#btn-download-start-bridge');
+    const downloadBtn = modal.querySelector('#btn-download-portable-zip');
     if (downloadBtn) {
       downloadBtn.onclick = () => {
         const msg = modal.querySelector('#wa-qr-status-msg');
-        if (msg) msg.textContent = '📥 Archivo descargado. Ábrelo en tu PC para ver el código QR aquí...';
-      };
-    }
-
-    const directLaunchBtn = modal.querySelector('#btn-direct-launch-bridge');
-    if (directLaunchBtn) {
-      directLaunchBtn.onclick = () => {
-        triggerLaunchWhatsAppBridge();
-        const msg = modal.querySelector('#wa-qr-status-msg');
-        if (msg) msg.textContent = '🚀 Solicitando apertura a Windows... Esperando 6 segundos...';
-        setTimeout(async () => {
-          if (!status || !status.online) {
-            const check = await checkWhatsAppBridgeStatus();
-            if (!check.online && msg) {
-              msg.textContent = '⚠️ Si la ventana no abrió, descarga y abre INICIAR-WHATSAPP.bat arriba.';
-            }
-          }
-        }, 6000);
+        if (msg) msg.textContent = '📥 Descargando archivo ZIP... Extrae y abre INICIAR-WHATSAPP.bat...';
       };
     }
 
