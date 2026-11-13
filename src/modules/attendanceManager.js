@@ -38,6 +38,16 @@ export function renderRrhhAsistencia(container, state) {
     if (!exitEmpIds.has(id)) pendingExitCount++;
   });
 
+  // Colaboradores en almuerzo hoy
+  const todayLunchOut = todayRecords.filter(a => a.type === 'SALIDA_ALMUERZO');
+  const todayLunchIn = todayRecords.filter(a => a.type === 'REGRESO_ALMUERZO');
+  const lunchOutEmpIds = new Set(todayLunchOut.map(e => e.employee_id));
+  const lunchInEmpIds = new Set(todayLunchIn.map(e => e.employee_id));
+  let inLunchCount = 0;
+  lunchOutEmpIds.forEach(id => {
+    if (!lunchInEmpIds.has(id)) inLunchCount++;
+  });
+
   // Filtrado de Asistencias
   let filteredRecords = state.administracion_asistencias.filter(r => {
     if (filterFrom && r.date < filterFrom) return false;
@@ -92,7 +102,7 @@ export function renderRrhhAsistencia(container, state) {
           ${pendingExitCount}
         </div>
         <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">
-          Personal laborando en turno
+          Personal laborando en turno ${inLunchCount > 0 ? `&bull; <strong style="color: #f59e0b;">${inLunchCount} en almuerzo 🥪</strong>` : ''}
         </div>
       </div>
     </div>
@@ -162,8 +172,10 @@ export function renderRrhhAsistencia(container, state) {
           <label style="display: block; margin-bottom: 3px; color: var(--text-muted);">Tipo:</label>
           <select id="att-filter-type" style="width: 100%; padding: 6px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
             <option value="all">Todos los tipos</option>
-            <option value="ENTRADA" ${filterType === 'ENTRADA' ? 'selected' : ''}>Entrada</option>
-            <option value="SALIDA" ${filterType === 'SALIDA' ? 'selected' : ''}>Salida</option>
+            <option value="ENTRADA" ${filterType === 'ENTRADA' ? 'selected' : ''}>🟢 Entrada</option>
+            <option value="SALIDA_ALMUERZO" ${filterType === 'SALIDA_ALMUERZO' ? 'selected' : ''}>🥪 Salida Almuerzo</option>
+            <option value="REGRESO_ALMUERZO" ${filterType === 'REGRESO_ALMUERZO' ? 'selected' : ''}>☕ Regreso Almuerzo</option>
+            <option value="SALIDA" ${filterType === 'SALIDA' ? 'selected' : ''}>🔴 Salida</option>
           </select>
         </div>
         <div>
@@ -210,7 +222,15 @@ export function renderRrhhAsistencia(container, state) {
                   const hasAudit = state.administracion_asistencias_audit.some(aud => aud.attendance_record_id === r.id);
                   
                   let statusHtml = '';
-                  if (r.status === 'ON_TIME') {
+                  if (r.type === 'REGRESO_ALMUERZO' && r.lunchDurationMinutes) {
+                    if (r.lunchExcessMinutes > 0) {
+                      statusHtml = `<span style="background: rgba(239, 68, 68, 0.15); color: #ef4444; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-size: 0.72rem;">⚠️ Exceso Almuerzo (${r.lunchDurationMinutes}m, +${r.lunchExcessMinutes}m)</span>`;
+                    } else {
+                      statusHtml = `<span style="background: rgba(34, 197, 94, 0.15); color: #22c55e; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-size: 0.72rem;">🟢 Almuerzo OK (${r.lunchDurationMinutes}m / 60m)</span>`;
+                    }
+                  } else if (r.type === 'SALIDA_ALMUERZO') {
+                    statusHtml = `<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-size: 0.72rem;">🥪 1h Autorizada</span>`;
+                  } else if (r.status === 'ON_TIME') {
                     statusHtml = `<span style="background: rgba(34, 197, 94, 0.15); color: #22c55e; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-size: 0.72rem;">🟢 A Tiempo</span>`;
                   } else if (r.status === 'LATE') {
                     statusHtml = `<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-size: 0.72rem;">🟠 Retardo (+${r.lateMinutes || 0}m)</span>`;
@@ -222,6 +242,17 @@ export function renderRrhhAsistencia(container, state) {
                     statusHtml = `<span style="background: rgba(239, 68, 68, 0.15); color: #ef4444; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-size: 0.72rem;">🔴 Inasistencia</span>`;
                   } else {
                     statusHtml = `<span style="background: rgba(255, 255, 255, 0.1); color: #fff; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-size: 0.72rem;">${r.status || 'Registrado'}</span>`;
+                  }
+
+                  let typeBadge = '';
+                  if (r.type === 'ENTRADA') {
+                    typeBadge = `<span style="padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.72rem; background: rgba(34, 197, 94, 0.2); color: #22c55e;">🟢 ENTRADA</span>`;
+                  } else if (r.type === 'SALIDA_ALMUERZO') {
+                    typeBadge = `<span style="padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.72rem; background: rgba(245, 158, 11, 0.2); color: #f59e0b;">🥪 SALIDA ALMUERZO</span>`;
+                  } else if (r.type === 'REGRESO_ALMUERZO') {
+                    typeBadge = `<span style="padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.72rem; background: rgba(6, 182, 212, 0.2); color: #06b6d4;">☕ REGRESO ALMUERZO</span>`;
+                  } else {
+                    typeBadge = `<span style="padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.72rem; background: rgba(239, 68, 68, 0.2); color: #ef4444;">🔴 SALIDA</span>`;
                   }
 
                   const timeDisplay = r.time_str || (r.time_in ? new Date(r.time_in).toLocaleTimeString('es-GT') : (r.time_out ? new Date(r.time_out).toLocaleTimeString('es-GT') : '--:--'));
@@ -245,9 +276,7 @@ export function renderRrhhAsistencia(container, state) {
                         <span style="color: #64748b;">Turno: ${r.shift || 'Matutino'}</span>
                       </td>
                       <td style="padding: 8px; text-align: center;">
-                        <span style="padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.72rem; background: ${r.type === 'ENTRADA' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${r.type === 'ENTRADA' ? '#22c55e' : '#ef4444'};">
-                          ${r.type === 'ENTRADA' ? '🟢 ENTRADA' : '🔴 SALIDA'}
-                        </span><br>
+                        ${typeBadge}<br>
                         <span style="font-size: 0.68rem; color: ${r.method === 'FACIAL' ? '#00f2fe' : '#94a3b8'}; font-weight: 600; display: inline-block; margin-top: 3px;">
                           ${r.method === 'FACIAL' ? '👤 Facial' : '📱 QR / Código'}
                         </span>
@@ -308,6 +337,8 @@ export function renderRrhhAsistencia(container, state) {
                 <label>Tipo de Evento *</label>
                 <select id="man-att-type" required style="width: 100%; padding: 8px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
                   <option value="ENTRADA">🟢 ENTRADA</option>
+                  <option value="SALIDA_ALMUERZO">🥪 SALIDA ALMUERZO</option>
+                  <option value="REGRESO_ALMUERZO">☕ REGRESO ALMUERZO (1h)</option>
                   <option value="SALIDA">🔴 SALIDA</option>
                 </select>
               </div>
@@ -365,6 +396,8 @@ export function renderRrhhAsistencia(container, state) {
                 <label>Tipo de Evento *</label>
                 <select id="edit-att-type" required style="width: 100%; padding: 8px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
                   <option value="ENTRADA">🟢 ENTRADA</option>
+                  <option value="SALIDA_ALMUERZO">🥪 SALIDA ALMUERZO</option>
+                  <option value="REGRESO_ALMUERZO">☕ REGRESO ALMUERZO (1h)</option>
                   <option value="SALIDA">🔴 SALIDA</option>
                 </select>
               </div>
@@ -483,6 +516,8 @@ export function renderRrhhAsistencia(container, state) {
         date: date,
         time_in: type === 'ENTRADA' ? `${date}T${timeStr}:00` : null,
         time_out: type === 'SALIDA' ? `${date}T${timeStr}:00` : null,
+        time_lunch_out: type === 'SALIDA_ALMUERZO' ? `${date}T${timeStr}:00` : null,
+        time_lunch_in: type === 'REGRESO_ALMUERZO' ? `${date}T${timeStr}:00` : null,
         time_str: timeStr + ':00',
         type: type,
         status: status,
@@ -582,6 +617,10 @@ export function renderRrhhAsistencia(container, state) {
 
       if (rec.type === 'ENTRADA') {
         rec.time_in = `${rec.date}T${newTime}:00`;
+      } else if (rec.type === 'SALIDA_ALMUERZO') {
+        rec.time_lunch_out = `${rec.date}T${newTime}:00`;
+      } else if (rec.type === 'REGRESO_ALMUERZO') {
+        rec.time_lunch_in = `${rec.date}T${newTime}:00`;
       } else {
         rec.time_out = `${rec.date}T${newTime}:00`;
       }

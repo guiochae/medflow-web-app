@@ -184,8 +184,8 @@ export function renderAttendanceMobileView(rootContainer) {
           <!-- Mensaje de Error si ocurre -->
           <div id="mob-error-banner" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fca5a5; padding: 10px; border-radius: 8px; font-size: 0.82rem; line-height: 1.4;"></div>
 
-          <!-- Botones de Acción de Marcaje -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px;">
+          <!-- Botones de Acción de Marcaje (4 Opciones: Entrada, Salida Almuerzo, Regreso Almuerzo, Salida) -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px;">
             <button 
               type="button" 
               id="btn-mob-mark-in" 
@@ -194,8 +194,8 @@ export function renderAttendanceMobileView(rootContainer) {
                 color: #ffffff;
                 border: none;
                 border-radius: 12px;
-                padding: 16px 10px;
-                font-size: 0.95rem;
+                padding: 14px 8px;
+                font-size: 0.88rem;
                 font-weight: 700;
                 cursor: pointer;
                 display: flex;
@@ -206,8 +206,57 @@ export function renderAttendanceMobileView(rootContainer) {
                 transition: transform 0.1s, opacity 0.2s;
               "
             >
-              <span style="font-size: 1.5rem;">🟢</span>
-              <span>MARCAR ENTRADA</span>
+              <span style="font-size: 1.35rem;">🟢</span>
+              <span>ENTRADA</span>
+            </button>
+
+            <button 
+              type="button" 
+              id="btn-mob-mark-lunch-out" 
+              style="
+                background: linear-gradient(135deg, #b45309, #f59e0b);
+                color: #ffffff;
+                border: none;
+                border-radius: 12px;
+                padding: 14px 8px;
+                font-size: 0.88rem;
+                font-weight: 700;
+                cursor: pointer;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 4px;
+                box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+                transition: transform 0.1s, opacity 0.2s;
+              "
+            >
+              <span style="font-size: 1.35rem;">🥪</span>
+              <span>SALIDA ALMUERZO</span>
+            </button>
+
+            <button 
+              type="button" 
+              id="btn-mob-mark-lunch-in" 
+              style="
+                background: linear-gradient(135deg, #0e7490, #06b6d4);
+                color: #ffffff;
+                border: none;
+                border-radius: 12px;
+                padding: 14px 8px;
+                font-size: 0.88rem;
+                font-weight: 700;
+                cursor: pointer;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 4px;
+                box-shadow: 0 4px 15px rgba(6, 182, 212, 0.3);
+                transition: transform 0.1s, opacity 0.2s;
+              "
+              title="Regreso de almuerzo (1 hora autorizada)"
+            >
+              <span style="font-size: 1.35rem;">☕</span>
+              <span>REGRESO (1h)</span>
             </button>
 
             <button 
@@ -218,8 +267,8 @@ export function renderAttendanceMobileView(rootContainer) {
                 color: #ffffff;
                 border: none;
                 border-radius: 12px;
-                padding: 16px 10px;
-                font-size: 0.95rem;
+                padding: 14px 8px;
+                font-size: 0.88rem;
                 font-weight: 700;
                 cursor: pointer;
                 display: flex;
@@ -230,8 +279,8 @@ export function renderAttendanceMobileView(rootContainer) {
                 transition: transform 0.1s, opacity 0.2s;
               "
             >
-              <span style="font-size: 1.5rem;">🔴</span>
-              <span>MARCAR SALIDA</span>
+              <span style="font-size: 1.35rem;">🔴</span>
+              <span>SALIDA JORNADA</span>
             </button>
           </div>
         </form>
@@ -283,7 +332,7 @@ export function renderAttendanceMobileView(rootContainer) {
     });
   }
 
-  // Handler de marcaje (Entrada o Salida)
+  // Handler de marcaje (Entrada, Salida Almuerzo, Regreso Almuerzo o Salida)
   const handleMarkAction = async (type) => {
     const code = inputCode ? inputCode.value.trim().toUpperCase() : '';
     if (!code) {
@@ -296,38 +345,32 @@ export function renderAttendanceMobileView(rootContainer) {
     }
 
     const btnIn = document.getElementById('btn-mob-mark-in');
+    const btnLunchOut = document.getElementById('btn-mob-mark-lunch-out');
+    const btnLunchIn = document.getElementById('btn-mob-mark-lunch-in');
     const btnOut = document.getElementById('btn-mob-mark-out');
     
     // Guardar contenido original de botones
-    const origInHtml = btnIn ? btnIn.innerHTML : '<span style="font-size: 1.5rem;">🟢</span><span>MARCAR ENTRADA</span>';
-    const origOutHtml = btnOut ? btnOut.innerHTML : '<span style="font-size: 1.5rem;">🔴</span><span>MARCAR SALIDA</span>';
+    const origInHtml = btnIn ? btnIn.innerHTML : '<span style="font-size: 1.35rem;">🟢</span><span>ENTRADA</span>';
+    const origLunchOutHtml = btnLunchOut ? btnLunchOut.innerHTML : '<span style="font-size: 1.35rem;">🥪</span><span>SALIDA ALMUERZO</span>';
+    const origLunchInHtml = btnLunchIn ? btnLunchIn.innerHTML : '<span style="font-size: 1.35rem;">☕</span><span>REGRESO (1h)</span>';
+    const origOutHtml = btnOut ? btnOut.innerHTML : '<span style="font-size: 1.35rem;">🔴</span><span>SALIDA JORNADA</span>';
 
-    if (btnIn) {
-      btnIn.disabled = true;
-      btnIn.style.opacity = '0.65';
-      if (type === 'ENTRADA') {
-        btnIn.innerHTML = '<span style="font-size: 1.3rem;">⏳</span><span>REGISTRANDO...</span>';
-      }
-    }
-    if (btnOut) {
-      btnOut.disabled = true;
-      btnOut.style.opacity = '0.65';
-      if (type === 'SALIDA') {
-        btnOut.innerHTML = '<span style="font-size: 1.3rem;">⏳</span><span>REGISTRANDO...</span>';
-      }
-    }
+    const allButtons = [btnIn, btnLunchOut, btnLunchIn, btnOut].filter(Boolean);
+    allButtons.forEach(btn => {
+      btn.disabled = true;
+      btn.style.opacity = '0.65';
+    });
+
+    if (type === 'ENTRADA' && btnIn) btnIn.innerHTML = '<span style="font-size: 1.2rem;">⏳</span><span>REGISTRANDO...</span>';
+    if (type === 'SALIDA_ALMUERZO' && btnLunchOut) btnLunchOut.innerHTML = '<span style="font-size: 1.2rem;">⏳</span><span>REGISTRANDO...</span>';
+    if (type === 'REGRESO_ALMUERZO' && btnLunchIn) btnLunchIn.innerHTML = '<span style="font-size: 1.2rem;">⏳</span><span>REGISTRANDO...</span>';
+    if (type === 'SALIDA' && btnOut) btnOut.innerHTML = '<span style="font-size: 1.2rem;">⏳</span><span>REGISTRANDO...</span>';
 
     const restoreButtons = () => {
-      if (btnIn) {
-        btnIn.disabled = false;
-        btnIn.style.opacity = '1';
-        btnIn.innerHTML = origInHtml;
-      }
-      if (btnOut) {
-        btnOut.disabled = false;
-        btnOut.style.opacity = '1';
-        btnOut.innerHTML = origOutHtml;
-      }
+      if (btnIn) { btnIn.disabled = false; btnIn.style.opacity = '1'; btnIn.innerHTML = origInHtml; }
+      if (btnLunchOut) { btnLunchOut.disabled = false; btnLunchOut.style.opacity = '1'; btnLunchOut.innerHTML = origLunchOutHtml; }
+      if (btnLunchIn) { btnLunchIn.disabled = false; btnLunchIn.style.opacity = '1'; btnLunchIn.innerHTML = origLunchInHtml; }
+      if (btnOut) { btnOut.disabled = false; btnOut.style.opacity = '1'; btnOut.innerHTML = origOutHtml; }
     };
 
     // Timeout de seguridad de 6 segundos para evitar bloqueo perpetuo
@@ -374,8 +417,12 @@ export function renderAttendanceMobileView(rootContainer) {
   };
 
   const btnIn = document.getElementById('btn-mob-mark-in');
+  const btnLunchOut = document.getElementById('btn-mob-mark-lunch-out');
+  const btnLunchIn = document.getElementById('btn-mob-mark-lunch-in');
   const btnOut = document.getElementById('btn-mob-mark-out');
   if (btnIn) btnIn.addEventListener('click', () => handleMarkAction('ENTRADA'));
+  if (btnLunchOut) btnLunchOut.addEventListener('click', () => handleMarkAction('SALIDA_ALMUERZO'));
+  if (btnLunchIn) btnLunchIn.addEventListener('click', () => handleMarkAction('REGRESO_ALMUERZO'));
   if (btnOut) btnOut.addEventListener('click', () => handleMarkAction('SALIDA'));
 }
 
@@ -389,14 +436,39 @@ function renderSuccessReceipt(record, employee) {
   const emp = employee || { name: 'Colaborador LUGAMED', employee_code: 'EMP-S/C', position: 'Personal' };
   const rec = record || { type: 'ENTRADA', status: 'ON_TIME', time_str: new Date().toLocaleTimeString('es-GT') };
 
-  const isEntry = rec.type === 'ENTRADA';
   const isLate = rec.status === 'LATE';
 
-  const statusBadge = isEntry
-    ? (isLate 
-        ? `<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 0.78rem;">⚠️ RETARDO (+${rec.lateMinutes || 0} min)</span>`
-        : `<span style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 0.78rem;">✅ A TIEMPO</span>`)
-    : `<span style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 0.78rem;">🏁 JORNADA FINALIZADA ${rec.hoursWorked ? `(${rec.hoursWorked} hrs)` : ''}</span>`;
+  let typeLabel = '🟢 ENTRADA';
+  let typeColor = '#22c55e';
+  let statusBadge = '';
+
+  if (rec.type === 'ENTRADA') {
+    typeLabel = '🟢 ENTRADA';
+    typeColor = '#22c55e';
+    statusBadge = isLate 
+      ? `<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 0.78rem;">⚠️ RETARDO (+${rec.lateMinutes || 0} min)</span>`
+      : `<span style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 0.78rem;">✅ A TIEMPO</span>`;
+  } else if (rec.type === 'SALIDA_ALMUERZO') {
+    typeLabel = '🥪 SALIDA A ALMUERZO';
+    typeColor = '#f59e0b';
+    statusBadge = `<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 0.78rem;">🥪 1 HORA AUTORIZADA</span>`;
+  } else if (rec.type === 'REGRESO_ALMUERZO') {
+    typeLabel = '☕ REGRESO DE ALMUERZO';
+    typeColor = '#06b6d4';
+    if (rec.lunchDurationMinutes) {
+      if (rec.lunchExcessMinutes > 0) {
+        statusBadge = `<span style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 0.78rem;">⚠️ EXCESO: ${rec.lunchDurationMinutes}m (+${rec.lunchExcessMinutes}m sobre 1h)</span>`;
+      } else {
+        statusBadge = `<span style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 0.78rem;">✅ ALMUERZO A TIEMPO (${rec.lunchDurationMinutes}m / 60m)</span>`;
+      }
+    } else {
+      statusBadge = `<span style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 0.78rem;">✅ REGRESO REGISTRADO</span>`;
+    }
+  } else {
+    typeLabel = '🔴 SALIDA DE JORNADA';
+    typeColor = '#ef4444';
+    statusBadge = `<span style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 0.78rem;">🏁 JORNADA FINALIZADA ${rec.hoursWorked ? `(${rec.hoursWorked} hrs)` : ''}</span>`;
+  }
 
   container.innerHTML = `
     <div style="
@@ -450,7 +522,7 @@ function renderSuccessReceipt(record, employee) {
         </div>
         <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px;">
           <span style="color: #94a3b8;">Tipo de Marcaje:</span>
-          <strong style="color: ${isEntry ? '#22c55e' : '#ef4444'};">${rec.type}</strong>
+          <strong style="color: ${typeColor};">${typeLabel}</strong>
         </div>
         <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px;">
           <span style="color: #94a3b8;">Hora Registrada:</span>

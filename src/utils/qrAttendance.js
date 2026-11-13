@@ -134,10 +134,10 @@ export async function generateQRDataURL(text) {
 }
 
 /**
- * Registra un evento de marcaje de asistencia (Entrada o Salida)
+ * Registra un evento de marcaje de asistencia (Entrada, Salida de Almuerzo, Regreso de Almuerzo o Salida de Jornada)
  * @param {object} params
  * @param {string} params.employeeCode - Código oficial de empleado
- * @param {'ENTRADA'|'SALIDA'} params.type - Tipo de marcaje
+ * @param {'ENTRADA'|'SALIDA_ALMUERZO'|'REGRESO_ALMUERZO'|'SALIDA'} params.type - Tipo de marcaje
  * @param {string} [params.ipAddress] - Dirección IP detectada
  * @param {string} [params.userAgent] - Agente de usuario
  * @param {'FACIAL'|'QR'} [params.method='QR'] - Método biométrico o código utilizado
@@ -382,9 +382,10 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
     const diffMs = now.getTime() - lastTime;
     if (diffMs < 120000 && lastRecord.type === type) {
       const waitSeconds = Math.ceil((120000 - diffMs) / 1000);
+      const typeLabel = type === 'ENTRADA' ? 'Entrada' : (type === 'SALIDA_ALMUERZO' ? 'Salida a Almuerzo' : (type === 'REGRESO_ALMUERZO' ? 'Regreso de Almuerzo' : 'Salida'));
       return {
         success: false,
-        error: `Ya registraste tu ${type === 'ENTRADA' ? 'Entrada' : 'Salida'} hace un momento (${Math.floor(diffMs / 1000)}s atrás). Espera ${waitSeconds}s antes de marcar de nuevo para evitar duplicados.`
+        error: `Ya registraste tu ${typeLabel} hace un momento (${Math.floor(diffMs / 1000)}s atrás). Espera ${waitSeconds}s antes de marcar de nuevo para evitar duplicados.`
       };
     }
   }
@@ -461,6 +462,9 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
   let status = 'ON_TIME';
   let lateMinutes = 0;
   let hoursWorked = null;
+  let lunchDurationMinutes = null;
+  let lunchExcessMinutes = 0;
+  let punchMessage = '';
 
   if (type === 'ENTRADA') {
     const currentHour = now.getHours();
@@ -471,9 +475,42 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
     if (totalMinutesNow > (shiftTotalMinutes + 15)) {
       status = 'LATE';
       lateMinutes = totalMinutesNow - shiftTotalMinutes;
+      punchMessage = `Entrada registrada con retardo (+${lateMinutes} min).`;
     } else {
       status = 'ON_TIME';
       lateMinutes = 0;
+      punchMessage = `Entrada registrada a tiempo. ¡Que tengas una excelente jornada!`;
+    }
+  } else if (type === 'SALIDA_ALMUERZO') {
+    status = 'ON_TIME';
+    punchMessage = `Salida a almuerzo registrada. Tienes 1 hora autorizada (60 min). ¡Buen provecho!`;
+  } else if (type === 'REGRESO_ALMUERZO') {
+    // Buscar la salida a almuerzo más reciente del colaborador (en las últimas 8 horas)
+    const recentLunchOut = state.administracion_asistencias.find(a => {
+      if (!isEmpAttendance(a) || a.type !== 'SALIDA_ALMUERZO') return false;
+      const outTime = new Date(a.time_lunch_out || a.time_out || a.created_at).getTime();
+      const diffHours = (now.getTime() - outTime) / (1000 * 60 * 60);
+      return diffHours >= 0 && diffHours <= 8;
+    });
+
+    if (recentLunchOut) {
+      const outTime = new Date(recentLunchOut.time_lunch_out || recentLunchOut.time_out || recentLunchOut.created_at).getTime();
+      const diffMinutes = Math.round((now.getTime() - outTime) / 60000);
+      lunchDurationMinutes = Math.max(0, diffMinutes);
+
+      if (lunchDurationMinutes > 60) {
+        lunchExcessMinutes = lunchDurationMinutes - 60;
+        status = 'LATE'; // Marcado como retardo / exceso de tiempo autorizado
+        punchMessage = `Regreso de almuerzo: ${lunchDurationMinutes} min tomados. ⚠️ Exceso de ${lunchExcessMinutes} min sobre la 1 hora autorizada.`;
+      } else {
+        lunchExcessMinutes = 0;
+        status = 'ON_TIME';
+        punchMessage = `Regreso de almuerzo registrado: ${lunchDurationMinutes} min tomados. ✅ Dentro de la hora autorizada (60 min).`;
+      }
+    } else {
+      lunchDurationMinutes = null;
+      status = 'ON_TIME';
+      punchMessage = `Regreso de almuerzo registrado exitosamente. (Recuerda que tienes 1 hora autorizada).`;
     }
   } else if (type === 'SALIDA') {
     status = 'ON_TIME';
@@ -488,8 +525,24 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
     if (recentEntry && recentEntry.time_in) {
       const inTime = new Date(recentEntry.time_in).getTime();
       const outTime = now.getTime();
-      const diffHours = (outTime - inTime) / (1000 * 60 * 60);
+      let diffHours = (outTime - inTime) / (1000 * 60 * 60);
+
+      // Si tomó almuerzo entre la entrada y la salida, descontar el tiempo de almuerzo de las horas de trabajo
+      const lunchReturn = state.administracion_asistencias.find(a => {
+        if (!isEmpAttendance(a) || a.type !== 'REGRESO_ALMUERZO') return false;
+        const retTime = new Date(a.created_at).getTime();
+        return retTime >= inTime && retTime <= outTime;
+      });
+
+      if (lunchReturn && lunchReturn.lunchDurationMinutes) {
+        const lunchHours = lunchReturn.lunchDurationMinutes / 60;
+        diffHours = Math.max(0, diffHours - lunchHours);
+      }
+
       hoursWorked = Math.max(0, parseFloat(diffHours.toFixed(2)));
+      punchMessage = `Salida de jornada registrada. Horas laboradas: ${hoursWorked} hrs. ¡Buen descanso!`;
+    } else {
+      punchMessage = `Salida de jornada registrada exitosamente.`;
     }
   }
 
@@ -503,12 +556,17 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
     date: todayYMD,
     time_in: type === 'ENTRADA' ? nowIso : null,
     time_out: type === 'SALIDA' ? nowIso : null,
+    time_lunch_out: type === 'SALIDA_ALMUERZO' ? nowIso : null,
+    time_lunch_in: type === 'REGRESO_ALMUERZO' ? nowIso : null,
     time_str: currentTimeStr,
     type: type,
     method: method || 'QR',
     status: status,
     lateMinutes: lateMinutes,
+    lunchDurationMinutes: lunchDurationMinutes,
+    lunchExcessMinutes: lunchExcessMinutes,
     hoursWorked: hoursWorked,
+    message: punchMessage,
     ip_address: ipAddress || '192.168.1.100',
     user_agent: userAgent || (typeof navigator !== 'undefined' ? navigator.userAgent : 'Móvil QR LUGAMED'),
     created_at: nowIso,
@@ -569,9 +627,11 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
     saveAppState(state).catch(e => console.warn("Sync diferido de estado:", e));
   } catch (e) {}
 
+  const typeFriendlyLabel = type === 'ENTRADA' ? 'Entrada' : (type === 'SALIDA_ALMUERZO' ? 'Salida a Almuerzo' : (type === 'REGRESO_ALMUERZO' ? 'Regreso de Almuerzo' : 'Salida de Jornada'));
+
   return {
     success: true,
-    message: `${type === 'ENTRADA' ? 'Entrada' : 'Salida'} registrada correctamente para ${employee.name}.`,
+    message: punchMessage || `${typeFriendlyLabel} registrada correctamente para ${employee.name}.`,
     record: newAttendance,
     employee: employee
   };

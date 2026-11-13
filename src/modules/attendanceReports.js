@@ -218,11 +218,27 @@ function renderDailyReport(container, state) {
   const employeeDayData = activeEmployees.map(emp => {
     const empRecords = dayRecords.filter(r => r.employee_id === emp.id || r.employee_code === emp.employee_code);
     const entry = empRecords.find(r => r.type === 'ENTRADA');
+    const lunchOut = empRecords.find(r => r.type === 'SALIDA_ALMUERZO');
+    const lunchIn = empRecords.find(r => r.type === 'REGRESO_ALMUERZO');
     const exit = empRecords.find(r => r.type === 'SALIDA');
+
+    let lunchMinutes = 0;
+    let lunchExcessMinutes = 0;
+    if (lunchIn && lunchIn.lunchDurationMinutes) {
+      lunchMinutes = lunchIn.lunchDurationMinutes;
+      lunchExcessMinutes = lunchIn.lunchExcessMinutes || 0;
+    } else if (lunchOut && lunchIn) {
+      const outT = new Date(lunchOut.time_lunch_out || lunchOut.time_out || lunchOut.created_at).getTime();
+      const inT = new Date(lunchIn.time_lunch_in || lunchIn.time_in || lunchIn.created_at).getTime();
+      lunchMinutes = Math.max(0, Math.round((inT - outT) / 60000));
+      lunchExcessMinutes = lunchMinutes > 60 ? (lunchMinutes - 60) : 0;
+    }
 
     let hoursWorked = 0;
     if (entry && exit) {
-      hoursWorked = calculateHoursDiff(entry.time_in, exit.time_out);
+      const grossHours = calculateHoursDiff(entry.time_in, exit.time_out);
+      const lunchHours = lunchMinutes > 0 ? (lunchMinutes / 60) : 0;
+      hoursWorked = Math.max(0, parseFloat((grossHours - lunchHours).toFixed(2)));
     }
 
     let status = 'SIN_REGISTRO';
@@ -235,6 +251,10 @@ function renderDailyReport(container, state) {
     return {
       employee: emp,
       entry: entry,
+      lunchOut: lunchOut,
+      lunchIn: lunchIn,
+      lunchMinutes: lunchMinutes,
+      lunchExcessMinutes: lunchExcessMinutes,
       exit: exit,
       hoursWorked: hoursWorked,
       status: status,
@@ -328,6 +348,9 @@ function renderDailyReport(container, state) {
               <th style="padding: 8px;">Depto / Cargo</th>
               <th style="padding: 8px;">Turno</th>
               <th style="padding: 8px; text-align: center;">Entrada</th>
+              <th style="padding: 8px; text-align: center;">Salida Almuerzo</th>
+              <th style="padding: 8px; text-align: center;">Regreso Almuerzo</th>
+              <th style="padding: 8px; text-align: center;">Almuerzo (1h aut.)</th>
               <th style="padding: 8px; text-align: center;">Salida</th>
               <th style="padding: 8px; text-align: center;">Horas</th>
               <th style="padding: 8px; text-align: center;">Estado Entrada</th>
@@ -336,11 +359,24 @@ function renderDailyReport(container, state) {
           </thead>
           <tbody>
             ${employeeDayData.length === 0
-              ? `<tr><td colspan="9" style="text-align: center; padding: 25px; color: var(--text-muted);">No hay colaboradores registrados.</td></tr>`
+              ? `<tr><td colspan="12" style="text-align: center; padding: 25px; color: var(--text-muted);">No hay colaboradores registrados.</td></tr>`
               : employeeDayData.map(item => {
                   const entryTime = item.entry ? (item.entry.time_str || (item.entry.time_in ? new Date(item.entry.time_in).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' }) : '--:--')) : '--:--';
+                  const lunchOutTime = item.lunchOut ? (item.lunchOut.time_str || (item.lunchOut.time_lunch_out ? new Date(item.lunchOut.time_lunch_out).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' }) : '--:--')) : '--:--';
+                  const lunchInTime = item.lunchIn ? (item.lunchIn.time_str || (item.lunchIn.time_lunch_in ? new Date(item.lunchIn.time_lunch_in).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' }) : '--:--')) : '--:--';
                   const exitTime = item.exit ? (item.exit.time_str || (item.exit.time_out ? new Date(item.exit.time_out).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' }) : '--:--')) : '--:--';
                   
+                  let lunchBadge = '--';
+                  if (item.lunchMinutes > 0) {
+                    if (item.lunchExcessMinutes > 0) {
+                      lunchBadge = `<span style="background: rgba(239, 68, 68, 0.15); color: #ef4444; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.72rem;">⚠️ ${item.lunchMinutes}m (+${item.lunchExcessMinutes}m)</span>`;
+                    } else {
+                      lunchBadge = `<span style="background: rgba(34, 197, 94, 0.15); color: #22c55e; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.72rem;">✅ ${item.lunchMinutes}m / 60m</span>`;
+                    }
+                  } else if (item.lunchOut && !item.lunchIn) {
+                    lunchBadge = `<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.72rem;">🥪 En Almuerzo</span>`;
+                  }
+
                   let badge = '';
                   if (item.status === 'ON_TIME') badge = '<span style="background: rgba(34,197,94,0.15); color: #22c55e; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.72rem;">A Tiempo</span>';
                   else if (item.status === 'LATE') badge = `<span style="background: rgba(245,158,11,0.15); color: #f59e0b; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.72rem;">Retardo (+${item.lateMinutes}m)</span>`;
@@ -355,6 +391,9 @@ function renderDailyReport(container, state) {
                       <td style="padding: 8px; color: var(--text-muted); font-size: 0.75rem;">${item.employee.department || 'General'}<br><span style="color: #64748b;">${item.employee.position}</span></td>
                       <td style="padding: 8px; font-size: 0.75rem;">${item.employee.shift || 'Matutino'}</td>
                       <td style="padding: 8px; text-align: center; font-family: monospace; font-weight: bold; color: ${item.entry ? '#22c55e' : 'var(--text-muted)'};">${entryTime}</td>
+                      <td style="padding: 8px; text-align: center; font-family: monospace; font-weight: bold; color: ${item.lunchOut ? '#f59e0b' : 'var(--text-muted)'};">${lunchOutTime}</td>
+                      <td style="padding: 8px; text-align: center; font-family: monospace; font-weight: bold; color: ${item.lunchIn ? '#06b6d4' : 'var(--text-muted)'};">${lunchInTime}</td>
+                      <td style="padding: 8px; text-align: center;">${lunchBadge}</td>
                       <td style="padding: 8px; text-align: center; font-family: monospace; font-weight: bold; color: ${item.exit ? '#ef4444' : 'var(--text-muted)'};">${exitTime}</td>
                       <td style="padding: 8px; text-align: center; font-weight: bold;">${item.hoursWorked > 0 ? `${item.hoursWorked} hrs` : '--'}</td>
                       <td style="padding: 8px; text-align: center;">${badge}</td>
@@ -376,7 +415,7 @@ function renderDailyReport(container, state) {
 
   // Exportar Excel
   container.querySelector('#btn-exp-daily-excel').addEventListener('click', () => {
-    const headers = ['Código', 'Colaborador', 'Departamento', 'Puesto', 'Turno', 'Hora Entrada', 'Hora Salida', 'Horas Trabajadas', 'Estado', 'Minutos Retardo'];
+    const headers = ['Código', 'Colaborador', 'Departamento', 'Puesto', 'Turno', 'Hora Entrada', 'Salida Almuerzo', 'Regreso Almuerzo', 'Min Almuerzo', 'Exceso Almuerzo (Min)', 'Hora Salida', 'Horas Trabajadas', 'Estado', 'Minutos Retardo'];
     const rows = employeeDayData.map(i => [
       i.employee.employee_code || '',
       i.employee.name,
@@ -384,6 +423,10 @@ function renderDailyReport(container, state) {
       i.employee.position || '',
       i.employee.shift || '',
       i.entry ? (i.entry.time_str || i.entry.time_in) : '',
+      i.lunchOut ? (i.lunchOut.time_str || i.lunchOut.time_lunch_out) : '',
+      i.lunchIn ? (i.lunchIn.time_str || i.lunchIn.time_lunch_in) : '',
+      i.lunchMinutes || 0,
+      i.lunchExcessMinutes || 0,
       i.exit ? (i.exit.time_str || i.exit.time_out) : '',
       i.hoursWorked,
       i.status,
@@ -394,7 +437,7 @@ function renderDailyReport(container, state) {
 
   // Exportar CSV
   container.querySelector('#btn-exp-daily-csv').addEventListener('click', () => {
-    const headers = ['Código', 'Colaborador', 'Departamento', 'Puesto', 'Turno', 'Hora Entrada', 'Hora Salida', 'Horas Trabajadas', 'Estado', 'Minutos Retardo'];
+    const headers = ['Código', 'Colaborador', 'Departamento', 'Puesto', 'Turno', 'Hora Entrada', 'Salida Almuerzo', 'Regreso Almuerzo', 'Min Almuerzo', 'Exceso Almuerzo (Min)', 'Hora Salida', 'Horas Trabajadas', 'Estado', 'Minutos Retardo'];
     const rows = employeeDayData.map(i => [
       i.employee.employee_code || '',
       i.employee.name,
@@ -402,6 +445,10 @@ function renderDailyReport(container, state) {
       i.employee.position || '',
       i.employee.shift || '',
       i.entry ? (i.entry.time_str || i.entry.time_in) : '',
+      i.lunchOut ? (i.lunchOut.time_str || i.lunchOut.time_lunch_out) : '',
+      i.lunchIn ? (i.lunchIn.time_str || i.lunchIn.time_lunch_in) : '',
+      i.lunchMinutes || 0,
+      i.lunchExcessMinutes || 0,
       i.exit ? (i.exit.time_str || i.exit.time_out) : '',
       i.hoursWorked,
       i.status,
@@ -1063,8 +1110,10 @@ function renderEmployeeReport(container, state) {
   // Agrupar por fecha
   const dateMap = {};
   empRecords.forEach(r => {
-    if (!dateMap[r.date]) dateMap[r.date] = { date: r.date, entry: null, exit: null, audits: [] };
+    if (!dateMap[r.date]) dateMap[r.date] = { date: r.date, entry: null, lunchOut: null, lunchIn: null, exit: null, audits: [] };
     if (r.type === 'ENTRADA') dateMap[r.date].entry = r;
+    if (r.type === 'SALIDA_ALMUERZO') dateMap[r.date].lunchOut = r;
+    if (r.type === 'REGRESO_ALMUERZO') dateMap[r.date].lunchIn = r;
     if (r.type === 'SALIDA') dateMap[r.date].exit = r;
   });
 
@@ -1078,8 +1127,24 @@ function renderEmployeeReport(container, state) {
   let totalLateMinutes = 0;
 
   dailyLogs.forEach(d => {
+    let lunchMins = 0;
+    let lunchExcess = 0;
+    if (d.lunchIn && d.lunchIn.lunchDurationMinutes) {
+      lunchMins = d.lunchIn.lunchDurationMinutes;
+      lunchExcess = d.lunchIn.lunchExcessMinutes || 0;
+    } else if (d.lunchOut && d.lunchIn) {
+      const outT = new Date(d.lunchOut.time_lunch_out || d.lunchOut.time_out || d.lunchOut.created_at).getTime();
+      const inT = new Date(d.lunchIn.time_lunch_in || d.lunchIn.time_in || d.lunchIn.created_at).getTime();
+      lunchMins = Math.max(0, Math.round((inT - outT) / 60000));
+      lunchExcess = lunchMins > 60 ? (lunchMins - 60) : 0;
+    }
+    d.lunchMinutes = lunchMins;
+    d.lunchExcessMinutes = lunchExcess;
+
     if (d.entry && d.exit) {
-      d.hours = calculateHoursDiff(d.entry.time_in, d.exit.time_out);
+      const gross = calculateHoursDiff(d.entry.time_in, d.exit.time_out);
+      const lunchH = lunchMins > 0 ? (lunchMins / 60) : 0;
+      d.hours = Math.max(0, parseFloat((gross - lunchH).toFixed(2)));
       totalHours += d.hours;
     } else if (d.entry) {
       d.hours = 8;
@@ -1189,6 +1254,9 @@ function renderEmployeeReport(container, state) {
             <tr style="border-bottom: 2px solid var(--border-color); text-align: left; color: var(--text-muted);">
               <th style="padding: 8px;">Fecha</th>
               <th style="padding: 8px; text-align: center;">Entrada</th>
+              <th style="padding: 8px; text-align: center;">Salida Almuerzo</th>
+              <th style="padding: 8px; text-align: center;">Regreso Almuerzo</th>
+              <th style="padding: 8px; text-align: center;">Almuerzo (1h aut.)</th>
               <th style="padding: 8px; text-align: center;">Salida</th>
               <th style="padding: 8px; text-align: center;">Horas Registradas</th>
               <th style="padding: 8px; text-align: center;">Estado</th>
@@ -1198,10 +1266,23 @@ function renderEmployeeReport(container, state) {
           </thead>
           <tbody>
             ${dailyLogs.length === 0
-              ? `<tr><td colspan="7" style="text-align: center; padding: 25px; color: var(--text-muted);">No se encontraron marcajes para este colaborador en el rango seleccionado.</td></tr>`
+              ? `<tr><td colspan="10" style="text-align: center; padding: 25px; color: var(--text-muted);">No se encontraron marcajes para este colaborador en el rango seleccionado.</td></tr>`
               : dailyLogs.map(log => {
                   const entryTime = log.entry ? (log.entry.time_str || (log.entry.time_in ? new Date(log.entry.time_in).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' }) : '--:--')) : '--:--';
+                  const lunchOutTime = log.lunchOut ? (log.lunchOut.time_str || (log.lunchOut.time_lunch_out ? new Date(log.lunchOut.time_lunch_out).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' }) : '--:--')) : '--:--';
+                  const lunchInTime = log.lunchIn ? (log.lunchIn.time_str || (log.lunchIn.time_lunch_in ? new Date(log.lunchIn.time_lunch_in).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' }) : '--:--')) : '--:--';
                   const exitTime = log.exit ? (log.exit.time_str || (log.exit.time_out ? new Date(log.exit.time_out).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' }) : '--:--')) : '--:--';
+
+                  let lunchBadge = '--';
+                  if (log.lunchMinutes > 0) {
+                    if (log.lunchExcessMinutes > 0) {
+                      lunchBadge = `<span style="background: rgba(239, 68, 68, 0.15); color: #ef4444; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.72rem;">⚠️ ${log.lunchMinutes}m (+${log.lunchExcessMinutes}m)</span>`;
+                    } else {
+                      lunchBadge = `<span style="background: rgba(34, 197, 94, 0.15); color: #22c55e; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.72rem;">✅ ${log.lunchMinutes}m / 60m</span>`;
+                    }
+                  } else if (log.lunchOut && !log.lunchIn) {
+                    lunchBadge = `<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.72rem;">🥪 En Almuerzo</span>`;
+                  }
 
                   let statusBadge = '';
                   const st = log.entry ? log.entry.status : 'SIN_REGISTRO';
@@ -1217,6 +1298,9 @@ function renderEmployeeReport(container, state) {
                     <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
                       <td style="padding: 8px; font-weight: bold; color: var(--text-primary);">${log.date}</td>
                       <td style="padding: 8px; text-align: center; font-family: monospace; font-weight: bold; color: ${log.entry ? '#22c55e' : 'var(--text-muted)'};">${entryTime}</td>
+                      <td style="padding: 8px; text-align: center; font-family: monospace; font-weight: bold; color: ${log.lunchOut ? '#f59e0b' : 'var(--text-muted)'};">${lunchOutTime}</td>
+                      <td style="padding: 8px; text-align: center; font-family: monospace; font-weight: bold; color: ${log.lunchIn ? '#06b6d4' : 'var(--text-muted)'};">${lunchInTime}</td>
+                      <td style="padding: 8px; text-align: center;">${lunchBadge}</td>
                       <td style="padding: 8px; text-align: center; font-family: monospace; font-weight: bold; color: ${log.exit ? '#ef4444' : 'var(--text-muted)'};">${exitTime}</td>
                       <td style="padding: 8px; text-align: center; font-weight: bold;">${log.hours > 0 ? `${log.hours} hrs` : '--'}</td>
                       <td style="padding: 8px; text-align: center;">${statusBadge}</td>
@@ -1239,12 +1323,16 @@ function renderEmployeeReport(container, state) {
 
   // Exportar Excel
   container.querySelector('#btn-exp-emp-excel').addEventListener('click', () => {
-    const headers = ['Fecha', 'Código', 'Colaborador', 'Hora Entrada', 'Hora Salida', 'Horas Registradas', 'Estado', 'Minutos Retardo'];
+    const headers = ['Fecha', 'Código', 'Colaborador', 'Hora Entrada', 'Salida Almuerzo', 'Regreso Almuerzo', 'Min Almuerzo', 'Exceso Almuerzo (Min)', 'Hora Salida', 'Horas Registradas', 'Estado', 'Minutos Retardo'];
     const rows = dailyLogs.map(l => [
       l.date,
       employee.employee_code || '',
       employee.name,
       l.entry ? (l.entry.time_str || l.entry.time_in) : '',
+      l.lunchOut ? (l.lunchOut.time_str || l.lunchOut.time_lunch_out) : '',
+      l.lunchIn ? (l.lunchIn.time_str || l.lunchIn.time_lunch_in) : '',
+      l.lunchMinutes || 0,
+      l.lunchExcessMinutes || 0,
       l.exit ? (l.exit.time_str || l.exit.time_out) : '',
       l.hours,
       l.entry ? l.entry.status : 'SIN_REGISTRO',
@@ -1255,12 +1343,16 @@ function renderEmployeeReport(container, state) {
 
   // Exportar CSV
   container.querySelector('#btn-exp-emp-csv').addEventListener('click', () => {
-    const headers = ['Fecha', 'Código', 'Colaborador', 'Hora Entrada', 'Hora Salida', 'Horas Registradas', 'Estado', 'Minutos Retardo'];
+    const headers = ['Fecha', 'Código', 'Colaborador', 'Hora Entrada', 'Salida Almuerzo', 'Regreso Almuerzo', 'Min Almuerzo', 'Exceso Almuerzo (Min)', 'Hora Salida', 'Horas Registradas', 'Estado', 'Minutos Retardo'];
     const rows = dailyLogs.map(l => [
       l.date,
       employee.employee_code || '',
       employee.name,
       l.entry ? (l.entry.time_str || l.entry.time_in) : '',
+      l.lunchOut ? (l.lunchOut.time_str || l.lunchOut.time_lunch_out) : '',
+      l.lunchIn ? (l.lunchIn.time_str || l.lunchIn.time_lunch_in) : '',
+      l.lunchMinutes || 0,
+      l.lunchExcessMinutes || 0,
       l.exit ? (l.exit.time_str || l.exit.time_out) : '',
       l.hours,
       l.entry ? l.entry.status : 'SIN_REGISTRO',

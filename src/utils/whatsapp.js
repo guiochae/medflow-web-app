@@ -946,7 +946,7 @@ export function updateWhatsAppPillUI(status) {
       }
     } else {
       sidebarBadge.classList.add('offline');
-      sidebarBadge.textContent = 'Offline';
+      sidebarBadge.textContent = 'Conectar';
     }
   }
 
@@ -956,8 +956,8 @@ export function updateWhatsAppPillUI(status) {
 
   let stateClass = 'offline';
   let dotClass = 'offline';
-  let labelText = 'WhatsApp Inactivo (Instalar)';
-  let tooltipText = 'El puente de WhatsApp no está instalado o activo en esta computadora. Haz clic para vincular o iniciar.';
+  let labelText = 'WhatsApp (Clic para Activar)';
+  let tooltipText = 'El puente de WhatsApp no está activo en esta computadora. Haz clic para iniciar el servicio y mostrar el Código QR.';
 
   if (status.online) {
     if (status.isReady) {

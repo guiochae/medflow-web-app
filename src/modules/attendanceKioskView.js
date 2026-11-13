@@ -104,47 +104,94 @@ export function renderAttendanceKioskView(rootContainer) {
         </div>
       </header>
 
-      <!-- Selector de Modo de Marcaje (Entrada 🟢 / Salida 🔴) -->
-      <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 8px; flex-shrink: 0;">
+      <!-- Selector de Modo de Marcaje (Entrada 🟢 / Salida Almuerzo 🥪 / Regreso Almuerzo ☕ / Salida 🔴) -->
+      <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 8px; flex-shrink: 0; flex-wrap: wrap;">
         <button id="btn-toggle-type-in" style="
           flex: 1;
-          max-width: 280px;
-          padding: clamp(8px, 1.8vw, 12px) 14px;
-          border-radius: 12px;
+          min-width: 140px;
+          max-width: 220px;
+          padding: clamp(6px, 1.5vw, 10px) 10px;
+          border-radius: 10px;
           border: 2px solid #22c55e;
           background: ${currentPunchType === 'ENTRADA' ? 'linear-gradient(135deg, #15803d, #22c55e)' : 'rgba(34, 197, 94, 0.1)'};
           color: #ffffff;
           font-weight: 800;
-          font-size: clamp(0.85rem, 2vw, 1rem);
+          font-size: clamp(0.78rem, 1.6vw, 0.88rem);
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
           gap: 6px;
-          box-shadow: ${currentPunchType === 'ENTRADA' ? '0 0 18px rgba(34, 197, 94, 0.45)' : 'none'};
+          box-shadow: ${currentPunchType === 'ENTRADA' ? '0 0 16px rgba(34, 197, 94, 0.45)' : 'none'};
           transition: all 0.2s;
         ">
-          <span style="font-size: 1.15rem;">🟢</span> REGISTRAR ENTRADA
+          <span style="font-size: 1.1rem;">🟢</span> ENTRADA
         </button>
+
+        <button id="btn-toggle-type-lunch-out" style="
+          flex: 1;
+          min-width: 140px;
+          max-width: 220px;
+          padding: clamp(6px, 1.5vw, 10px) 10px;
+          border-radius: 10px;
+          border: 2px solid #f59e0b;
+          background: ${currentPunchType === 'SALIDA_ALMUERZO' ? 'linear-gradient(135deg, #b45309, #f59e0b)' : 'rgba(245, 158, 11, 0.1)'};
+          color: #ffffff;
+          font-weight: 800;
+          font-size: clamp(0.78rem, 1.6vw, 0.88rem);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          box-shadow: ${currentPunchType === 'SALIDA_ALMUERZO' ? '0 0 16px rgba(245, 158, 11, 0.45)' : 'none'};
+          transition: all 0.2s;
+        ">
+          <span style="font-size: 1.1rem;">🥪</span> SALIDA ALMUERZO
+        </button>
+
+        <button id="btn-toggle-type-lunch-in" style="
+          flex: 1;
+          min-width: 140px;
+          max-width: 220px;
+          padding: clamp(6px, 1.5vw, 10px) 10px;
+          border-radius: 10px;
+          border: 2px solid #06b6d4;
+          background: ${currentPunchType === 'REGRESO_ALMUERZO' ? 'linear-gradient(135deg, #0e7490, #06b6d4)' : 'rgba(6, 182, 212, 0.1)'};
+          color: #ffffff;
+          font-weight: 800;
+          font-size: clamp(0.78rem, 1.6vw, 0.88rem);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          box-shadow: ${currentPunchType === 'REGRESO_ALMUERZO' ? '0 0 16px rgba(6, 182, 212, 0.45)' : 'none'};
+          transition: all 0.2s;
+        " title="Regreso de almuerzo (1 hora autorizada)">
+          <span style="font-size: 1.1rem;">☕</span> REGRESO (1h)
+        </button>
+
         <button id="btn-toggle-type-out" style="
           flex: 1;
-          max-width: 280px;
-          padding: clamp(8px, 1.8vw, 12px) 14px;
-          border-radius: 12px;
+          min-width: 140px;
+          max-width: 220px;
+          padding: clamp(6px, 1.5vw, 10px) 10px;
+          border-radius: 10px;
           border: 2px solid #ef4444;
           background: ${currentPunchType === 'SALIDA' ? 'linear-gradient(135deg, #b91c1c, #ef4444)' : 'rgba(239, 68, 68, 0.1)'};
           color: #ffffff;
           font-weight: 800;
-          font-size: clamp(0.85rem, 2vw, 1rem);
+          font-size: clamp(0.78rem, 1.6vw, 0.88rem);
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
           gap: 6px;
-          box-shadow: ${currentPunchType === 'SALIDA' ? '0 0 18px rgba(239, 68, 68, 0.45)' : 'none'};
+          box-shadow: ${currentPunchType === 'SALIDA' ? '0 0 16px rgba(239, 68, 68, 0.45)' : 'none'};
           transition: all 0.2s;
         ">
-          <span style="font-size: 1.15rem;">🔴</span> REGISTRAR SALIDA
+          <span style="font-size: 1.1rem;">🔴</span> SALIDA JORNADA
         </button>
       </div>
 
@@ -355,11 +402,17 @@ export function renderAttendanceKioskView(rootContainer) {
               <!-- Banner de Error Manual -->
               <div id="kiosk-manual-error" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fca5a5; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; text-align: center;"></div>
 
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                <button type="button" id="btn-manual-mark-in" style="background: linear-gradient(135deg, #16a34a, #22c55e); color: #fff; border: none; border-radius: 8px; padding: clamp(8px, 1.8vw, 11px) 6px; font-size: 0.85rem; font-weight: 700; cursor: pointer;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                <button type="button" id="btn-manual-mark-in" style="background: linear-gradient(135deg, #16a34a, #22c55e); color: #fff; border: none; border-radius: 8px; padding: clamp(7px, 1.5vw, 10px) 4px; font-size: 0.8rem; font-weight: 700; cursor: pointer;">
                   🟢 Entrada
                 </button>
-                <button type="button" id="btn-manual-mark-out" style="background: linear-gradient(135deg, #dc2626, #ef4444); color: #fff; border: none; border-radius: 8px; padding: clamp(8px, 1.8vw, 11px) 6px; font-size: 0.85rem; font-weight: 700; cursor: pointer;">
+                <button type="button" id="btn-manual-mark-lunch-out" style="background: linear-gradient(135deg, #b45309, #f59e0b); color: #fff; border: none; border-radius: 8px; padding: clamp(7px, 1.5vw, 10px) 4px; font-size: 0.8rem; font-weight: 700; cursor: pointer;">
+                  🥪 Salida Almuerzo
+                </button>
+                <button type="button" id="btn-manual-mark-lunch-in" style="background: linear-gradient(135deg, #0e7490, #06b6d4); color: #fff; border: none; border-radius: 8px; padding: clamp(7px, 1.5vw, 10px) 4px; font-size: 0.8rem; font-weight: 700; cursor: pointer;" title="Regreso de almuerzo (1 hora autorizada)">
+                  ☕ Regreso (1h)
+                </button>
+                <button type="button" id="btn-manual-mark-out" style="background: linear-gradient(135deg, #dc2626, #ef4444); color: #fff; border: none; border-radius: 8px; padding: clamp(7px, 1.5vw, 10px) 4px; font-size: 0.8rem; font-weight: 700; cursor: pointer;">
                   🔴 Salida
                 </button>
               </div>
@@ -574,26 +627,48 @@ function initKioskClock() {
 }
 
 /**
- * Alternancia entre Entrada 🟢 y Salida 🔴
+ * Alternancia entre Entrada 🟢, Salida Almuerzo 🥪, Regreso Almuerzo ☕ y Salida 🔴
  */
 function initTypeToggleButtons() {
   const btnIn = document.getElementById('btn-toggle-type-in');
+  const btnLunchOut = document.getElementById('btn-toggle-type-lunch-out');
+  const btnLunchIn = document.getElementById('btn-toggle-type-lunch-in');
   const btnOut = document.getElementById('btn-toggle-type-out');
 
   const updateStyles = () => {
     if (btnIn) {
       btnIn.style.background = currentPunchType === 'ENTRADA' ? 'linear-gradient(135deg, #15803d, #22c55e)' : 'rgba(34, 197, 94, 0.1)';
-      btnIn.style.boxShadow = currentPunchType === 'ENTRADA' ? '0 0 18px rgba(34, 197, 94, 0.45)' : 'none';
+      btnIn.style.boxShadow = currentPunchType === 'ENTRADA' ? '0 0 16px rgba(34, 197, 94, 0.45)' : 'none';
+    }
+    if (btnLunchOut) {
+      btnLunchOut.style.background = currentPunchType === 'SALIDA_ALMUERZO' ? 'linear-gradient(135deg, #b45309, #f59e0b)' : 'rgba(245, 158, 11, 0.1)';
+      btnLunchOut.style.boxShadow = currentPunchType === 'SALIDA_ALMUERZO' ? '0 0 16px rgba(245, 158, 11, 0.45)' : 'none';
+    }
+    if (btnLunchIn) {
+      btnLunchIn.style.background = currentPunchType === 'REGRESO_ALMUERZO' ? 'linear-gradient(135deg, #0e7490, #06b6d4)' : 'rgba(6, 182, 212, 0.1)';
+      btnLunchIn.style.boxShadow = currentPunchType === 'REGRESO_ALMUERZO' ? '0 0 16px rgba(6, 182, 212, 0.45)' : 'none';
     }
     if (btnOut) {
       btnOut.style.background = currentPunchType === 'SALIDA' ? 'linear-gradient(135deg, #b91c1c, #ef4444)' : 'rgba(239, 68, 68, 0.1)';
-      btnOut.style.boxShadow = currentPunchType === 'SALIDA' ? '0 0 18px rgba(239, 68, 68, 0.45)' : 'none';
+      btnOut.style.boxShadow = currentPunchType === 'SALIDA' ? '0 0 16px rgba(239, 68, 68, 0.45)' : 'none';
     }
   };
 
   if (btnIn) {
     btnIn.addEventListener('click', () => {
       currentPunchType = 'ENTRADA';
+      updateStyles();
+    });
+  }
+  if (btnLunchOut) {
+    btnLunchOut.addEventListener('click', () => {
+      currentPunchType = 'SALIDA_ALMUERZO';
+      updateStyles();
+    });
+  }
+  if (btnLunchIn) {
+    btnLunchIn.addEventListener('click', () => {
+      currentPunchType = 'REGRESO_ALMUERZO';
       updateStyles();
     });
   }
@@ -675,6 +750,8 @@ function initManualForm() {
   const errorEl = document.getElementById('kiosk-manual-error');
   const formEl = document.getElementById('kiosk-manual-code-form');
   const btnIn = document.getElementById('btn-manual-mark-in');
+  const btnLunchOut = document.getElementById('btn-manual-mark-lunch-out');
+  const btnLunchIn = document.getElementById('btn-manual-mark-lunch-in');
   const btnOut = document.getElementById('btn-manual-mark-out');
 
   if (inputCode) {
@@ -749,6 +826,8 @@ function initManualForm() {
   }
 
   if (btnIn) btnIn.addEventListener('click', () => handleManualPunch('ENTRADA'));
+  if (btnLunchOut) btnLunchOut.addEventListener('click', () => handleManualPunch('SALIDA_ALMUERZO'));
+  if (btnLunchIn) btnLunchIn.addEventListener('click', () => handleManualPunch('REGRESO_ALMUERZO'));
   if (btnOut) btnOut.addEventListener('click', () => handleManualPunch('SALIDA'));
 }
 
@@ -1035,14 +1114,39 @@ function showReceiptCard(record, employee) {
   const emp = employee || { name: 'Colaborador', employee_code: 'EMP-001', position: 'Personal' };
   const rec = record || { type: 'ENTRADA', status: 'ON_TIME', time_str: new Date().toLocaleTimeString('es-GT') };
 
-  const isEntry = rec.type === 'ENTRADA';
   const isLate = rec.status === 'LATE';
 
-  const statusBadge = isEntry
-    ? (isLate 
-        ? `<span style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid #f59e0b; padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 0.8rem;">⚠️ RETARDO (+${rec.lateMinutes || 0} min)</span>`
-        : `<span style="background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid #22c55e; padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 0.8rem;">✅ A TIEMPO</span>`)
-    : `<span style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid #60a5fa; padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 0.8rem;">🏁 JORNADA FINALIZADA ${rec.hoursWorked ? `(${rec.hoursWorked} hrs)` : ''}</span>`;
+  let typeLabel = '🟢 ENTRADA';
+  let typeColor = '#22c55e';
+  let statusBadge = '';
+
+  if (rec.type === 'ENTRADA') {
+    typeLabel = '🟢 ENTRADA';
+    typeColor = '#22c55e';
+    statusBadge = isLate 
+      ? `<span style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid #f59e0b; padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 0.8rem;">⚠️ RETARDO (+${rec.lateMinutes || 0} min)</span>`
+      : `<span style="background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid #22c55e; padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 0.8rem;">✅ A TIEMPO</span>`;
+  } else if (rec.type === 'SALIDA_ALMUERZO') {
+    typeLabel = '🥪 SALIDA A ALMUERZO';
+    typeColor = '#f59e0b';
+    statusBadge = `<span style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid #f59e0b; padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 0.8rem;">🥪 1 HORA AUTORIZADA</span>`;
+  } else if (rec.type === 'REGRESO_ALMUERZO') {
+    typeLabel = '☕ REGRESO DE ALMUERZO';
+    typeColor = '#06b6d4';
+    if (rec.lunchDurationMinutes) {
+      if (rec.lunchExcessMinutes > 0) {
+        statusBadge = `<span style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid #ef4444; padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 0.8rem;">⚠️ EXCESO: ${rec.lunchDurationMinutes}m (+${rec.lunchExcessMinutes}m sobre 1h)</span>`;
+      } else {
+        statusBadge = `<span style="background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid #22c55e; padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 0.8rem;">✅ ALMUERZO A TIEMPO (${rec.lunchDurationMinutes}m / 60m)</span>`;
+      }
+    } else {
+      statusBadge = `<span style="background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid #22c55e; padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 0.8rem;">✅ REGRESO REGISTRADO</span>`;
+    }
+  } else {
+    typeLabel = '🔴 SALIDA DE JORNADA';
+    typeColor = '#ef4444';
+    statusBadge = `<span style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid #60a5fa; padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 0.8rem;">🏁 JORNADA FINALIZADA ${rec.hoursWorked ? `(${rec.hoursWorked} hrs)` : ''}</span>`;
+  }
 
   const photoHtml = emp.face_photo 
     ? `<img src="${emp.face_photo}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 3px solid #22c55e; box-shadow: 0 0 20px rgba(34,197,94,0.5); margin-bottom: 8px;">`
@@ -1060,7 +1164,7 @@ function showReceiptCard(record, employee) {
     <div style="background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 12px 16px; width: 90%; max-width: 320px; font-size: 0.85rem; display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; text-align: left;">
       <div style="display: flex; justify-content: space-between;">
         <span style="color: #94a3b8;">Tipo:</span>
-        <strong style="color: ${isEntry ? '#22c55e' : '#ef4444'}; font-size: 0.95rem;">${rec.type}</strong>
+        <strong style="color: ${typeColor}; font-size: 0.95rem;">${typeLabel}</strong>
       </div>
       <div style="display: flex; justify-content: space-between;">
         <span style="color: #94a3b8;">Hora:</span>
@@ -1071,7 +1175,7 @@ function showReceiptCard(record, employee) {
         <strong style="color: #00f2fe;">${rec.method === 'FACIAL' ? '👤 Reconocimiento Facial' : '📱 Código QR / Manual'}</strong>
       </div>
       <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,0.12);">
-        <span style="color: #94a3b8;">Puntualidad:</span>
+        <span style="color: #94a3b8;">Estado / Puntualidad:</span>
         ${statusBadge}
       </div>
     </div>
