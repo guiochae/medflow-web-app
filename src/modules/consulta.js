@@ -1,6 +1,7 @@
 // src/modules/consulta.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
 import { searchDiagnosticSuggestions } from '../data/cie10.js';
+import { openDocumentViewerModal } from './laboratorio.js';
 import logoUrl from '../assets/logo.jpg';
 
 function isCurrentUserAdmin() {
@@ -328,6 +329,31 @@ function getPatientVitalsHeaderHtml(patient) {
     `;
   }
 
+  const completedLabsWithDoc = (patient.localLabs || []).filter(l => l.documentUrl || l.stage === 'completado');
+  let labBannerHtml = '';
+  if (completedLabsWithDoc.length > 0) {
+    labBannerHtml = `
+      <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 10px 14px; margin-top: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.2rem;">🔬📑</span>
+          <div>
+            <strong style="color: #10b981; font-size: 0.88rem;">Resultados de Laboratorio Escaneados Disponibles (${completedLabsWithDoc.length}):</strong>
+            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
+              Estudios procesados: ${completedLabsWithDoc.map(l => l.name).join(', ')}
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          ${completedLabsWithDoc.map(lab => `
+            <button type="button" class="btn btn-primary btn-small btn-view-consult-lab" data-labid="${lab.id}" style="font-size: 0.78rem; padding: 5px 12px; background: #10b981; border: none; color: white; border-radius: 4px; cursor: pointer; font-weight: 600;">
+              📄 Ver ${lab.name} (PDF)
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
   return `
     <div class="glass-card" style="margin-bottom: 1.5rem; padding: 12px 16px; border-left: 4px solid var(--accent-primary);">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 8px; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
@@ -343,6 +369,7 @@ function getPatientVitalsHeaderHtml(patient) {
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px;">
         ${vitalsGridHtml}
       </div>
+      ${labBannerHtml}
     </div>
   `;
 }
@@ -998,6 +1025,19 @@ ${(() => {
             ${indList.map(ind => `<div>📌 Indicación: ${ind}</div>`).join('')}
           </div>
         ` : '<p style="margin-top: 8px; color: var(--text-muted); font-style: italic; font-size: 0.85rem;">No se emitieron exámenes de apoyo ni tratamientos adicionales.</p>'}
+
+        ${patient.localLabs && patient.localLabs.filter(l => l.stage === 'completado' || l.documentUrl).length > 0 ? `
+          <div style="margin-top: 12px; border-top: 1px dashed var(--border-color); padding-top: 8px;">
+            <strong style="color: #10b981; font-size: 0.85rem; display: block; margin-bottom: 6px;">📄 Resultados Oficiales de Laboratorio Escaneados (PDF):</strong>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              ${patient.localLabs.filter(l => l.stage === 'completado' || l.documentUrl).map(l => `
+                <button type="button" class="btn btn-small btn-view-consult-lab" data-labid="${l.id}" style="background: #10b981; border: none; color: white; padding: 4px 10px; border-radius: 4px; font-weight: 600; font-size: 0.75rem; cursor: pointer;">
+                  👁️ Ver ${l.name} (PDF)
+                </button>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
       </div>
     </div>
 
@@ -3500,5 +3540,27 @@ function initializeVoiceDictation() {
 
       recognition.start();
     });
+  });
+}
+
+// Delegación de eventos para visualizar documentos escaneados de laboratorio en consulta e historial clínico
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-view-consult-lab');
+    if (btn) {
+      const labId = btn.getAttribute('data-labid');
+      const stateObj = getAppState();
+      const activePatientId = getActivePatientId();
+      let patientObj = (stateObj.patients || []).find(p => p.id === activePatientId);
+      if (!patientObj || !(patientObj.localLabs || []).some(l => l.id === labId)) {
+        patientObj = (stateObj.patients || []).find(p => (p.localLabs || []).some(l => l.id === labId));
+      }
+      if (patientObj) {
+        const targetLab = (patientObj.localLabs || []).find(l => l.id === labId);
+        if (targetLab && targetLab.documentUrl) {
+          openDocumentViewerModal(`Resultados de Laboratorio: ${patientObj.name} - ${targetLab.name}`, targetLab.documentUrl, targetLab.fileName, { order: targetLab, patient: patientObj });
+        }
+      }
+    }
   });
 }

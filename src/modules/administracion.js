@@ -10,6 +10,7 @@ import { db, saveStateToLocalCache } from '../firebase.js';
 import { doc, setDoc } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import logoUrl from '../assets/logo.jpg';
+import { openDocumentViewerModal as openLabDocumentViewerModal } from './laboratorio.js';
 
 let activeAdminTab = 'caja'; // 'caja', 'contabilidad', 'compras', 'rrhh'
 let activeCajaSubTab = 'cobros'; // 'cobros', 'cxp', 'nominas'
@@ -428,6 +429,8 @@ function loadPatientBillingDetails(patient, state) {
     });
   }
 
+  const completedLabsWithDoc = (patient.localLabs || []).filter(l => l.documentUrl || l.stage === 'completado');
+
   detailArea.innerHTML = `
     <div class="glass-card" style="padding: 1.25rem; max-width: 100%;">
       <div style="border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 12px;">
@@ -435,6 +438,27 @@ function loadPatientBillingDetails(patient, state) {
         <h3 style="margin: 4px 0 0 0; font-family: var(--font-heading); color: var(--text-primary); font-size: 1.15rem;">${patient.name}</h3>
         <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: bold;">Cuentas unificadas: ${pendingBills.length} cobro(s) pendiente(s)</span>
       </div>
+
+      ${completedLabsWithDoc.length > 0 ? `
+        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 1.1rem;">🔬📑</span>
+              <strong style="color: #10b981; font-size: 0.85rem;">Resultados de Laboratorio Escaneados Disponibles (${completedLabsWithDoc.length})</strong>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">
+              Documentos oficiales cargados para verificación contable y entrega al paciente: ${completedLabsWithDoc.map(l => l.name).join(', ')}
+            </div>
+          </div>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+            ${completedLabsWithDoc.map(lab => `
+              <button type="button" class="btn btn-primary btn-small btn-view-caja-lab" data-labid="${lab.id}" style="font-size: 0.75rem; padding: 4px 10px; background: #10b981; border: none; color: white; border-radius: 4px; cursor: pointer; font-weight: 600;">
+                📄 Ver ${lab.name} (PDF)
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
 
       <!-- Asistente de edición de cargos -->
       <div style="background: rgba(0,0,0,0.15); border-radius: 6px; padding: 12px; border: 1px dashed var(--border-color); margin-bottom: 12px;">
@@ -628,6 +652,17 @@ function loadPatientBillingDetails(patient, state) {
 
   // Carga inicial
   repopulateEditTable();
+
+  // Bind ver documentos escaneados de laboratorio en caja
+  detailArea.querySelectorAll('.btn-view-caja-lab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const labId = btn.getAttribute('data-labid');
+      const targetLab = completedLabsWithDoc.find(x => x.id === labId);
+      if (targetLab && targetLab.documentUrl) {
+        openLabDocumentViewerModal(`Resultados de Laboratorio: ${patient.name} - ${targetLab.name}`, targetLab.documentUrl, targetLab.fileName, { order: targetLab, patient });
+      }
+    });
+  });
 
   // Bind Submit Procesar Cobro
   document.getElementById('caja-pay-patient-form').addEventListener('submit', (e) => {

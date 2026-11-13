@@ -1,6 +1,7 @@
 // src/modules/laboratorio.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
 import { showPastConsultationDetail } from './consulta.js';
+import { sendLabResultsToDoctor } from '../utils/whatsapp.js';
 
 function normalizeString(str) {
   if (!str) return '';
@@ -1578,7 +1579,119 @@ function showOrderPreviewModal(patient, order) {
   modal.style.display = 'flex';
 }
 
+/**
+ * Modal Visor Universal de Documentos Escaneados (PDF o Imagen).
+ * Permite previsualizar, descargar, imprimir y reenviar por WhatsApp el documento oficial.
+ */
+export function openDocumentViewerModal(title, documentUrl, fileName, options = {}) {
+  let modal = document.getElementById('global-document-viewer-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'global-document-viewer-modal';
+    modal.className = 'modal-overlay';
+    modal.style.zIndex = '999999';
+    document.body.appendChild(modal);
+  }
+
+  const isPdf = String(documentUrl).includes('application/pdf') || String(fileName || '').toLowerCase().endsWith('.pdf');
+  const safeTitle = title || 'Documento Escaneado de Laboratorio';
+  const safeFileName = fileName || (isPdf ? 'Resultados_Laboratorio.pdf' : 'Resultados_Laboratorio.jpg');
+
+  modal.style.display = 'flex';
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width: 95%; width: 1100px; max-height: 94vh; display: flex; flex-direction: column; background: var(--bg-card, #121222); border-radius: var(--radius-sm, 8px); box-shadow: 0 10px 40px rgba(0,0,0,0.8); border: 1px solid var(--border-color);">
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding: 12px 20px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.4rem;">${isPdf ? '📄' : '🖼️'}</span>
+          <div>
+            <h2 style="margin: 0; font-size: 1.15rem; color: var(--text-primary); font-family: var(--font-heading);">${safeTitle}</h2>
+            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
+              Archivo: <strong style="color: var(--accent-primary);">${safeFileName}</strong>
+            </div>
+          </div>
+        </div>
+        <button class="modal-close" id="btn-close-viewer-modal" style="font-size: 1.5rem; background: none; border: none; color: var(--text-muted); cursor: pointer;">&times;</button>
+      </div>
+
+      <div class="modal-body" style="flex: 1; overflow: auto; padding: 15px; display: flex; justify-content: center; align-items: center; min-height: 450px; background: rgba(0,0,0,0.3);">
+        ${isPdf ? `
+          <iframe src="${documentUrl}#toolbar=1" style="width: 100%; height: 72vh; border: none; border-radius: 4px; background: white;" title="${safeTitle}"></iframe>
+        ` : `
+          <img src="${documentUrl}" alt="${safeTitle}" style="max-width: 100%; max-height: 72vh; object-fit: contain; border-radius: 4px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);">
+        `}
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding: 12px 20px; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; gap: 8px;">
+          ${options.order && options.patient ? `
+            <button class="btn btn-primary btn-small" id="btn-resend-wa-lab" style="font-size: 0.8rem; padding: 6px 12px; background: #25D366; border: none; color: white; display: inline-flex; align-items: center; gap: 5px;">
+              💬 Enviar por WhatsApp al Médico
+            </button>
+          ` : ''}
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <a href="${documentUrl}" download="${safeFileName}" class="btn btn-secondary" style="font-size: 0.85rem; padding: 6px 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 5px;">
+            📥 Descargar
+          </a>
+          <button class="btn btn-secondary" id="btn-open-tab-lab" style="font-size: 0.85rem; padding: 6px 14px;">
+            🔗 Abrir en Pestaña Nueva
+          </button>
+          <button class="btn btn-primary" id="btn-done-viewer-modal" style="font-size: 0.85rem; padding: 6px 16px;">
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const closeViewer = () => { modal.style.display = 'none'; };
+  modal.querySelector('#btn-close-viewer-modal').onclick = closeViewer;
+  modal.querySelector('#btn-done-viewer-modal').onclick = closeViewer;
+  modal.querySelector('#btn-open-tab-lab').onclick = () => {
+    const win = window.open();
+    if (win) {
+      if (isPdf) {
+        win.document.write(`<iframe src="${documentUrl}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+      } else {
+        win.document.write(`<body style="margin:0; background:#0e0e1a; display:flex; align-items:center; justify-content:center; height:100vh;"><img src="${documentUrl}" style="max-width:100%; max-height:100vh;"></body>`);
+      }
+    } else {
+      alert("Por favor habilita las ventanas emergentes (popups) para abrir en una pestaña nueva.");
+    }
+  };
+
+  const resendBtn = modal.querySelector('#btn-resend-wa-lab');
+  if (resendBtn && options.order && options.patient) {
+    resendBtn.onclick = async () => {
+      resendBtn.disabled = true;
+      resendBtn.textContent = 'Enviando...';
+      const stateObj = getAppState();
+      const docName = options.order.doctorName || options.patient.assignedDoctorName || 'Dr. Carlos Montenegro';
+      let docUser = (stateObj.users || []).find(u => u.name && u.name.toLowerCase() === docName.toLowerCase());
+      if (!docUser) docUser = (stateObj.users || []).find(u => u.role && u.role.toLowerCase().includes('medico'));
+      const docPhone = (docUser && (docUser.phone || docUser.telephone)) || '5555-0000';
+
+      const res = await sendLabResultsToDoctor(docName, docPhone, options.patient.name, options.order, {
+        documentUrl,
+        fileName: safeFileName,
+        fileType: isPdf ? 'application/pdf' : 'image/jpeg'
+      });
+
+      if (res && res.success) {
+        alert(`✅ Resultados enviados exitosamente por WhatsApp al médico ${docName}.`);
+      }
+      resendBtn.disabled = false;
+      resendBtn.textContent = '💬 Enviar por WhatsApp al Médico';
+    };
+  }
+}
+
 export function showLocalLabReportPrintWindow(study, patient) {
+  if (study && study.documentUrl) {
+    openDocumentViewerModal(`Resultados de Laboratorio: ${patient ? patient.name : 'Paciente'} - ${study.name}`, study.documentUrl, study.fileName, { order: study, patient });
+    return;
+  }
+
   const printWindow = window.open('', '_blank');
   if (!printWindow) {
     alert("Por favor, permite las ventanas emergentes (popups) para poder imprimir los resultados.");
@@ -2003,7 +2116,7 @@ function renderLaboratoristaDashboard(container) {
         actionBtn = `<button class="btn btn-secondary btn-small btn-act-order" style="font-size: 0.78rem; padding: 4px 8px;">✏️ Resultados</button>`;
       } else if (order.stage === 'completado') {
         stageBadge = '<span class="status-badge status-completed" style="background: rgba(0,230,118,0.15); color: var(--accent-success); border: 1px solid var(--accent-success); padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Completado</span>';
-        actionBtn = `<button class="btn btn-success btn-small btn-act-order" style="font-size: 0.78rem; padding: 4px 8px;">🖨️ Reporte</button>`;
+        actionBtn = `<button class="btn btn-success btn-small btn-act-order" style="font-size: 0.78rem; padding: 4px 8px; background: #10b981; border: none; color: white;">${order.documentUrl ? '📄 Ver PDF' : '🖨️ Reporte'}</button>`;
       }
 
       const studiesBadges = (order.studyNames && order.studyNames.length > 0)
@@ -2094,7 +2207,7 @@ function openOrderDetailsModal(order, patientObj) {
   } else if (order.stage === 'ingresar_resultados') {
     actionButtonHtml = `<button class="btn btn-secondary" id="btn-modal-action" style="padding: 10px 20px; font-weight: bold;">✏️ INGRESAR RESULTADOS</button>`;
   } else if (order.stage === 'completado') {
-    actionButtonHtml = `<button class="btn btn-success" id="btn-modal-action" style="padding: 10px 20px; font-weight: bold;">🖨️ IMPRIMIR REPORTE</button>`;
+    actionButtonHtml = `<button class="btn btn-success" id="btn-modal-action" style="padding: 10px 20px; font-weight: bold; background: #10b981; border: none; color: white;">${order.documentUrl ? '📄 VER RESULTADOS (PDF)' : '🖨️ IMPRIMIR REPORTE'}</button>`;
   }
 
   let statusText = '';
@@ -2187,49 +2300,8 @@ function openOrderDetailsModal(order, patientObj) {
   }
 }
 
-// --- MODAL GLOBAL DE INGRESO DE RESULTADOS ---
-function getCoprologyOptions(paramName) {
-  const normName = String(paramName || '').trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (normName === "COLOR") {
-    return ["Café", "Amarillo", "Verde", "Negro", "Acólico"];
-  }
-  if (normName === "ASPECTO") {
-    return ["Blando", "Formado", "Pastoso", "Líquido", "Semilíquido"];
-  }
-  if (normName === "RESTOS ALIMENTICIOS" || normName === "RESTOS ALIMENTARIOS") {
-    return ["No se observa", "Escasa (+)", "Regular (++)", "Abundante (+++)"];
-  }
-  if (normName === "MOCO") {
-    return ["No se observa", "Escaso (+)", "Moderado (++)", "Abundante (+++)"];
-  }
-  if (normName === "SANGRE") {
-    return ["No se observa", "Escasa (+)", "Moderada (++)", "Abundante (+++)"];
-  }
-  if (normName === "GRASAS") {
-    return ["No se observa", "Escasa (+)", "Regular (++)", "Abundante (+++)"];
-  }
-  if (normName === "ALMIDON" || normName === "ALMIDON Y GRASAS") {
-    return ["No se observa", "Escaso (+)", "Regular (++)", "Abundante (+++)"];
-  }
-  if (normName === "LEVADURAS") {
-    return ["No se observa", "Escasas (+)", "Abundantes (+++)"];
-  }
-  if (normName === "FIBRAS MUSCULARES") {
-    return ["No se observa", "Escasa (+)", "Regular (++)", "Abundante (+++)"];
-  }
-  if (normName === "CELULAS VEGETALES") {
-    return ["No se observa", "Escasa (+)", "Regular (++)", "Abundante (+++)"];
-  }
-  if (normName === "JABONES") {
-    return ["No se observa", "Escasa (+)", "Regular (++)", "Abundante (+++)"];
-  }
-  if (normName === "BACTERIAS") {
-    return ["Escasa (+)", "Regular (++)", "Abundante (+++)"];
-  }
-  return null;
-}
-
-function openResultsModal(study, customPatient, onSaveCallback) {
+// --- MODAL DE CARGA DE RESULTADOS ESCANEADOS (DOCUMENTO PDF / IMAGEN) ---
+export function openResultsModal(study, customPatient, onSaveCallback) {
   const resultsModal = document.getElementById('results-entry-modal');
   const resultsTitle = document.getElementById('results-modal-title');
   const resultsBody = document.getElementById('results-modal-body');
@@ -2239,230 +2311,279 @@ function openResultsModal(study, customPatient, onSaveCallback) {
 
   if (!resultsModal || !resultsBody) return;
 
-  const normStudyName = normalizeString(study.name);
-  const isCoprologia = normStudyName.includes('heces') || normStudyName.includes('copro');
-
-  // Auto-expandir estudios de Coprología/Heces si tienen menos de 18 parámetros
-  if (isCoprologia) {
-    if (!study.parameters || study.parameters.length < 18) {
-      const defaultCoprology = LAB_STUDIES_CATALOG.find(c => {
-        const cName = normalizeString(c.name);
-        return cName === 'heces' || cName === 'heces completas';
-      });
-      if (defaultCoprology && defaultCoprology.parameters) {
-        study.parameters = defaultCoprology.parameters.map(p => ({
-          studyName: study.name,
-          name: p.name,
-          unit: p.unit,
-          normal: p.normal,
-          value: ''
-        }));
-        
-        if (customPatient) {
-          const stateObj = getAppState();
-          const pObj = stateObj.patients.find(p => p.id === customPatient.id);
-          if (pObj) {
-            const sObj = pObj.localLabs.find(s => s.id === study.id);
-            if (sObj) {
-              sObj.parameters = study.parameters;
-              saveAppState(stateObj);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  resultsTitle.textContent = `Ingreso de Resultados: ${study.name}`;
-  
   const stateObj = getAppState();
-  const cloudCatalog = stateObj.laboratoryTests || [];
+  const doctorName = study.doctorName || (customPatient && customPatient.assignedDoctorName) || 'Dr. Carlos Montenegro';
+  let doctorUser = (stateObj.users || []).find(u => u.name && u.name.toLowerCase() === doctorName.toLowerCase());
+  if (!doctorUser) doctorUser = (stateObj.users || []).find(u => u.role && u.role.toLowerCase().includes('medico'));
+  const doctorPhone = (doctorUser && (doctorUser.phone || doctorUser.telephone)) || '5555-0000';
 
-  const tableRowsHtml = (study.parameters || []).map((param, index) => {
-    let defaultUnit = param.unit && param.unit !== 'N/A' ? param.unit : '';
-    let defaultNormal = param.normal && param.normal !== 'N/A' ? param.normal : '';
+  resultsTitle.innerHTML = `📁 Carga de Resultados Escaneados: <span style="color: var(--accent-primary);">${study.name}</span>`;
 
-    if (!defaultUnit || !defaultNormal) {
-      const normStudyName = normalizeString(param.studyName || study.name);
-      const normParamName = normalizeString(param.name);
+  let selectedFileData = study.documentUrl || null;
+  let selectedFileName = study.fileName || '';
+  let selectedFileType = study.fileType || '';
+  let selectedFileSize = study.fileSize || 0;
 
-      // 1. Intentar buscar en el catálogo cargado en la nube (cargado por Excel)
-      const cloudStudy = cloudCatalog.find(c => normalizeString(c.name) === normStudyName);
-      if (cloudStudy) {
-        const foundParam = cloudStudy.parameters && cloudStudy.parameters.find(p => normalizeString(p.name) === normParamName);
-        if (foundParam) {
-          if (!defaultUnit) defaultUnit = foundParam.unit && foundParam.unit !== 'N/A' ? foundParam.unit : '';
-          if (!defaultNormal) defaultNormal = foundParam.normal && foundParam.normal !== 'N/A' ? foundParam.normal : '';
-        } else if (cloudStudy.parameters && cloudStudy.parameters.length === 1 && normParamName === normalizeString('Resultado General')) {
-          if (!defaultUnit) defaultUnit = cloudStudy.parameters[0].unit && cloudStudy.parameters[0].unit !== 'N/A' ? cloudStudy.parameters[0].unit : '';
-          if (!defaultNormal) defaultNormal = cloudStudy.parameters[0].normal && cloudStudy.parameters[0].normal !== 'N/A' ? cloudStudy.parameters[0].normal : '';
-        }
-      }
-
-      // 2. Si no se encontró, buscar en el catálogo estático predefinido
-      if (!defaultUnit || !defaultNormal) {
-        const staticStudy = LAB_STUDIES_CATALOG.find(c => normalizeString(c.name) === normStudyName);
-        if (staticStudy) {
-          const foundParam = staticStudy.parameters && staticStudy.parameters.find(p => normalizeString(p.name) === normParamName);
-          if (foundParam) {
-            if (!defaultUnit) defaultUnit = foundParam.unit && foundParam.unit !== 'N/A' ? foundParam.unit : '';
-            if (!defaultNormal) defaultNormal = foundParam.normal && foundParam.normal !== 'N/A' ? foundParam.normal : '';
-          }
-        }
-      }
-    }
-
-    // Si después de buscar siguen siendo N/A, dejarlos vacíos para comodidad
-    if (defaultUnit === 'N/A') defaultUnit = '';
-    if (defaultNormal === 'N/A') defaultNormal = '';
-
-    // Renderizado del campo de resultado
-    let valueFieldHtml = '';
-    const options = getCoprologyOptions(param.name);
-    if (options && isCoprologia) {
-      const isSelected = options.includes(param.value);
-      valueFieldHtml = `
-        <div style="display: flex; gap: 5px; flex-direction: column;">
-          <select onchange="const input = this.nextElementSibling; if (this.value) { input.value = this.value; input.style.display = 'none'; } else { input.value = ''; input.style.display = 'block'; input.focus(); }" style="
-            width: 100%;
-            padding: 8px 12px;
-            background: var(--bg-card, #1f2937);
-            border: 1px solid var(--border-color);
-            color: var(--text-primary);
-            border-radius: var(--radius-sm);
-            font-weight: bold;
-          ">
-            <option value="">-- Seleccione una opción o escriba --</option>
-            ${options.map(o => `<option value="${o}" ${param.value === o ? 'selected' : ''}>${o}</option>`).join('')}
-            <option value="" ${param.value && !isSelected ? 'selected' : ''}>Otro (Escribir)...</option>
-          </select>
-          <input type="text" name="param-val-${index}" value="${param.value || ''}" required placeholder="Resultado..." style="
-            width: 100%;
-            padding: 8px 12px;
-            background: var(--bg-card, rgba(255,255,255,0.05));
-            border: 1px solid var(--border-color);
-            color: var(--text-primary);
-            border-radius: var(--radius-sm);
-            font-weight: 700;
-            display: ${param.value && !isSelected ? 'block' : (param.value ? 'none' : 'block')};
-          ">
-        </div>
-      `;
-    } else {
-      valueFieldHtml = `
-        <input type="text" name="param-val-${index}" value="${param.value || ''}" required placeholder="Ej. 110 o Negativo" style="
-          width: 100%;
-          padding: 8px 12px;
-          background: var(--bg-card, rgba(255,255,255,0.05));
-          border: 1px solid var(--border-color);
-          color: var(--text-primary);
-          border-radius: var(--radius-sm);
-          font-weight: 700;
-        ">
-      `;
-    }
-
-    // Si es coprología, las unidades y valores de referencia son fijos (readonly)
-    const extraAttrs = isCoprologia ? 'readonly tabindex="-1"' : '';
-    const extraStyles = isCoprologia ? 'background: rgba(255,255,255,0.02); color: var(--text-muted); pointer-events: none;' : '';
-
-    return `
-      <tr style="border-bottom: 1px solid var(--border-color);">
-        <td style="padding: 10px 12px;">
-          <strong style="color: var(--text-primary); font-size: 0.9rem;">${param.name}</strong>
-          ${param.studyName && param.studyName !== param.name ? `<div style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal; margin-top: 2px;">🧪 ${param.studyName}</div>` : ''}
-        </td>
-        <td style="padding: 8px 12px;">
-          ${valueFieldHtml}
-        </td>
-        <td style="padding: 8px 12px;">
-          <input type="text" name="param-unit-${index}" value="${defaultUnit}" ${extraAttrs} placeholder="Ninguna" style="
-            width: 100%;
-            padding: 8px 12px;
-            background: var(--bg-card, rgba(255,255,255,0.05));
-            border: 1px solid var(--border-color);
-            color: var(--text-muted);
-            border-radius: var(--radius-sm);
-            ${extraStyles}
-          ">
-        </td>
-        <td style="padding: 8px 12px;">
-          <input type="text" name="param-ref-${index}" value="${defaultNormal}" ${extraAttrs} placeholder="Estable / Normal" style="
-            width: 100%;
-            padding: 8px 12px;
-            background: var(--bg-card, rgba(255,255,255,0.05));
-            border: 1px solid var(--border-color);
-            color: var(--text-muted);
-            border-radius: var(--radius-sm);
-            ${extraStyles}
-          ">
-        </td>
-      </tr>
-    `;
-  }).join('');
+  const studiesBadges = (study.studyNames && study.studyNames.length > 0)
+    ? study.studyNames.map(s => `<span style="background: rgba(37, 99, 235, 0.12); color: var(--accent-primary); border: 1px solid rgba(37, 99, 235, 0.3); padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600;">🧪 ${s}</span>`).join(' ')
+    : `<span style="background: rgba(37, 99, 235, 0.12); color: var(--accent-primary); border: 1px solid rgba(37, 99, 235, 0.3); padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600;">🧪 ${study.name}</span>`;
 
   resultsBody.innerHTML = `
-    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
-      Complete los resultados analíticos para cada uno de los estudios solicitados en esta orden. Las unidades y valores de referencia son completamente opcionales.
-    </p>
-    <div style="overflow-x: auto; margin-bottom: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
-      <table class="results-table-input" style="width: 100%; border-collapse: collapse; text-align: left;">
-        <thead>
-          <tr style="background: rgba(37, 99, 235, 0.12); border-bottom: 2px solid var(--accent-primary);">
-            <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 35%;">Análisis / Parámetro</th>
-            <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 25%;">Resultado Obtenido</th>
-            <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 18%;">Unidades (Opcional)</th>
-            <th style="padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; font-weight: 700; width: 22%;">Valores de Referencia (Opcional)</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${tableRowsHtml}
-        </tbody>
-      </table>
+    <!-- Tarjeta Informativa del Paciente y Solicitud -->
+    <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: var(--radius-sm, 6px); padding: 14px; margin-bottom: 1.25rem;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; font-size: 0.88rem;">
+        <div>
+          <span style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase;">Paciente:</span>
+          <div style="font-weight: 700; color: var(--text-primary); font-size: 1rem;">${customPatient ? customPatient.name : 'Paciente'}</div>
+        </div>
+        <div>
+          <span style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase;">No. Orden / Expediente:</span>
+          <div style="font-family: monospace; color: var(--accent-primary); font-weight: 600;">#${study.id}</div>
+        </div>
+        <div>
+          <span style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase;">Médico Asignado:</span>
+          <div style="color: var(--text-primary); font-weight: 600;">👨‍⚕️ ${doctorName} <span style="font-size: 0.78rem; color: var(--text-muted);">(${doctorPhone})</span></div>
+        </div>
+      </div>
+      <div style="margin-top: 10px; border-top: 1px dashed var(--border-color); padding-top: 8px;">
+        <span style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; display: block; margin-bottom: 6px;">Estudios Incluidos en esta Orden:</span>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+          ${studiesBadges}
+        </div>
+      </div>
+    </div>
+
+    <!-- Instrucciones Importantes -->
+    <div style="background: rgba(0, 242, 254, 0.05); border-left: 4px solid var(--accent-primary); border-radius: 4px; padding: 10px 14px; margin-bottom: 1.25rem; font-size: 0.85rem; color: var(--text-primary);">
+      ℹ️ <strong>Carga de Resultados Oficiales:</strong> Suba el documento escaneado (PDF o Imagen JPG/PNG). No es necesario ingresar parámetros manuales. El documento se asociará inmediatamente al historial del paciente, facturación y se enviará por WhatsApp al médico asignado.
+    </div>
+
+    <!-- Área de Dropzone / Carga de Archivo -->
+    <div id="lab-dropzone" style="border: 2px dashed var(--accent-primary); border-radius: 8px; padding: 25px 20px; text-align: center; cursor: pointer; transition: all 0.3s; background: rgba(0, 242, 254, 0.02); margin-bottom: 1.25rem;">
+      <input type="file" id="lab-scan-file-input" accept="application/pdf,image/jpeg,image/png,image/webp" style="display: none;">
+      <div id="dropzone-empty-view" style="${selectedFileData ? 'display: none;' : ''}">
+        <span style="font-size: 2.8rem; display: block; margin-bottom: 8px;">🖨️📄</span>
+        <strong style="color: var(--text-primary); font-size: 1rem; display: block; margin-bottom: 4px;">Haga clic o arrastre aquí el documento escaneado</strong>
+        <span style="color: var(--text-muted); font-size: 0.82rem;">Formatos aceptados: PDF, JPG, PNG, WEBP (hasta 15 MB)</span>
+      </div>
+
+      <div id="dropzone-preview-view" style="${selectedFileData ? '' : 'display: none;'} text-align: center;">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap;">
+          <span style="font-size: 2rem;" id="dropzone-file-icon">📄</span>
+          <div style="text-align: left;">
+            <strong id="dropzone-filename" style="color: var(--accent-primary); font-size: 0.95rem; display: block;">${selectedFileName || 'Documento cargado'}</strong>
+            <span id="dropzone-filesize" style="font-size: 0.8rem; color: var(--text-muted);">${selectedFileSize ? (selectedFileSize / 1024).toFixed(1) + ' KB' : ''}</span>
+          </div>
+          <button type="button" id="btn-change-scan-file" class="btn btn-secondary btn-small" style="font-size: 0.78rem; padding: 4px 10px; margin-left: 10px;">🔄 Cambiar Archivo</button>
+        </div>
+        <div id="dropzone-inline-preview" style="max-height: 250px; overflow: hidden; border-radius: 6px; border: 1px solid var(--border-color); margin-top: 8px; background: rgba(0,0,0,0.2);">
+          <!-- Vista previa condicional -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Notas Adicionales -->
+    <div style="margin-bottom: 1rem;">
+      <label style="display: block; font-size: 0.82rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">Observaciones / Notas del Laboratorio (Opcional):</label>
+      <textarea id="lab-scan-notes" rows="2" placeholder="Ej. Muestra recibida en condiciones óptimas. Análisis validado y sellado." style="width: 100%; padding: 8px 12px; background: var(--bg-card, #1f2937); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; font-size: 0.85rem; resize: vertical;">${study.notes || ''}</textarea>
+    </div>
+
+    <!-- Aviso de Notificación WhatsApp -->
+    <div style="background: rgba(37, 211, 102, 0.08); border: 1px solid rgba(37, 211, 102, 0.3); border-radius: 6px; padding: 10px 14px; font-size: 0.85rem; color: var(--text-primary); display: flex; align-items: center; gap: 10px;">
+      <span style="font-size: 1.5rem;">📲</span>
+      <div>
+        <strong style="color: #25D366;">Notificación Automática por WhatsApp:</strong>
+        <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
+          Al guardar, se enviará el PDF oficial de resultados a <strong>${doctorName}</strong> al número <strong>${doctorPhone}</strong>.
+        </div>
+      </div>
     </div>
   `;
 
+  // Bind Dropzone y file picker
+  const dropzone = resultsBody.querySelector('#lab-dropzone');
+  const fileInput = resultsBody.querySelector('#lab-scan-file-input');
+  const emptyView = resultsBody.querySelector('#dropzone-empty-view');
+  const previewView = resultsBody.querySelector('#dropzone-preview-view');
+  const fileNameEl = resultsBody.querySelector('#dropzone-filename');
+  const fileSizeEl = resultsBody.querySelector('#dropzone-filesize');
+  const fileIconEl = resultsBody.querySelector('#dropzone-file-icon');
+  const inlinePreview = resultsBody.querySelector('#dropzone-inline-preview');
+  const changeBtn = resultsBody.querySelector('#btn-change-scan-file');
+
+  function renderInlinePreview(dataUrl, fileType, fileName) {
+    if (!dataUrl) {
+      inlinePreview.innerHTML = '';
+      return;
+    }
+    const isPdf = String(fileType).includes('pdf') || String(fileName).toLowerCase().endsWith('.pdf');
+    if (isPdf) {
+      fileIconEl.textContent = '📄';
+      inlinePreview.innerHTML = `
+        <div style="padding: 15px; text-align: center; background: rgba(37, 99, 235, 0.05);">
+          <span style="font-size: 2rem;">📑</span>
+          <div style="font-weight: 600; color: var(--accent-primary); margin: 6px 0;">Documento PDF Listo para Procesar</div>
+          <button type="button" class="btn btn-secondary btn-small" id="btn-quick-preview-pdf" style="font-size: 0.75rem;">👁️ Vista Previa del PDF</button>
+        </div>
+      `;
+      const quickBtn = inlinePreview.querySelector('#btn-quick-preview-pdf');
+      if (quickBtn) {
+        quickBtn.onclick = (e) => {
+          e.stopPropagation();
+          openDocumentViewerModal(`Vista Previa: ${fileName}`, dataUrl, fileName);
+        };
+      }
+    } else {
+      fileIconEl.textContent = '🖼️';
+      inlinePreview.innerHTML = `<img src="${dataUrl}" style="max-height: 220px; max-width: 100%; object-fit: contain; display: block; margin: 0 auto; border-radius: 4px;">`;
+    }
+  }
+
+  if (selectedFileData) {
+    renderInlinePreview(selectedFileData, selectedFileType, selectedFileName);
+  }
+
+  dropzone.onclick = (e) => {
+    if (e.target.id === 'btn-change-scan-file' || e.target.id === 'btn-quick-preview-pdf') return;
+    fileInput.click();
+  };
+
+  if (changeBtn) {
+    changeBtn.onclick = (e) => {
+      e.stopPropagation();
+      fileInput.click();
+    };
+  }
+
+  dropzone.ondragover = (e) => {
+    e.preventDefault();
+    dropzone.style.background = 'rgba(0, 242, 254, 0.1)';
+    dropzone.style.borderColor = 'var(--accent-secondary)';
+  };
+
+  dropzone.ondragleave = (e) => {
+    e.preventDefault();
+    dropzone.style.background = 'rgba(0, 242, 254, 0.02)';
+    dropzone.style.borderColor = 'var(--accent-primary)';
+  };
+
+  dropzone.ondrop = (e) => {
+    e.preventDefault();
+    dropzone.style.background = 'rgba(0, 242, 254, 0.02)';
+    dropzone.style.borderColor = 'var(--accent-primary)';
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileSelected(e.dataTransfer.files[0]);
+    }
+  };
+
+  fileInput.onchange = () => {
+    if (fileInput.files && fileInput.files.length > 0) {
+      handleFileSelected(fileInput.files[0]);
+    }
+  };
+
+  function handleFileSelected(file) {
+    if (!file) return;
+    selectedFileName = file.name;
+    selectedFileType = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
+    selectedFileSize = file.size;
+
+    const reader = new FileReader();
+    reader.onload = (re) => {
+      selectedFileData = re.target.result;
+      emptyView.style.display = 'none';
+      previewView.style.display = 'block';
+      fileNameEl.textContent = file.name;
+      fileSizeEl.textContent = (file.size / 1024 > 1024) 
+        ? (file.size / (1024 * 1024)).toFixed(2) + ' MB' 
+        : (file.size / 1024).toFixed(1) + ' KB';
+      renderInlinePreview(selectedFileData, selectedFileType, selectedFileName);
+    };
+    reader.readAsDataURL(file);
+  }
+
   resultsModal.style.display = 'flex';
 
-  resultsForm.onsubmit = (e) => {
+  resultsForm.onsubmit = async (e) => {
     e.preventDefault();
-    
+
+    if (!selectedFileData) {
+      alert("⚠️ Por favor, seleccione o arrastre el documento escaneado (PDF o imagen) con los resultados antes de continuar.");
+      return;
+    }
+
     if (!customPatient) {
       alert("Error: No se pudo identificar el paciente.");
       return;
     }
 
-    const stateObj = getAppState();
-    const pObj = stateObj.patients.find(p => p.id === customPatient.id);
-    if (!pObj) {
-      alert("Error: Paciente no encontrado.");
-      return;
-    }
-    const sObj = pObj.localLabs.find(s => s.id === study.id);
-
-    if (sObj && sObj.parameters) {
-      sObj.parameters.forEach((param, index) => {
-        const valEl = resultsForm.elements[`param-val-${index}`];
-        const unitEl = resultsForm.elements[`param-unit-${index}`];
-        const refEl = resultsForm.elements[`param-ref-${index}`];
-
-        if (valEl) param.value = valEl.value;
-        if (unitEl) param.unit = unitEl.value;
-        if (refEl) param.normal = refEl.value;
-      });
-
-      sObj.stage = 'completado';
-      saveAppState(stateObj);
+    const submitBtn = resultsForm.querySelector('button[type="submit"]');
+    const originalText = submitBtn ? submitBtn.innerHTML : 'Guardar Resultados';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '⏳ Guardando y Enviando...';
     }
 
-    resultsModal.style.display = 'none';
-    
-    if (typeof onSaveCallback === 'function') {
-      onSaveCallback();
-    } else {
-      const roleLower = String(stateObj.currentUser && stateObj.currentUser.role || '').toLowerCase();
-      if (roleLower.includes('laboratorista') || roleLower.includes('laboratorio')) {
-        renderLaboratoristaDashboard(document.getElementById('app'));
+    try {
+      const stateObj = getAppState();
+      const pObj = stateObj.patients.find(p => p.id === customPatient.id);
+      if (!pObj) {
+        alert("Error: Paciente no encontrado.");
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = originalText; }
+        return;
+      }
+
+      const sObj = (pObj.localLabs || []).find(s => s.id === study.id);
+      const notesVal = resultsBody.querySelector('#lab-scan-notes') ? resultsBody.querySelector('#lab-scan-notes').value.trim() : '';
+
+      if (sObj) {
+        sObj.documentUrl = selectedFileData;
+        sObj.fileName = selectedFileName;
+        sObj.fileType = selectedFileType;
+        sObj.fileSize = selectedFileSize;
+        sObj.uploadDate = new Date().toISOString();
+        sObj.completedAt = new Date().toISOString();
+        sObj.stage = 'completado';
+        sObj.status = 'Completado';
+        sObj.notes = notesVal;
+
+        // Limpiar parámetros para no dejar datos residuales viejos
+        sObj.parameters = [];
+
+        await saveAppState(stateObj);
+      }
+
+      // Enviar resultados vía WhatsApp al médico asignado
+      try {
+        await sendLabResultsToDoctor(doctorName, doctorPhone, customPatient.name, sObj || study, {
+          documentUrl: selectedFileData,
+          fileName: selectedFileName,
+          fileType: selectedFileType,
+          notes: notesVal
+        });
+      } catch (waErr) {
+        console.warn("Aviso al enviar WhatsApp de resultados:", waErr);
+      }
+
+      alert(`✅ ¡Resultados escaneados guardados exitosamente!\n\nLa orden #${study.id} se ha marcado como COMPLETADA.\nLos resultados ya están disponibles en el expediente del paciente, facturación e historial clínico, y se notificó al médico asignado (${doctorName}).`);
+
+      resultsModal.style.display = 'none';
+
+      if (typeof onSaveCallback === 'function') {
+        onSaveCallback();
+      } else {
+        const roleLower = String(stateObj.currentUser && stateObj.currentUser.role || '').toLowerCase();
+        if (roleLower.includes('laboratorista') || roleLower.includes('laboratorio')) {
+          renderLaboratoristaDashboard(document.getElementById('app'));
+        }
+      }
+    } catch (err) {
+      console.error("Error al guardar resultados de laboratorio:", err);
+      alert("Error al guardar resultados: " + err.message);
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
       }
     }
   };

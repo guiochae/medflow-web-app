@@ -1,5 +1,5 @@
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
-import { showLocalLabReportPrintWindow } from './laboratorio.js';
+import { showLocalLabReportPrintWindow, openDocumentViewerModal } from './laboratorio.js';
 import { initPartogramaChart } from './partogramaChart.js';
 import { 
   notifyDoctorViaWhatsApp, 
@@ -1861,25 +1861,47 @@ function renderStudies(patient) {
         card.style.border = '1px solid var(--border-color)';
         card.style.borderRadius = 'var(--radius-sm)';
 
-        let paramsHtml = l.parameters.slice(0, 3).map(p => `
-          <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-top: 4px;">
-            <span style="color: var(--text-muted);">${p.name}:</span>
-            <span style="font-weight: 600; color: var(--accent-success);">${p.value} ${p.unit}</span>
-          </div>
-        `).join('');
+        let detailsHtml = '';
+        if (l.documentUrl) {
+          detailsHtml = `
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-primary); margin-bottom: 4px;">
+              <span style="font-size: 1.1rem;">📑</span>
+              <strong style="color: #10b981;">Resultados Escaneados Oficiales</strong>
+            </div>
+            <div style="font-size: 0.76rem; color: var(--text-muted); word-break: break-all;">
+              Archivo: <strong style="color: var(--accent-primary);">${l.fileName || 'Resultados.pdf'}</strong>
+            </div>
+            ${(l.studyNames && l.studyNames.length > 0) ? `
+              <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px;">
+                ${l.studyNames.map(s => `<span style="background: rgba(37,99,235,0.1); color: var(--accent-primary); font-size: 0.72rem; padding: 2px 6px; border-radius: 8px;">🧪 ${s}</span>`).join('')}
+              </div>
+            ` : ''}
+            ${l.notes ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; font-style: italic;">Notas: "${l.notes}"</div>` : ''}
+          `;
+        } else {
+          let paramsRows = (l.parameters || []).slice(0, 3).map(p => `
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-top: 4px;">
+              <span style="color: var(--text-muted);">${p.name}:</span>
+              <span style="font-weight: 600; color: var(--accent-success);">${p.value} ${p.unit || ''}</span>
+            </div>
+          `).join('');
 
-        if (l.parameters.length > 3) {
-          paramsHtml += `<div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-top: 6px; font-style: italic;">+ ${l.parameters.length - 3} parámetros más</div>`;
+          if ((l.parameters || []).length > 3) {
+            paramsRows += `<div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-top: 6px; font-style: italic;">+ ${l.parameters.length - 3} parámetros más</div>`;
+          }
+          detailsHtml = paramsRows;
         }
 
         card.innerHTML = `
           <h4 style="color: var(--accent-primary); font-size: 0.95rem; margin-bottom: 5px; font-family: var(--font-heading);">${l.name}</h4>
           <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px;">Fecha: ${new Date(l.date).toLocaleDateString()}</div>
           <div style="background: rgba(255,255,255,0.02); padding: 8px; border-radius: 4px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.05);">
-            ${paramsHtml}
+            ${detailsHtml}
           </div>
           <div style="display: flex; gap: 8px;">
-            <button class="btn btn-secondary btn-small" id="btn-view-local-${l.id}" style="flex: 1;">📄 Reporte</button>
+            <button class="btn btn-secondary btn-small" id="btn-view-local-${l.id}" style="flex: 1; ${l.documentUrl ? 'background: #10b981; border: none; color: white;' : ''}">
+              ${l.documentUrl ? '📄 Ver Escaneo (PDF)' : '📄 Reporte'}
+            </button>
             <button class="btn btn-danger btn-small" id="btn-del-local-lab-${l.id}" style="padding: 6px 10px; background: var(--accent-danger); border: none; color: #fff; cursor: pointer; border-radius: var(--radius-sm);" title="Eliminar Estudio">🗑️</button>
           </div>
         `;
@@ -2660,26 +2682,41 @@ function showClinicalHistoryModal(patient) {
             <div class="timeline-item" style="border-left: 2px solid var(--accent-primary); padding-left: 15px; margin-bottom: 1.5rem;">
               <div class="timeline-date" style="font-weight: 700; color: var(--accent-primary);">${l.date ? new Date(l.date).toLocaleString() : 'N/A'} - ${l.name}</div>
               <div class="timeline-desc" style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; margin-top: 6px;">
-                <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
-                  <thead>
-                    <tr style="border-bottom: 1px solid var(--border-color);">
-                      <th style="text-align: left; padding: 6px;">Parámetro</th>
-                      <th style="text-align: left; padding: 6px;">Resultado</th>
-                      <th style="text-align: left; padding: 6px;">Unidad</th>
-                      <th style="text-align: left; padding: 6px;">Rango de Referencia</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${(l.parameters || []).map(p => `
-                      <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <td style="padding: 6px; font-weight: 600;">${p.name === 'Resultado General' ? (p.studyName || l.name) : p.name}</td>
-                        <td style="padding: 6px; color: var(--accent-success); font-weight: bold;">${p.value || 'N/A'}</td>
-                        <td style="padding: 6px; color: var(--text-muted);">${p.unit || '-'}</td>
-                        <td style="padding: 6px; color: var(--text-muted);">${p.normal || '-'}</td>
+                ${l.documentUrl ? `
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; flex-wrap: wrap; gap: 8px;">
+                    <div>
+                      <div style="font-weight: 700; color: #10b981; font-size: 0.88rem;">📄 Documento Oficial Escaneado: ${l.fileName || 'Resultados.pdf'}</div>
+                      <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
+                        ${(l.studyNames && l.studyNames.length > 0) ? `Estudios: ${l.studyNames.join(', ')}` : ''}
+                        ${l.notes ? ` | Observaciones: "${l.notes}"` : ''}
+                      </div>
+                    </div>
+                    <button type="button" class="btn btn-primary btn-small btn-view-hist-doc" data-labid="${l.id}" style="font-size: 0.78rem; padding: 5px 12px; background: #10b981; border: none; color: white; border-radius: 4px; cursor: pointer; font-weight: 600;">
+                      👁️ Ver Documento (PDF)
+                    </button>
+                  </div>
+                ` : `
+                  <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                    <thead>
+                      <tr style="border-bottom: 1px solid var(--border-color);">
+                        <th style="text-align: left; padding: 6px;">Parámetro</th>
+                        <th style="text-align: left; padding: 6px;">Resultado</th>
+                        <th style="text-align: left; padding: 6px;">Unidad</th>
+                        <th style="text-align: left; padding: 6px;">Rango de Referencia</th>
                       </tr>
-                    `).join('')}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      ${(l.parameters || []).map(p => `
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                          <td style="padding: 6px; font-weight: 600;">${p.name === 'Resultado General' ? (p.studyName || l.name) : p.name}</td>
+                          <td style="padding: 6px; color: var(--accent-success); font-weight: bold;">${p.value || 'N/A'}</td>
+                          <td style="padding: 6px; color: var(--text-muted);">${p.unit || '-'}</td>
+                          <td style="padding: 6px; color: var(--text-muted);">${p.normal || '-'}</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                `}
               </div>
             </div>
           `).join('')}
@@ -2804,6 +2841,16 @@ function showClinicalHistoryModal(patient) {
         const foundSurg = (state.surgeries || []).find(s => s.id === surgId);
         if (foundSurg) {
           printSurgicalRecordInHistory(foundSurg, patient, state);
+        }
+      });
+    });
+
+    body.querySelectorAll('.btn-view-hist-doc').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const labId = btn.getAttribute('data-labid');
+        const targetLab = (patient.localLabs || []).find(x => x.id === labId);
+        if (targetLab && targetLab.documentUrl) {
+          openDocumentViewerModal(`Resultados de Laboratorio: ${patient.name} - ${targetLab.name}`, targetLab.documentUrl, targetLab.fileName, { order: targetLab, patient });
         }
       });
     });

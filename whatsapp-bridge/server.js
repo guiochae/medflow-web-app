@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth } = pkg;
+const { Client, LocalAuth, MessageMedia } = pkg;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,7 +26,8 @@ app.use((req, res, next) => {
   next();
 });
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 let isReady = false;
 let latestQr = null;
@@ -416,4 +417,82 @@ app.post('/api/notify-patient-reminder', async (req, res) => {
     });
   }
 });
+
+// Endpoint POST /api/notify-lab-result (Envío de resultados escaneados de laboratorio con PDF adjunto al médico)
+app.post('/api/notify-lab-result', async (req, res) => {
+  const { doctorName, doctorPhone, patientName, orderId, studies, fileName, mimeType, base64Data, customMessage } = req.body;
+
+  if (!doctorName || !doctorPhone || !patientName) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Faltan parámetros requeridos (doctorName, doctorPhone, patientName).' 
+    });
+  }
+
+  if (!isReady) {
+    return res.status(503).json({ 
+      success: false, 
+      error: 'El bot de WhatsApp aún no está listo. Por favor escanea el código QR en la terminal o espera la vinculación.' 
+    });
+  }
+
+  try {
+    let cleanPhone = String(doctorPhone).replace(/[^0-9]/g, '');
+    if (cleanPhone.length === 8) {
+      cleanPhone = '502' + cleanPhone;
+    }
+
+    const chatId = `${cleanPhone}@c.us`;
+
+    const messageCaption = customMessage || (
+      `🔬 *HOSPITAL PRIVADO MULTIMÉDICA SAYAXCHÉ*\n` +
+      `*RESULTADOS DE LABORATORIO CLÍNICO DISPONIBLES*\n\n` +
+      `Estimado(a) *${doctorName}*,\n` +
+      `Le informamos que ya están listos los resultados de laboratorio para el paciente:\n\n` +
+      `👤 *Paciente:* ${patientName}\n` +
+      `📋 *No. Orden:* #${orderId || 'S/N'}\n` +
+      `🧪 *Estudio(s):* ${studies || 'Análisis Clínicos'}\n` +
+      `📅 *Fecha:* ${new Date().toLocaleDateString('es-GT')}\n\n` +
+      `📎 *Adjunto documento escaneado oficial con los resultados para su evaluación médica.*`
+    );
+
+    let sentWithMedia = false;
+
+    // Si viene base64Data, intentar enviar como MessageMedia adjunto
+    if (base64Data && MessageMedia) {
+      try {
+        const cleanBase64 = String(base64Data).replace(/^data:[^;]+;base64,/, '');
+        const docMime = mimeType || (String(base64Data).includes('application/pdf') ? 'application/pdf' : 'image/jpeg');
+        const docFileName = fileName || `Resultados_Lab_${orderId || 'paciente'}.pdf`;
+
+        const media = new MessageMedia(docMime, cleanBase64, docFileName);
+        await client.sendMessage(chatId, media, { caption: messageCaption });
+        sentWithMedia = true;
+        console.log(`📎 Resultados con documento adjunto enviados a ${doctorName} (${cleanPhone})`);
+      } catch (mediaErr) {
+        console.warn('Aviso: Falló envío de media, enviando texto como respaldo:', mediaErr.message);
+      }
+    }
+
+    // Si no se envió con media o falló, enviar mensaje de texto
+    if (!sentWithMedia) {
+      await client.sendMessage(chatId, messageCaption);
+      console.log(`✉️ Notificación de texto de laboratorio enviada a ${doctorName} (${cleanPhone})`);
+    }
+
+    return res.status(200).json({ 
+      success: true, 
+      sentWithMedia: sentWithMedia,
+      message: 'Resultados de laboratorio notificados al médico exitosamente vía WhatsApp.' 
+    });
+  } catch (error) {
+    console.error('❌ Error al notificar resultados por WhatsApp:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Error interno al enviar resultados al médico por WhatsApp.',
+      details: error.message 
+    });
+  }
+});
+
 
