@@ -1622,12 +1622,10 @@ export function openDocumentViewerModal(title, documentUrl, fileName, options = 
       </div>
 
       <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding: 12px 20px; flex-wrap: wrap; gap: 10px;">
-        <div style="display: flex; gap: 8px;">
-          ${options.order && options.patient ? `
-            <button class="btn btn-primary btn-small" id="btn-resend-wa-lab" style="font-size: 0.8rem; padding: 6px 12px; background: #25D366; border: none; color: white; display: inline-flex; align-items: center; gap: 5px;">
-              💬 Enviar por WhatsApp al Médico
-            </button>
-          ` : ''}
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <span style="font-size: 0.8rem; color: #10b981; font-weight: 600; display: inline-flex; align-items: center; gap: 5px;">
+            ✅ Envío automático al médico por WhatsApp activo
+          </span>
         </div>
         <div style="display: flex; gap: 10px;">
           <a href="${documentUrl}" download="${safeFileName}" class="btn btn-secondary" style="font-size: 0.85rem; padding: 6px 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 5px;">
@@ -1659,31 +1657,6 @@ export function openDocumentViewerModal(title, documentUrl, fileName, options = 
       alert("Por favor habilita las ventanas emergentes (popups) para abrir en una pestaña nueva.");
     }
   };
-
-  const resendBtn = modal.querySelector('#btn-resend-wa-lab');
-  if (resendBtn && options.order && options.patient) {
-    resendBtn.onclick = async () => {
-      resendBtn.disabled = true;
-      resendBtn.textContent = 'Enviando...';
-      const stateObj = getAppState();
-      const docName = options.order.doctorName || options.patient.assignedDoctorName || 'Dr. Carlos Montenegro';
-      let docUser = (stateObj.users || []).find(u => u.name && u.name.toLowerCase() === docName.toLowerCase());
-      if (!docUser) docUser = (stateObj.users || []).find(u => u.role && u.role.toLowerCase().includes('medico'));
-      const docPhone = (docUser && (docUser.phone || docUser.telephone)) || '5555-0000';
-
-      const res = await sendLabResultsToDoctor(docName, docPhone, options.patient.name, options.order, {
-        documentUrl,
-        fileName: safeFileName,
-        fileType: isPdf ? 'application/pdf' : 'image/jpeg'
-      });
-
-      if (res && res.success) {
-        alert(`✅ Resultados enviados exitosamente por WhatsApp al médico ${docName}.`);
-      }
-      resendBtn.disabled = false;
-      resendBtn.textContent = '💬 Enviar por WhatsApp al Médico';
-    };
-  }
 }
 
 export function showLocalLabReportPrintWindow(study, patient) {
@@ -2553,14 +2526,19 @@ export function openResultsModal(study, customPatient, onSaveCallback) {
         await saveAppState(stateObj);
       }
 
-      // Enviar resultados vía WhatsApp al médico asignado
+      // Enviar resultados vía WhatsApp al médico asignado automáticamente
       try {
-        await sendLabResultsToDoctor(doctorName, doctorPhone, customPatient.name, sObj || study, {
+        const sendRes = await sendLabResultsToDoctor(doctorName, doctorPhone, customPatient.name, sObj || study, {
           documentUrl: selectedFileData,
           fileName: selectedFileName,
           fileType: selectedFileType,
           notes: notesVal
         });
+        if (sendRes && sendRes.success && sObj) {
+          sObj.whatsappSentToDoctor = true;
+          sObj.whatsappSentAt = new Date().toISOString();
+          await saveAppState(stateObj);
+        }
       } catch (waErr) {
         console.warn("Aviso al enviar WhatsApp de resultados:", waErr);
       }

@@ -102,6 +102,14 @@ export function renderPreconsulta(container) {
   // Initial render of patient list and detail area
   renderPatientList();
   renderPatientDetails();
+
+  // Sincronización automática de estudios pendientes de laboratorio/imagenología hacia el médico vía WhatsApp
+  autoSyncAllPendingStudiesFromBridge();
+  if (!window._preconsultaStudyWaSyncInterval) {
+    window._preconsultaStudyWaSyncInterval = setInterval(() => {
+      autoSyncAllPendingStudiesFromBridge();
+    }, 20000);
+  }
 }
 
 // Renderizar la lista de pacientes en la barra lateral
@@ -1283,7 +1291,7 @@ function renderPatientDetails() {
       const doctorPhone = (docObj && (docObj.phone || docObj.telefono || docObj.whatsapp_number)) || '5555-0000';
       const finalDocName = docObj ? docObj.name : assignedDocName;
 
-      // Enviar resultados al médico por WhatsApp bridge
+      // Enviar resultados al médico por WhatsApp bridge automáticamente
       const mime = loadedLabFileType === 'pdf' ? 'application/pdf' : 'image/jpeg';
       const sendRes = await sendLabResultsToDoctor(finalDocName, doctorPhone, patient.name, {
         id: newLab.id,
@@ -1297,9 +1305,12 @@ function renderPatientDetails() {
       });
 
       if (sendRes && sendRes.success) {
-        alert(`✅ ¡Resultados de laboratorio guardados exitosamente!\n\nSe ha enviado el archivo (${newLab.fileName}) por WhatsApp al médico asignado ${finalDocName} (${doctorPhone}).`);
+        newLab.whatsappSentToDoctor = true;
+        newLab.whatsappSentAt = new Date().toISOString();
+        await saveAppState(stateObj);
+        alert(`✅ ¡Resultados de laboratorio guardados exitosamente!\n\nSe ha enviado automáticamente el archivo (${newLab.fileName}) por WhatsApp al médico asignado ${finalDocName} (${doctorPhone}).`);
       } else {
-        alert(`✅ Resultados guardados en el expediente del paciente.\n(Aviso WhatsApp: El mensaje quedó listo para envío o el puente local reportó estado fuera de línea).`);
+        alert(`✅ Resultados guardados en el expediente del paciente.\n(Aviso WhatsApp: El archivo quedó registrado y se enviará automáticamente al médico al activarse el puente de WhatsApp).`);
       }
 
       // Limpiar formulario y recargar
@@ -1384,13 +1395,16 @@ function renderPatientDetails() {
       const doctorPhone = (docObj && (docObj.phone || docObj.telefono || docObj.whatsapp_number)) || '5555-0000';
       const finalDocName = docObj ? docObj.name : assignedDocName;
 
-      // Enviar resultados al médico por WhatsApp bridge
+      // Enviar resultados de imagenología al médico por WhatsApp bridge automáticamente
       const mime = loadedImgFileType === 'pdf' ? 'application/pdf' : 'image/jpeg';
       const sendRes = await sendLabResultsToDoctor(finalDocName, doctorPhone, patient.name, {
         id: newImg.id,
+        study: imgStudy,
         name: imgStudy,
+        type: 'imaging',
         studyNames: [imgStudy]
       }, {
+        isImaging: true,
         documentUrl: loadedImgFileBase64,
         fileName: newImg.fileName,
         fileType: mime,
@@ -1398,9 +1412,12 @@ function renderPatientDetails() {
       });
 
       if (sendRes && sendRes.success) {
-        alert(`✅ ¡Estudio de imagenología guardado exitosamente!\n\nSe ha enviado el archivo (${newImg.fileName}) por WhatsApp al médico asignado ${finalDocName} (${doctorPhone}).`);
+        newImg.whatsappSentToDoctor = true;
+        newImg.whatsappSentAt = new Date().toISOString();
+        await saveAppState(stateObj);
+        alert(`✅ ¡Estudio de imagenología guardado exitosamente!\n\nSe ha enviado automáticamente el archivo (${newImg.fileName}) por WhatsApp al médico asignado ${finalDocName} (${doctorPhone}).`);
       } else {
-        alert(`✅ Estudio de imagenología guardado en el expediente del paciente.`);
+        alert(`✅ Estudio de imagenología guardado en el expediente del paciente.\n(Aviso WhatsApp: El archivo quedó registrado y se enviará automáticamente al médico al activarse el puente de WhatsApp).`);
       }
 
       document.getElementById('form-img-upload').reset();
@@ -1867,6 +1884,150 @@ function showWhatsAppMessageDetailModal(messageText, metadata = {}) {
   modal.querySelector('#btn-close-msg-detail').onclick = close;
 }
 
+// Envío 100% automático por WhatsApp al médico asignado de estudios pendientes (Laboratorio e Imagenología)
+async function autoSendPendingStudiesToDoctor(patient) {
+  if (!patient || patient._syncingStudiesWa) return;
+  patient._syncingStudiesWa = true;
+
+  try {
+    const stateObj = getAppState();
+    const currentPatient = (stateObj.patients || []).find(p => p.id === patient.id) || patient;
+
+    const assignedDocId = currentPatient.assignedDoctorId;
+    const assignedDocName = currentPatient.assignedDoctorName || 'Dr. Carlos Mendoza';
+    let docObj = (stateObj.users || []).find(u => (assignedDocId && u.id === assignedDocId) || (u.name && u.name.toLowerCase() === assignedDocName.toLowerCase()));
+    if (!docObj) docObj = (stateObj.users || []).find(u => u.role && u.role.toLowerCase().includes('medico'));
+    const doctorPhone = (docObj && (docObj.phone || docObj.telefono || docObj.whatsapp_number)) || '5555-0000';
+    const finalDocName = docObj ? docObj.name : assignedDocName;
+
+    let changed = false;
+
+    // 1. Resultados de Laboratorio enviados por el Módulo de Laboratorio (localLabs)
+    const localLabs = currentPatient.localLabs || [];
+    for (const lab of localLabs) {
+      if (lab.stage === 'completado' && lab.documentUrl && !lab.whatsappSentToDoctor && !lab._waSending) {
+        lab._waSending = true;
+        try {
+          console.log(`[WhatsApp Auto-Send] Despachando laboratorio ${lab.name} de ${currentPatient.name} a ${finalDocName}...`);
+          const res = await sendLabResultsToDoctor(finalDocName, doctorPhone, currentPatient.name, lab, {
+            documentUrl: lab.documentUrl,
+            fileName: lab.fileName || `Resultados_${lab.name}.pdf`,
+            fileType: lab.fileType || 'application/pdf',
+            notes: lab.notes
+          });
+          if (res && res.success) {
+            lab.whatsappSentToDoctor = true;
+            lab.whatsappSentAt = new Date().toISOString();
+            changed = true;
+            console.log(`[WhatsApp Auto-Send] Éxito al enviar laboratorio ${lab.name} por WhatsApp.`);
+          }
+        } catch (err) {
+          console.warn(`[WhatsApp Auto-Send] No se pudo enviar laboratorio ${lab.name}:`, err);
+        } finally {
+          delete lab._waSending;
+        }
+      }
+    }
+
+    // 2. Resultados de Laboratorio cargados en sección Ingreso de Laboratorios (labHistory)
+    const labHistory = currentPatient.labHistory || [];
+    for (const lab of labHistory) {
+      if (lab.fileData && !lab.whatsappSentToDoctor && !lab._waSending) {
+        lab._waSending = true;
+        try {
+          const mime = lab.fileType === 'pdf' ? 'application/pdf' : 'image/jpeg';
+          console.log(`[WhatsApp Auto-Send] Despachando lab manual ${lab.name} de ${currentPatient.name} a ${finalDocName}...`);
+          const res = await sendLabResultsToDoctor(finalDocName, doctorPhone, currentPatient.name, {
+            id: lab.id,
+            name: lab.name,
+            studyNames: [lab.name]
+          }, {
+            documentUrl: lab.fileData,
+            fileName: lab.fileName || `${lab.name}.pdf`,
+            fileType: mime,
+            notes: lab.notes
+          });
+          if (res && res.success) {
+            lab.whatsappSentToDoctor = true;
+            lab.whatsappSentAt = new Date().toISOString();
+            changed = true;
+            console.log(`[WhatsApp Auto-Send] Éxito al enviar lab manual ${lab.name} por WhatsApp.`);
+          }
+        } catch (err) {
+          console.warn(`[WhatsApp Auto-Send] No se pudo enviar lab manual ${lab.name}:`, err);
+        } finally {
+          delete lab._waSending;
+        }
+      }
+    }
+
+    // 3. Estudios cargados en sección Ingreso de Imagenología (imagingHistory)
+    const imagingHistory = currentPatient.imagingHistory || [];
+    for (const img of imagingHistory) {
+      if (img.fileData && !img.whatsappSentToDoctor && !img._waSending) {
+        img._waSending = true;
+        try {
+          const mime = img.fileType === 'pdf' ? 'application/pdf' : 'image/jpeg';
+          console.log(`[WhatsApp Auto-Send] Despachando imagenología ${img.study} de ${currentPatient.name} a ${finalDocName}...`);
+          const res = await sendLabResultsToDoctor(finalDocName, doctorPhone, currentPatient.name, {
+            id: img.id,
+            study: img.study,
+            name: img.study,
+            type: 'imaging',
+            studyNames: [img.study]
+          }, {
+            isImaging: true,
+            documentUrl: img.fileData,
+            fileName: img.fileName || `${img.study}.pdf`,
+            fileType: mime,
+            notes: img.notes
+          });
+          if (res && res.success) {
+            img.whatsappSentToDoctor = true;
+            img.whatsappSentAt = new Date().toISOString();
+            changed = true;
+            console.log(`[WhatsApp Auto-Send] Éxito al enviar imagenología ${img.study} por WhatsApp.`);
+          }
+        } catch (err) {
+          console.warn(`[WhatsApp Auto-Send] No se pudo enviar imagenología ${img.study}:`, err);
+        } finally {
+          delete img._waSending;
+        }
+      }
+    }
+
+    if (changed) {
+      await saveAppState(stateObj);
+      const activeId = getActivePatientId();
+      if (activeId === currentPatient.id) {
+        const labList = document.getElementById('lab-history-list');
+        if (labList) {
+          renderStudies(currentPatient);
+        }
+      }
+    }
+  } finally {
+    delete patient._syncingStudiesWa;
+  }
+}
+
+// Sincronizar en segundo plano todos los estudios pendientes de todos los pacientes desde el equipo con WhatsApp
+export async function autoSyncAllPendingStudiesFromBridge() {
+  const state = getAppState();
+  if (!state || !state.patients || state.patients.length === 0) return;
+
+  for (const patient of state.patients) {
+    const hasPending = 
+      (patient.localLabs || []).some(l => l.stage === 'completado' && l.documentUrl && !l.whatsappSentToDoctor) ||
+      (patient.labHistory || []).some(l => l.fileData && !l.whatsappSentToDoctor) ||
+      (patient.imagingHistory || []).some(img => img.fileData && !img.whatsappSentToDoctor);
+
+    if (hasPending) {
+      await autoSendPendingStudiesToDoctor(patient);
+    }
+  }
+}
+
 // Renderizar listas de archivos de laboratorios y estudios cargados
 function renderStudies(patient) {
   const labList = document.getElementById('lab-history-list');
@@ -1897,44 +2058,14 @@ function renderStudies(patient) {
         ${previewHtml}
         <div class="uploaded-file-name" title="${l.name}">${l.name}</div>
         <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">${new Date(l.date).toLocaleDateString()}</div>
-        <button type="button" class="btn-resend-wa-lab" data-idx="${idx}" style="margin-top: 6px; padding: 4px 6px; font-size: 0.72rem; background: #25D366; color: white; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; font-weight: 600;">💬 Enviar al Médico</button>
+        ${l.whatsappSentToDoctor 
+          ? `<div style="margin-top: 6px; font-size: 0.72rem; color: #10b981; font-weight: 600; text-align: center; display: flex; align-items: center; justify-content: center; gap: 3px;">✅ Enviado por WhatsApp</div>` 
+          : `<div style="margin-top: 6px; font-size: 0.72rem; color: #f59e0b; font-weight: 600; text-align: center; display: flex; align-items: center; justify-content: center; gap: 3px;">⏳ Envío automático...</div>`}
       `;
-
-      // Enviar por WhatsApp al médico asignado
-      const waBtn = li.querySelector('.btn-resend-wa-lab');
-      if (waBtn) {
-        waBtn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          waBtn.disabled = true;
-          waBtn.textContent = 'Enviando...';
-          const stateObj = getAppState();
-          const assignedDocId = patient.assignedDoctorId;
-          const assignedDocName = patient.assignedDoctorName || 'Dr. Carlos Mendoza';
-          let docObj = (stateObj.users || []).find(u => (assignedDocId && u.id === assignedDocId) || (u.name && u.name.toLowerCase() === assignedDocName.toLowerCase()));
-          if (!docObj) docObj = (stateObj.users || []).find(u => u.role && u.role.toLowerCase().includes('medico'));
-          const doctorPhone = (docObj && (docObj.phone || docObj.telefono || docObj.whatsapp_number)) || '5555-0000';
-          const finalDocName = docObj ? docObj.name : assignedDocName;
-
-          const mime = l.fileType === 'pdf' ? 'application/pdf' : 'image/jpeg';
-          await sendLabResultsToDoctor(finalDocName, doctorPhone, patient.name, {
-            id: l.id || `lab-${idx}`,
-            name: l.name,
-            studyNames: [l.name]
-          }, {
-            documentUrl: l.fileData,
-            fileName: l.fileName || `${l.name}.pdf`,
-            fileType: mime,
-            notes: l.notes
-          });
-          alert(`✅ Resultados de laboratorio enviados por WhatsApp al médico ${finalDocName} (${doctorPhone}).`);
-          waBtn.disabled = false;
-          waBtn.textContent = '💬 Enviar al Médico';
-        });
-      }
 
       // Visualización rápida al hacer clic en la tarjeta
       li.addEventListener('click', (e) => {
-        if (e.target.classList.contains('btn-remove-file') || e.target.classList.contains('btn-resend-wa-lab')) return;
+        if (e.target.classList.contains('btn-remove-file')) return;
         viewFileWindow(l.name, l.fileData, l.fileType, l.notes);
       });
 
@@ -1970,43 +2101,13 @@ function renderStudies(patient) {
         ${previewHtml}
         <div class="uploaded-file-name" title="${img.study}">${img.study}</div>
         <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">${new Date(img.date).toLocaleDateString()}</div>
-        <button type="button" class="btn-resend-wa-img" data-idx="${idx}" style="margin-top: 6px; padding: 4px 6px; font-size: 0.72rem; background: #25D366; color: white; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; font-weight: 600;">💬 Enviar al Médico</button>
+        ${img.whatsappSentToDoctor 
+          ? `<div style="margin-top: 6px; font-size: 0.72rem; color: #10b981; font-weight: 600; text-align: center; display: flex; align-items: center; justify-content: center; gap: 3px;">✅ Enviado por WhatsApp</div>` 
+          : `<div style="margin-top: 6px; font-size: 0.72rem; color: #f59e0b; font-weight: 600; text-align: center; display: flex; align-items: center; justify-content: center; gap: 3px;">⏳ Envío automático...</div>`}
       `;
 
-      // Enviar por WhatsApp al médico asignado
-      const waImgBtn = li.querySelector('.btn-resend-wa-img');
-      if (waImgBtn) {
-        waImgBtn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          waImgBtn.disabled = true;
-          waImgBtn.textContent = 'Enviando...';
-          const stateObj = getAppState();
-          const assignedDocId = patient.assignedDoctorId;
-          const assignedDocName = patient.assignedDoctorName || 'Dr. Carlos Mendoza';
-          let docObj = (stateObj.users || []).find(u => (assignedDocId && u.id === assignedDocId) || (u.name && u.name.toLowerCase() === assignedDocName.toLowerCase()));
-          if (!docObj) docObj = (stateObj.users || []).find(u => u.role && u.role.toLowerCase().includes('medico'));
-          const doctorPhone = (docObj && (docObj.phone || docObj.telefono || docObj.whatsapp_number)) || '5555-0000';
-          const finalDocName = docObj ? docObj.name : assignedDocName;
-
-          const mime = img.fileType === 'pdf' ? 'application/pdf' : 'image/jpeg';
-          await sendLabResultsToDoctor(finalDocName, doctorPhone, patient.name, {
-            id: img.id || `img-${idx}`,
-            name: img.study,
-            studyNames: [img.study]
-          }, {
-            documentUrl: img.fileData,
-            fileName: img.fileName || `${img.study}.pdf`,
-            fileType: mime,
-            notes: img.notes
-          });
-          alert(`✅ Estudio de imagenología enviado por WhatsApp al médico ${finalDocName} (${doctorPhone}).`);
-          waImgBtn.disabled = false;
-          waImgBtn.textContent = '💬 Enviar al Médico';
-        });
-      }
-
       li.addEventListener('click', (e) => {
-        if (e.target.classList.contains('btn-remove-file') || e.target.classList.contains('btn-resend-wa-img')) return;
+        if (e.target.classList.contains('btn-remove-file')) return;
         viewFileWindow(img.study, img.fileData, img.fileType, img.notes);
       });
 
@@ -2077,12 +2178,14 @@ function renderStudies(patient) {
           <div style="background: rgba(255,255,255,0.02); padding: 8px; border-radius: 4px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.05);">
             ${detailsHtml}
           </div>
-          <div style="display: flex; gap: 8px;">
+          <div style="display: flex; gap: 8px; align-items: center;">
             <button class="btn btn-secondary btn-small" id="btn-view-local-${l.id}" style="flex: 1; ${l.documentUrl ? 'background: #10b981; border: none; color: white;' : ''}">
               ${l.documentUrl ? '📄 Ver Escaneo (PDF)' : '📄 Reporte'}
             </button>
             ${l.documentUrl ? `
-              <button class="btn btn-small" id="btn-wa-local-${l.id}" style="padding: 6px 12px; background: #25D366; border: none; color: #fff; cursor: pointer; border-radius: var(--radius-sm); font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="Enviar Resultados por WhatsApp al Médico">💬 WhatsApp</button>
+              <span style="font-size: 0.75rem; color: ${l.whatsappSentToDoctor ? '#10b981' : '#f59e0b'}; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; background: rgba(0,0,0,0.2); border-radius: 4px;">
+                ${l.whatsappSentToDoctor ? '✅ Enviado por WhatsApp' : '⏳ Envío automático...'}
+              </span>
             ` : ''}
             <button class="btn btn-danger btn-small" id="btn-del-local-lab-${l.id}" style="padding: 6px 10px; background: var(--accent-danger); border: none; color: #fff; cursor: pointer; border-radius: var(--radius-sm);" title="Eliminar Estudio">🗑️</button>
           </div>
@@ -2093,31 +2196,6 @@ function renderStudies(patient) {
         card.querySelector(`#btn-view-local-${l.id}`).addEventListener('click', () => {
           showLocalLabReportPrintWindow(l, patient);
         });
-
-        const waLocalBtn = card.querySelector(`#btn-wa-local-${l.id}`);
-        if (waLocalBtn) {
-          waLocalBtn.addEventListener('click', async () => {
-            waLocalBtn.disabled = true;
-            waLocalBtn.textContent = 'Enviando...';
-            const stateObj = getAppState();
-            const assignedDocId = patient.assignedDoctorId;
-            const assignedDocName = patient.assignedDoctorName || 'Dr. Carlos Mendoza';
-            let docObj = (stateObj.users || []).find(u => (assignedDocId && u.id === assignedDocId) || (u.name && u.name.toLowerCase() === assignedDocName.toLowerCase()));
-            if (!docObj) docObj = (stateObj.users || []).find(u => u.role && u.role.toLowerCase().includes('medico'));
-            const doctorPhone = (docObj && (docObj.phone || docObj.telefono || docObj.whatsapp_number)) || '5555-0000';
-            const finalDocName = docObj ? docObj.name : assignedDocName;
-
-            await sendLabResultsToDoctor(finalDocName, doctorPhone, patient.name, l, {
-              documentUrl: l.documentUrl,
-              fileName: l.fileName || `Resultados_${l.name}.pdf`,
-              fileType: l.fileType || 'application/pdf',
-              notes: l.notes
-            });
-            alert(`✅ Resultados de laboratorio enviados por WhatsApp al médico ${finalDocName} (${doctorPhone}).`);
-            waLocalBtn.disabled = false;
-            waLocalBtn.textContent = '💬 WhatsApp';
-          });
-        }
 
         card.querySelector(`#btn-del-local-lab-${l.id}`).addEventListener('click', async () => {
           const confirmDel = confirm(`⚠️ ADVERTENCIA DE ELIMINACIÓN:\n\n¿Está completamente seguro de que desea eliminar permanentemente este estudio de laboratorio y todos sus resultados?\n\nEsta acción se sincronizará con la nube y no se podrá deshacer.`);
@@ -2194,6 +2272,9 @@ function renderStudies(patient) {
       });
     }
   }
+
+  // Disparar envío 100% automático por WhatsApp de cualquier estudio pendiente para este paciente
+  autoSendPendingStudiesToDoctor(patient);
 }
 
 // Ventana de Impresión de Resultados Locales de Laboratorio

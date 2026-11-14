@@ -1367,19 +1367,31 @@ export async function sendLabResultsToDoctor(doctorName, doctorPhone, patientNam
 
   const studiesText = (order.studyNames && order.studyNames.length > 0)
     ? order.studyNames.join(', ')
-    : (order.name || 'Análisis Clínicos');
+    : (order.study || order.name || 'Estudios Médicos');
 
-  const customMessage = 
-    `🔬 *HOSPITAL PRIVADO MULTIMÉDICA SAYAXCHÉ*\n` +
-    `*RESULTADOS DE LABORATORIO CLÍNICO DISPONIBLES*\n\n` +
-    `Estimado(a) *${doctorName || 'Doctor(a)'}*,\n` +
-    `Se han procesado y cargado los resultados oficiales de laboratorio para el paciente:\n\n` +
-    `👤 *Paciente:* ${patientName}\n` +
-    `📋 *No. Orden:* #${order.id || 'S/N'}\n` +
-    `🧪 *Estudio(s):* ${studiesText}\n` +
-    `📅 *Fecha:* ${new Date().toLocaleDateString('es-GT')}\n` +
-    (documentInfo.notes ? `📝 *Observaciones:* ${documentInfo.notes}\n` : '') +
-    `\n📎 *Adjunto documento escaneado oficial con los resultados para su evaluación médica.*`;
+  const isImaging = Boolean(documentInfo.isImaging || (order && (order.type === 'imaging' || order.study)));
+
+  const customMessage = isImaging
+    ? `🖼️ *HOSPITAL PRIVADO MULTIMÉDICA SAYAXCHÉ*\n` +
+      `*ESTUDIOS DE IMAGENOLOGÍA DISPONIBLES*\n\n` +
+      `Estimado(a) *${doctorName || 'Doctor(a)'}*,\n` +
+      `Se han procesado y cargado los estudios oficiales de imagenología para el paciente:\n\n` +
+      `👤 *Paciente:* ${patientName}\n` +
+      `📋 *No. Identificador:* #${order.id || 'S/N'}\n` +
+      `🩻 *Estudio(s):* ${studiesText}\n` +
+      `📅 *Fecha:* ${new Date().toLocaleDateString('es-GT')}\n` +
+      (documentInfo.notes ? `📝 *Observaciones:* ${documentInfo.notes}\n` : '') +
+      `\n📎 *Adjunto estudio/placa oficial en archivo adjunto para su evaluación médica.*`
+    : `🔬 *HOSPITAL PRIVADO MULTIMÉDICA SAYAXCHÉ*\n` +
+      `*RESULTADOS DE LABORATORIO CLÍNICO DISPONIBLES*\n\n` +
+      `Estimado(a) *${doctorName || 'Doctor(a)'}*,\n` +
+      `Se han procesado y cargado los resultados oficiales de laboratorio para el paciente:\n\n` +
+      `👤 *Paciente:* ${patientName}\n` +
+      `📋 *No. Orden:* #${order.id || 'S/N'}\n` +
+      `🧪 *Estudio(s):* ${studiesText}\n` +
+      `📅 *Fecha:* ${new Date().toLocaleDateString('es-GT')}\n` +
+      (documentInfo.notes ? `📝 *Observaciones:* ${documentInfo.notes}\n` : '') +
+      `\n📎 *Adjunto documento escaneado oficial con los resultados para su evaluación médica.*`;
 
   const payload = {
     doctorName: doctorName || 'Doctor(a)',
@@ -1387,7 +1399,7 @@ export async function sendLabResultsToDoctor(doctorName, doctorPhone, patientNam
     patientName,
     orderId: order.id,
     studies: studiesText,
-    fileName: documentInfo.fileName || `Resultados_Lab_${order.id || 'paciente'}.pdf`,
+    fileName: documentInfo.fileName || (isImaging ? `Imagenologia_${order.id || 'paciente'}.pdf` : `Resultados_Lab_${order.id || 'paciente'}.pdf`),
     mimeType: documentInfo.fileType || 'application/pdf',
     base64Data: documentInfo.documentUrl || null,
     customMessage
@@ -1404,7 +1416,7 @@ export async function sendLabResultsToDoctor(doctorName, doctorPhone, patientNam
 
     if (response.ok) {
       const data = await response.json();
-      console.log('✅ Notificación de laboratorio enviada al médico:', data);
+      console.log('✅ Notificación de laboratorio/imagenología enviada al médico:', data);
 
       // Registrar en el log de mensajes del paciente
       if (patientName) {
@@ -1415,7 +1427,7 @@ export async function sendLabResultsToDoctor(doctorName, doctorPhone, patientNam
           }
           pObj.whatsappMessagesLog.unshift({
             id: `wamsg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-            type: 'RESULTADOS_LABORATORIO_MEDICO',
+            type: isImaging ? 'IMAGENOLOGIA_MEDICO' : 'RESULTADOS_LABORATORIO_MEDICO',
             sentAt: new Date().toISOString(),
             recipientName: doctorName || 'Médico Asignado',
             recipientPhone: cleanPhone,
@@ -1423,7 +1435,7 @@ export async function sendLabResultsToDoctor(doctorName, doctorPhone, patientNam
             patientName: patientName,
             orderId: order.id || 'N/A',
             studyNames: studiesText,
-            fileName: documentInfo.fileName || 'Resultados.pdf',
+            fileName: documentInfo.fileName || (isImaging ? 'Estudio_Imagen.pdf' : 'Resultados.pdf'),
             message: customMessage,
             status: data.sentWithMedia ? 'ENVIADO (CON DOCUMENTO ADJUNTO)' : 'ENVIADO (TEXTO)'
           });
