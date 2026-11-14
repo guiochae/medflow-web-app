@@ -462,13 +462,28 @@ app.post('/api/notify-lab-result', async (req, res) => {
     if (base64Data && MessageMedia) {
       try {
         const cleanBase64 = String(base64Data).replace(/^data:[^;]+;base64,/, '');
-        const docMime = mimeType || (String(base64Data).includes('application/pdf') ? 'application/pdf' : 'image/jpeg');
-        const docFileName = fileName || `Resultados_Lab_${orderId || 'paciente'}.pdf`;
+        
+        let docMime = 'application/pdf';
+        if (mimeType && mimeType.includes('/')) {
+          docMime = mimeType;
+        } else if (String(mimeType).toLowerCase().includes('pdf') || String(fileName || '').toLowerCase().endsWith('.pdf') || String(base64Data).startsWith('data:application/pdf')) {
+          docMime = 'application/pdf';
+        } else if (String(fileName || '').toLowerCase().endsWith('.png') || String(base64Data).startsWith('data:image/png')) {
+          docMime = 'image/png';
+        } else {
+          docMime = 'image/jpeg';
+        }
+
+        const ext = docMime === 'application/pdf' ? '.pdf' : (docMime === 'image/png' ? '.png' : '.jpg');
+        let docFileName = fileName || `Resultados_${orderId || 'paciente'}${ext}`;
+        if (!docFileName.includes('.')) {
+          docFileName += ext;
+        }
 
         const media = new MessageMedia(docMime, cleanBase64, docFileName);
         await client.sendMessage(chatId, media, { caption: messageCaption });
         sentWithMedia = true;
-        console.log(`📎 Resultados con documento adjunto enviados a ${doctorName} (${cleanPhone})`);
+        console.log(`📎 Resultados con documento adjunto (${docMime}) enviados a ${doctorName} (${cleanPhone})`);
       } catch (mediaErr) {
         console.warn('Aviso: Falló envío de media, enviando texto como respaldo:', mediaErr.message);
       }

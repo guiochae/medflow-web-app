@@ -1405,6 +1405,32 @@ export async function sendLabResultsToDoctor(doctorName, doctorPhone, patientNam
     if (response.ok) {
       const data = await response.json();
       console.log('✅ Notificación de laboratorio enviada al médico:', data);
+
+      // Registrar en el log de mensajes del paciente
+      if (patientName) {
+        const pObj = (state.patients || []).find(p => p.name === patientName || (p.id && order && (p.id === order.patientId || (p.localLabs || []).some(l => l.id === order.id))));
+        if (pObj) {
+          if (!Array.isArray(pObj.whatsappMessagesLog)) {
+            pObj.whatsappMessagesLog = [];
+          }
+          pObj.whatsappMessagesLog.unshift({
+            id: `wamsg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            type: 'RESULTADOS_LABORATORIO_MEDICO',
+            sentAt: new Date().toISOString(),
+            recipientName: doctorName || 'Médico Asignado',
+            recipientPhone: cleanPhone,
+            doctorName: doctorName || 'Médico Asignado',
+            patientName: patientName,
+            orderId: order.id || 'N/A',
+            studyNames: studiesText,
+            fileName: documentInfo.fileName || 'Resultados.pdf',
+            message: customMessage,
+            status: data.sentWithMedia ? 'ENVIADO (CON DOCUMENTO ADJUNTO)' : 'ENVIADO (TEXTO)'
+          });
+          saveAppState(state);
+        }
+      }
+
       return { success: true, sentWithMedia: data.sentWithMedia, message: data.message };
     } else {
       const err = await response.json().catch(() => ({}));
