@@ -1,5 +1,5 @@
 // src/modules/configuracion.js
-import { getAppState, saveAppState, removeFromFirestore, purgeAllDatabases, saveDocumentsBatch, purgeCollectionFromFirestore } from '../main.js';
+import { getAppState, saveAppState, removeFromFirestore, purgeAllDatabases, saveDocumentsBatch, purgeCollectionFromFirestore, resetToOfficialDatabase } from '../main.js';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 import { findExistingPatientByDpi, isGenericDpi } from '../utils/patientDpiValidator.js';
@@ -345,6 +345,20 @@ export function renderConfiguracion(container) {
             </div>
             <button type="button" class="btn btn-secondary" id="btn-trigger-import-db" style="margin-top: 1.5rem; width: 100%;">
               <span>📥</span> Importar Información...
+            </button>
+          </div>
+
+          <!-- Tarjeta Restablecer Base de Datos Oficial -->
+          <div style="background: rgba(16, 185, 129, 0.04); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-md); padding: 1.5rem; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔄</div>
+              <h4 style="color: #10b981; font-size: 1.2rem; margin-bottom: 0.5rem;">Restablecer Base de Datos Oficial</h4>
+              <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;">
+                Restaura de inmediato todos los <strong>51 pacientes registrados</strong> con sus historiales clínicos, signos vitales, consultas y recetas, así como la plantilla completa de los <strong>13 usuarios médicos y de enfermería</strong> oficiales del hospital, sincronizándolos en la nube y localmente.
+              </p>
+            </div>
+            <button type="button" class="btn" id="btn-trigger-restore-official-db" style="margin-top: 1.5rem; width: 100%; background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; font-weight: 700; padding: 12px; border-radius: var(--radius-sm); cursor: pointer;">
+              <span>🔄</span> Restablecer Pacientes y Usuarios Oficiales
             </button>
           </div>
 
@@ -842,6 +856,25 @@ export function renderConfiguracion(container) {
     if (btnImportDb) {
       e.preventDefault();
       renderImportModal();
+      return;
+    }
+
+    // Trigger Restore Official Database
+    const btnRestoreDb = e.target.closest('#btn-trigger-restore-official-db');
+    if (btnRestoreDb) {
+      e.preventDefault();
+      const confirmed = confirm("🔄 RESTABLECER BASE DE DATOS OFICIAL:\n\n¿Desea restablecer todos los 51 pacientes registrados con sus expedientes e historiales clínicos completos y los 13 usuarios médicos y de enfermería oficiales?\n\nEsta acción recuperará y sincronizará la base de datos oficial tanto en la nube como en memoria.");
+      if (confirmed) {
+        btnRestoreDb.disabled = true;
+        btnRestoreDb.textContent = "⏳ Restableciendo base de datos oficial...";
+        resetToOfficialDatabase().then(() => {
+          alert("✅ Todos los pacientes (51) y usuarios oficiales han sido restablecidos exitosamente.");
+          window.location.reload();
+        }).catch(err => {
+          alert("❌ Ocurrió un error al restablecer: " + err.message);
+          window.location.reload();
+        });
+      }
       return;
     }
 

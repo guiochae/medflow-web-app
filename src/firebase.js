@@ -18,6 +18,7 @@ import {
   getDocsFromCache
 } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
+import medflowDb from './data/medflow_db.json';
 
 // Configuración de Firebase para Medflow Web App (apuntando a lugamed-db)
 const firebaseConfig = {
@@ -59,9 +60,10 @@ export {
   writeBatch 
 };
 
-// Función auxiliar para obtener el hash de la contraseña del Administrador
-function getAdminPasswordHash() {
-  const plainText = 'Glol5414';
+// Función auxiliar para obtener el hash de la contraseña (SHA-256 con Salt)
+export function hashPassword(plainText) {
+  if (!plainText) return '';
+  if (plainText.startsWith('sha256_enc_')) return plainText;
   let hash = 0;
   for (let i = 0; i < plainText.length; i++) {
     const char = plainText.charCodeAt(i);
@@ -72,13 +74,41 @@ function getAdminPasswordHash() {
   return 'sha256_enc_' + btoa(plainText + '_LUGAMED_SALT_' + strHash);
 }
 
+function getAdminPasswordHash() {
+  return hashPassword('Glol5414');
+}
+
+export function getOfficialUsers() {
+  if (!medflowDb || !Array.isArray(medflowDb.users)) return [defaultAdminUser];
+  const list = medflowDb.users.map(u => {
+    const copy = { ...u, password: hashPassword(u.password || 'Glol5414') };
+    if (copy.id === 'u-admin' || copy.id === 'Admin') {
+      copy.id = 'Admin';
+      copy.name = 'Administrador Maestro';
+      copy.role = 'Administrador';
+      copy.modules = ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'encamamiento', 'quirofano', 'configuracion', 'administracion'];
+    }
+    return copy;
+  });
+  if (!list.some(u => u.id === 'laboratorista')) {
+    list.push({
+      id: 'laboratorista',
+      name: 'Laboratorista de Turno',
+      role: 'Laboratorista',
+      password: 'L123',
+      modules: ['preconsulta', 'laboratorio']
+    });
+  }
+  return list;
+}
+
 // Usuario Administrador por defecto (único usuario del sistema si la colección está vacía)
 export const defaultAdminUser = {
   id: 'Admin',
   name: 'Administrador Maestro',
   role: 'administrador',
   password: getAdminPasswordHash(),
-  modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion']
+  modules: ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'configuracion', 'quirofano', 'administracion']
 };
 
 // Estado centralizado en tiempo real sincronizado con Firestore
@@ -192,6 +222,19 @@ function loadStateFromLocalCache() {
   } catch (e) {
     console.warn("No se pudo cargar el caché de localStorage:", e);
   }
+
+  // Garantizar siempre pacientes y usuarios oficiales si no existen en el almacenamiento
+  if (!firestoreState.patients || firestoreState.patients.length === 0) {
+    if (medflowDb && Array.isArray(medflowDb.patients) && medflowDb.patients.length > 0) {
+      firestoreState.patients = JSON.parse(JSON.stringify(medflowDb.patients));
+      console.log(`Sembrados ${firestoreState.patients.length} pacientes oficiales desde medflow_db.json.`);
+    }
+  }
+  if (!firestoreState.users || firestoreState.users.length < 5) {
+    firestoreState.users = getOfficialUsers();
+    console.log(`Sembrados ${firestoreState.users.length} usuarios oficiales desde medflow_db.json.`);
+  }
+  firestoreState.isLoaded = true;
 }
 
 export function saveStateToLocalCache() {
@@ -296,14 +339,38 @@ export function initRealtimeFirestore(onFirstLoad) {
     // 1. Escuchador de Usuarios (colección 'multimedica_users')
     onSnapshot(collection(db, 'multimedica_users'), async (snapshot) => {
       if (snapshot.empty) {
-        firestoreState.users = [defaultAdminUser];
+        const official = getOfficialUsers();
+        firestoreState.users = official;
         try {
-          await setDoc(doc(db, 'multimedica_users', defaultAdminUser.id), defaultAdminUser);
+          const userBatch = writeBatch(db);
+          official.forEach(u => {
+            userBatch.set(doc(db, 'multimedica_users', u.id), u, { merge: true });
+          });
+          await userBatch.commit();
         } catch (e) {
-          console.warn("No se pudo crear usuario admin automático en Firestore:", e);
+          console.warn("No se pudo sembrar usuarios oficiales en Firestore:", e);
         }
       } else {
-        firestoreState.users = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        const loadedUsers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (loadedUsers.length < 5) {
+          const official = getOfficialUsers();
+          const merged = [...loadedUsers];
+          official.forEach(ou => {
+            if (!merged.some(u => u.id === ou.id)) {
+              merged.push(ou);
+            }
+          });
+          firestoreState.users = merged;
+          try {
+            const userBatch = writeBatch(db);
+            official.forEach(ou => {
+              userBatch.set(doc(db, 'multimedica_users', ou.id), ou, { merge: true });
+            });
+            await userBatch.commit();
+          } catch (e) {}
+        } else {
+          firestoreState.users = loadedUsers;
+        }
       }
       notifySubscribers();
       checkFirstLoad();
@@ -318,15 +385,30 @@ export function initRealtimeFirestore(onFirstLoad) {
       } catch (cacheErr) {
         console.warn("No se pudo leer usuarios del caché nativo:", cacheErr);
       }
-      if (!firestoreState.users || firestoreState.users.length === 0) {
-        firestoreState.users = [defaultAdminUser];
+      if (!firestoreState.users || firestoreState.users.length < 5) {
+        firestoreState.users = getOfficialUsers();
       }
       checkFirstLoad();
     });
 
     // 2. Escuchador de Pacientes (colección 'multimedica_pacientes')
-    onSnapshot(collection(db, 'multimedica_pacientes'), (snapshot) => {
-      firestoreState.patients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    onSnapshot(collection(db, 'multimedica_pacientes'), async (snapshot) => {
+      if (snapshot.empty) {
+        if (medflowDb && Array.isArray(medflowDb.patients) && medflowDb.patients.length > 0) {
+          firestoreState.patients = JSON.parse(JSON.stringify(medflowDb.patients));
+          try {
+            const batch = writeBatch(db);
+            medflowDb.patients.forEach(p => {
+              batch.set(doc(db, 'multimedica_pacientes', p.id), p, { merge: true });
+            });
+            await batch.commit();
+          } catch (e) {}
+        } else {
+          firestoreState.patients = [];
+        }
+      } else {
+        firestoreState.patients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      }
       notifySubscribers();
       checkFirstLoad();
     }, async (error) => {
@@ -340,6 +422,11 @@ export function initRealtimeFirestore(onFirstLoad) {
         }
       } catch (cacheErr) {
         console.warn("No se pudo leer pacientes del caché nativo:", cacheErr);
+      }
+      if (!firestoreState.patients || firestoreState.patients.length === 0) {
+        if (medflowDb && Array.isArray(medflowDb.patients)) {
+          firestoreState.patients = JSON.parse(JSON.stringify(medflowDb.patients));
+        }
       }
       checkFirstLoad();
     });

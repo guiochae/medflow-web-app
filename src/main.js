@@ -15,6 +15,7 @@ import { renderAttendanceKioskView } from './modules/attendanceKioskView.js';
 import { deduplicateAndSanitizeNursingStaff } from './modules/enfermeriaDepartment.js';
 import { initWhatsAppReceptionistBridge } from './utils/whatsapp.js';
 import logoUrl from './assets/logo.jpg';
+import medflowDb from './data/medflow_db.json';
 import {
   db,
   firestoreState,
@@ -185,6 +186,21 @@ export function getAppState() {
       }
     }
 
+    // Asegurar que siempre existan los 51 pacientes oficiales si el estado quedó vacío
+    if ((!firestoreState.patients || firestoreState.patients.length === 0) && medflowDb && Array.isArray(medflowDb.patients) && medflowDb.patients.length > 0) {
+      firestoreState.patients = JSON.parse(JSON.stringify(medflowDb.patients));
+      console.log(`[getAppState] Auto-restaurados ${firestoreState.patients.length} pacientes oficiales.`);
+    }
+
+    // Asegurar que existan todos los usuarios oficiales si hay menos de 5
+    if (firestoreState.users.length < 5 && medflowDb && Array.isArray(medflowDb.users)) {
+      medflowDb.users.forEach(u => {
+        if (!firestoreState.users.some(x => x.id === u.id)) {
+          firestoreState.users.push({ ...u, password: hashPassword(u.password || 'Glol5414') });
+        }
+      });
+    }
+
     // Asegurar que todo el personal en memoria tenga siempre código asignado y nóminas depuradas
     backfillEmployeeCodes(firestoreState);
     reconcileAndRecoverLiquidaciones(firestoreState);
@@ -197,13 +213,17 @@ export function getAppState() {
 
   // Estado inicial por defecto mientras Firestore está cargando
   const defaultState = {
-    users: [adminUser],
-    patients: [],
-    medications: [],
-    pharmacySales: [],
-    laboratoryTests: [],
-    imagingStudies: [],
-    consultationTypes: [],
+    users: (medflowDb && Array.isArray(medflowDb.users) && medflowDb.users.length > 0)
+      ? medflowDb.users.map(u => ({ ...u, password: hashPassword(u.password || 'Glol5414') }))
+      : [adminUser],
+    patients: (medflowDb && Array.isArray(medflowDb.patients) && medflowDb.patients.length > 0)
+      ? JSON.parse(JSON.stringify(medflowDb.patients))
+      : [],
+    medications: (medflowDb && Array.isArray(medflowDb.medications)) ? medflowDb.medications : [],
+    pharmacySales: (medflowDb && Array.isArray(medflowDb.pharmacySales)) ? medflowDb.pharmacySales : [],
+    laboratoryTests: (medflowDb && Array.isArray(medflowDb.laboratoryTests)) ? medflowDb.laboratoryTests : [],
+    imagingStudies: (medflowDb && Array.isArray(medflowDb.imagingStudies)) ? medflowDb.imagingStudies : [],
+    consultationTypes: (medflowDb && Array.isArray(medflowDb.consultationTypes)) ? medflowDb.consultationTypes : [],
     roomRates: [],
     encamamiento: [],
     emergencias: [],
@@ -249,8 +269,49 @@ export function getAppState() {
   return defaultState;
 }
 
-export function resetToOfficialDatabase() {
-  return purgeAllDatabases();
+export async function resetToOfficialDatabase() {
+  if (!medflowDb) return false;
+
+  const officialUsers = medflowDb.users.map(u => {
+    const userCopy = { ...u, password: hashPassword(u.password || 'Glol5414') };
+    if (userCopy.id === 'u-admin' || userCopy.id === 'Admin') {
+      userCopy.id = 'Admin';
+      userCopy.name = 'Administrador Maestro';
+      userCopy.role = 'Administrador';
+      userCopy.modules = ['preconsulta', 'consulta', 'recetario', 'laboratorio', 'imagenologia', 'farmacia', 'encamamiento', 'quirofano', 'configuracion', 'administracion'];
+    }
+    return userCopy;
+  });
+
+  if (!officialUsers.some(u => u.id === 'laboratorista')) {
+    officialUsers.push({
+      id: 'laboratorista',
+      name: 'Laboratorista de Turno',
+      role: 'Laboratorista',
+      password: 'L123',
+      modules: ['preconsulta', 'laboratorio']
+    });
+  }
+
+  const officialPatients = JSON.parse(JSON.stringify(medflowDb.patients || []));
+
+  firestoreState.users = officialUsers;
+  firestoreState.patients = officialPatients;
+  if (medflowDb.medications) firestoreState.medications = medflowDb.medications;
+  if (medflowDb.laboratoryTests) firestoreState.laboratoryTests = medflowDb.laboratoryTests;
+  if (medflowDb.imagingStudies) firestoreState.imagingStudies = medflowDb.imagingStudies;
+  if (medflowDb.consultationTypes) firestoreState.consultationTypes = medflowDb.consultationTypes;
+
+  saveStateToLocalCache();
+
+  try {
+    await saveDocumentsBatch('users', officialUsers);
+    await saveDocumentsBatch('patients', officialPatients);
+  } catch (err) {
+    console.warn("Error sincronizando restauración oficial en Firestore:", err);
+  }
+
+  return true;
 }
 
 // Guardar cambios directamente en Firestore y sincronizar estado
