@@ -11,6 +11,7 @@ import { doc, setDoc } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import logoUrl from '../assets/logo.jpg';
 import { openDocumentViewerModal as openLabDocumentViewerModal } from './laboratorio.js';
+import { syncPatientBilling } from './preconsulta.js';
 
 let activeAdminTab = 'caja'; // 'caja', 'contabilidad', 'compras', 'rrhh'
 let activeCajaSubTab = 'cobros'; // 'cobros', 'cxp', 'nominas'
@@ -252,10 +253,17 @@ function renderCajaTab(container, state) {
 
 // 1. Cobros a Pacientes
 function renderCajaCobros(container, state) {
-  // Obtener listado de todos los pacientes con cargos pendientes o historial
+  // Sincronizar todos los servicios de pacientes (consultas, laboratorios, imagenología, recetas) sin precio por defecto
   const patientsList = state.patients || [];
+  patientsList.forEach(p => {
+    try {
+      syncPatientBilling(p, state);
+    } catch(e) {
+      console.warn("syncPatientBilling error:", e);
+    }
+  });
   
-  // Buscar si algún paciente tiene cobros pendientes
+  // Buscar pacientes con cuentas pendientes
   const patientsWithPending = patientsList.filter(p => 
     p.billingHistory && p.billingHistory.some(b => b.status === 'Pendiente')
   );
@@ -290,7 +298,12 @@ function renderCajaCobros(container, state) {
           ${patientsWithPending.length === 0 
             ? `<div style="text-align: center; color: var(--text-muted); font-style: italic; padding: 20px 0; font-size: 0.85rem;">No hay cuentas pendientes en este momento.</div>`
             : patientsWithPending.map(p => {
-                const pendingCount = p.billingHistory.filter(b => b.status === 'Pendiente').length;
+                const pendingBills = (p.billingHistory || []).filter(b => b.status === 'Pendiente');
+                const pendingCount = pendingBills.length;
+                const unpricedCount = pendingBills
+                  .flatMap(b => b.details || [])
+                  .filter(d => !(parseFloat(d.amount) > 0)).length;
+
                 return `
                   <div class="patient-caja-card" data-id="${p.id}" style="
                     padding: 10px 12px;
@@ -308,9 +321,16 @@ function renderCajaCobros(container, state) {
                       <strong>${p.name}</strong><br>
                       <span style="font-size: 0.72rem; color: var(--text-muted);">Exp: ${p.id}</span>
                     </div>
-                    <span style="background: var(--accent-danger); color: white; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px; font-weight: bold;">
-                      ${pendingCount} pendiente(s)
-                    </span>
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 3px;">
+                      <span style="background: var(--accent-danger); color: white; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px; font-weight: bold;">
+                        ${pendingCount} cuenta(s)
+                      </span>
+                      ${unpricedCount > 0 ? `
+                        <span style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); font-size: 0.68rem; padding: 1px 6px; border-radius: 6px; font-weight: bold;">
+                          ${unpricedCount} sin precio
+                        </span>
+                      ` : ''}
+                    </div>
                   </div>
                 `;
               }).join('')
@@ -378,6 +398,11 @@ function loadPatientBillingDetails(patient, state) {
   const detailArea = document.getElementById('caja-billing-detail-area');
   if (!detailArea) return;
 
+  // Sincronizar todos los servicios pendientes de los diferentes módulos sin precio
+  try {
+    syncPatientBilling(patient, state);
+  } catch(e) {}
+
   const pendingBills = (patient.billingHistory || []).filter(b => b.status === 'Pendiente');
 
   if (pendingBills.length === 0) {
@@ -406,24 +431,25 @@ function loadPatientBillingDetails(patient, state) {
   let tempBillItems = [];
   pendingBills.forEach(bill => {
     (bill.details || []).forEach((item, idx) => {
+      const amt = (item && item.amount !== undefined && !isNaN(item.amount)) ? parseFloat(item.amount) : 0;
       tempBillItems.push({
         id: bill.id + '-' + idx,
         billId: bill.id,
-        description: item.description,
-        amount: parseFloat(item.amount) || 0,
+        description: typeof item === 'string' ? item : (item.description || item.name || 'Servicio Médico'),
+        amount: amt,
         type: item.scenario ? (item.scenario === 1 ? 'interconsulta' : 'cuenta_ajena') : 'hospital',
         doctorId: item.externalDoctorId || ''
       });
     });
   });
 
-  // Si no hay cargos preexistentes en las facturas, agregar una fila vacía
+  // Si no hay cargos preexistentes en las facturas, agregar una fila vacía sin precio
   if (tempBillItems.length === 0) {
     tempBillItems.push({
       id: 'default-' + Date.now(),
       billId: pendingBills[0].id,
       description: 'Consulta General',
-      amount: 100.00,
+      amount: 0.00,
       type: 'hospital',
       doctorId: ''
     });
@@ -460,10 +486,10 @@ function loadPatientBillingDetails(patient, state) {
         </div>
       ` : ''}
 
-      <!-- Asistente de edición de cargos -->
+      <!-- Asistente de edición de cargos y consolidación de cuenta -->
       <div style="background: rgba(0,0,0,0.15); border-radius: 6px; padding: 12px; border: 1px dashed var(--border-color); margin-bottom: 12px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <h4 style="margin: 0; font-size: 0.82rem; color: var(--accent-primary);">Edición Manual de Cargos y Honorarios:</h4>
+          <h4 style="margin: 0; font-size: 0.82rem; color: var(--accent-primary);">Consolidación de Cuenta (Colocar Precios a Servicios):</h4>
           <button type="button" class="btn btn-secondary btn-small" id="caja-btn-add-line" style="font-size: 0.72rem; padding: 3px 8px;">➕ Agregar Cargo</button>
         </div>
         
@@ -471,10 +497,10 @@ function loadPatientBillingDetails(patient, state) {
           <table style="width: 100%; border-collapse: collapse; font-size: 0.78rem;">
             <thead>
               <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted); text-align: left;">
-                <th style="padding: 4px 0;">Concepto / Descripción</th>
+                <th style="padding: 4px 0;">Concepto / Descripción del Servicio</th>
                 <th style="padding: 4px 0; width: 130px;">Tipo Cargo</th>
                 <th style="padding: 4px 0; width: 140px;">Médico Ext.</th>
-                <th style="padding: 4px 0; width: 80px; text-align: right;">Importe (Q)</th>
+                <th style="padding: 4px 0; width: 90px; text-align: right;">Precio (Q)</th>
                 <th style="padding: 4px 0; text-align: center; width: 30px;"></th>
               </tr>
             </thead>
@@ -482,6 +508,12 @@ function loadPatientBillingDetails(patient, state) {
               <!-- Inyectado dinámicamente -->
             </tbody>
           </table>
+        </div>
+
+        <div style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
+          <button type="button" class="btn btn-secondary" id="caja-btn-save-draft" style="width: 100%; padding: 7px; font-size: 0.82rem; font-weight: 600; border: 1px solid #38bdf8; color: #38bdf8; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <span>💾</span> Guardar Precios y Consolidar Cuenta Pendiente
+          </button>
         </div>
       </div>
 
@@ -547,11 +579,13 @@ function loadPatientBillingDetails(patient, state) {
         subtotalHospital += item.amount;
       }
 
+      const isUnpriced = (item.amount === 0);
       const tr = document.createElement('tr');
       tr.style.borderBottom = '1px solid rgba(255,255,255,0.02)';
       tr.innerHTML = `
         <td style="padding: 4px 0;">
           <input type="text" class="row-desc" value="${item.description}" style="width: 95%; padding: 4px; font-size: 0.75rem; border: 1px solid var(--border-color); border-radius: 3px; background: var(--bg-card); color: var(--text-primary);">
+          ${isUnpriced ? `<div style="font-size: 0.68rem; color: #f87171; font-weight: bold; margin-top: 2px;">⚠️ Sin precio asignado</div>` : ''}
         </td>
         <td style="padding: 4px 0;">
           <select class="row-type" style="width: 95%; padding: 4px; font-size: 0.72rem; border: 1px solid var(--border-color); border-radius: 3px; background: var(--bg-card); color: var(--text-primary);">
@@ -567,10 +601,10 @@ function loadPatientBillingDetails(patient, state) {
           </select>
         </td>
         <td style="padding: 4px 0;">
-          <input type="number" class="row-amount" value="${item.amount.toFixed(2)}" min="0.00" step="10.00" style="width: 80px; text-align: right; padding: 4px; font-size: 0.75rem; border: 1px solid var(--border-color); border-radius: 3px; background: var(--bg-card); color: var(--text-primary);">
+          <input type="number" class="row-amount" value="${item.amount > 0 ? item.amount.toFixed(2) : ''}" min="0.00" step="1.00" placeholder="0.00" style="width: 85px; text-align: right; padding: 4px; font-size: 0.75rem; border: 1px solid ${item.amount > 0 ? 'var(--border-color)' : '#f87171'}; border-radius: 3px; background: var(--bg-card); color: var(--text-primary);" title="Colocar precio del servicio">
         </td>
         <td style="padding: 4px 0; text-align: center;">
-          <button type="button" class="btn-remove-row" data-idx="${idx}" style="background: none; border: none; color: var(--accent-danger); cursor: pointer;">❌</button>
+          <button type="button" class="btn-remove-row" data-idx="${idx}" style="background: none; border: none; color: var(--accent-danger); cursor: pointer;" title="Eliminar servicio">❌</button>
         </td>
       `;
 
@@ -637,18 +671,59 @@ function loadPatientBillingDetails(patient, state) {
     document.getElementById('caja-grand-total').textContent = `Q${(subtotalHospital + subtotalCuentaAjena).toFixed(2)}`;
   };
 
-  // Bind botón agregar cargo
+  // Bind botón agregar cargo (sin precio por defecto para colocarlo en caja)
   document.getElementById('caja-btn-add-line').addEventListener('click', () => {
     tempBillItems.push({
       id: 'new-' + Date.now(),
       billId: pendingBills[0].id,
       description: 'Nuevo Servicio Médico',
-      amount: 150.00,
+      amount: 0.00,
       type: 'hospital',
       doctorId: ''
     });
     repopulateEditTable();
   });
+
+  // Bind botón guardar precios y consolidar cuenta pendiente
+  const btnSaveDraft = document.getElementById('caja-btn-save-draft');
+  if (btnSaveDraft) {
+    btnSaveDraft.addEventListener('click', async () => {
+      const patientObj = state.patients.find(p => p.id === patient.id);
+      if (!patientObj) return;
+
+      const primaryBill = patientObj.billingHistory.find(b => b.id === pendingBills[0].id);
+      if (!primaryBill) return;
+
+      // Consolidar todos los cargos en la cuenta principal con los precios colocados
+      primaryBill.details = tempBillItems.map(i => ({
+        description: i.description,
+        amount: parseFloat(i.amount) || 0,
+        externalDoctorId: i.doctorId || null,
+        scenario: i.type === 'hospital' ? null : (i.type === 'interconsulta' ? 1 : 2)
+      }));
+
+      const grandTotal = primaryBill.details.reduce((sum, i) => sum + (parseFloat(i.amount) || 0), 0);
+      primaryBill.total = grandTotal;
+      primaryBill.status = 'Pendiente';
+
+      // Liquidar facturas secundarias si habían varias pendientes para unificarlas todas en la principal
+      pendingBills.forEach(b => {
+        if (b.id !== primaryBill.id) {
+          const other = patientObj.billingHistory.find(x => x.id === b.id);
+          if (other) {
+            other.status = 'Pagado';
+            other.details = [];
+            other.total = 0;
+            other.concept = `(Consolidado en ${primaryBill.id})`;
+          }
+        }
+      });
+
+      await saveAppState(state);
+      alert(`✅ ¡Cuenta consolidada con éxito!\n\nSe han fijado los precios para los ${primaryBill.details.length} servicios de ${patient.name}.\nTotal actual de la cuenta: Q${grandTotal.toFixed(2)}.`);
+      loadPatientBillingDetails(patientObj, state);
+    });
+  }
 
   // Carga inicial
   repopulateEditTable();

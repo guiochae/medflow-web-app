@@ -2,6 +2,7 @@
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
 import { showPastConsultationDetail } from './consulta.js';
 import { sendLabResultsToDoctor } from '../utils/whatsapp.js';
+import { syncPatientBilling } from './preconsulta.js';
 
 function normalizeString(str) {
   if (!str) return '';
@@ -1322,6 +1323,7 @@ function renderLabBuilder(patient, doctors) {
         };
 
         pObj.localLabs.unshift(newLocalLabOrder);
+        try { syncPatientBilling(pObj, stateObj); } catch(e){}
         saveAppState(stateObj);
         patient.localLabs = pObj.localLabs;
         
@@ -1477,6 +1479,7 @@ function renderLabBuilder(patient, doctors) {
     const patientObj = stateObj.patients.find(p => p.id === patient.id);
     if (!patientObj.studyOrders) patientObj.studyOrders = [];
     patientObj.studyOrders.unshift(newOrder);
+    try { syncPatientBilling(patientObj, stateObj); } catch(e){}
     saveAppState(stateObj);
 
     showOrderPreviewModal(patientObj, newOrder);
@@ -2523,6 +2526,7 @@ export function openResultsModal(study, customPatient, onSaveCallback) {
         // Limpiar parámetros para no dejar datos residuales viejos
         sObj.parameters = [];
 
+        try { syncPatientBilling(pObj, stateObj); } catch(e){}
         await saveAppState(stateObj);
       }
 

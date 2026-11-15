@@ -1,6 +1,7 @@
 // src/modules/imagenologia.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
 import { showPastConsultationDetail } from './consulta.js';
+import { syncPatientBilling } from './preconsulta.js';
 
 // Lista temporal de estudios de imagenología agregados en la orden externa activa
 let currentOrderImaging = [];
@@ -953,6 +954,7 @@ function renderImgBuilder(patient, doctors) {
       };
 
       pObj.studyOrders.unshift(newOrder);
+      try { syncPatientBilling(pObj, stateObj); } catch(e){}
       await saveAppState(stateObj);
       alert("💾 Orden de estudios de imagenología grabada con éxito.");
       

@@ -2,6 +2,7 @@
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
 import { medicationsDatabase } from '../data/medicamentos.js';
 import { showPastConsultationDetail } from './consulta.js';
+import { syncPatientBilling } from './preconsulta.js';
 import logoUrl from '../assets/logo.jpg';
 
 function searchMedications(query) {
@@ -1490,6 +1491,7 @@ function renderRecipeBuilder(patient, doctors) {
       };
 
       patientObj.prescriptions.unshift(newRecipe);
+      try { syncPatientBilling(patientObj, stateObj); } catch(e){}
 
       stateObj.demandaReal = stateObj.demandaReal || [];
       currentPrescriptionMedicines.forEach(m => {

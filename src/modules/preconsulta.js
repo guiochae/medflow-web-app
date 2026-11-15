@@ -3388,147 +3388,150 @@ function isSlotOccupied(dateStr, timeStr) {
   return false;
 }
 
-// Función auxiliar para sincronizar cobros pendientes de recetas, laboratorios e imagenología
-function syncPatientBilling(patientObj, stateObj) {
+// Función auxiliar para sincronizar cobros pendientes de recetas, laboratorios, imagenología y consultas
+// Todos los servicios se registran sin precio (0.00), con la opción de colocarles su precio para consolidar la cuenta
+export function syncPatientBilling(patientObj, stateObj) {
   if (!patientObj) return;
-  patientObj.billingHistory = patientObj.billingHistory || [];
-  const todayStr = new Date().toISOString().substring(0, 10);
+  patientObj.billingHistory = Array.isArray(patientObj.billingHistory) ? patientObj.billingHistory : [];
   let stateModified = false;
 
-  // 1. Sincronizar Recetas Emitidas
+  // Encontrar o crear la cuenta pendiente activa para consolidar todos los servicios del paciente en una sola cuenta
+  let pendingBill = patientObj.billingHistory.find(b => b.status === 'Pendiente');
+
+  if (!pendingBill) {
+    pendingBill = {
+      id: 'FAC-' + Date.now(),
+      date: new Date().toISOString(),
+      concept: `Cuenta Consolidada de Servicios - ${patientObj.name}`,
+      details: [],
+      diagnosis: 'Servicios Médicos y Hospitalarios',
+      total: 0,
+      status: 'Pendiente'
+    };
+  }
+
+  pendingBill.details = Array.isArray(pendingBill.details) ? pendingBill.details : [];
+
+  // Helper para verificar si un servicio ya existe en la cuenta pendiente o en facturas pagadas previamente
+  const isItemAlreadyRecorded = (identifier) => {
+    const identLower = String(identifier || '').toLowerCase().trim();
+    if (!identLower) return false;
+
+    // Revisar en la factura pendiente actual
+    const existsInPending = pendingBill.details.some(d => {
+      const dDesc = String(typeof d === 'string' ? d : (d.description || d.name || '')).toLowerCase().trim();
+      return dDesc.includes(identLower);
+    });
+    if (existsInPending) return true;
+
+    // Revisar en facturas pagadas previamente para no duplicar servicios ya cancelados
+    const existsInPaid = patientObj.billingHistory.some(b => 
+      b.status === 'Pagado' && Array.isArray(b.details) && b.details.some(d => {
+        const dDesc = String(typeof d === 'string' ? d : (d.description || d.name || '')).toLowerCase().trim();
+        return dDesc.includes(identLower);
+      })
+    );
+    return existsInPaid;
+  };
+
+  // 1. Sincronizar Recetas Emitidas (Medicamentos registrados sin precio)
   const prescriptions = patientObj.prescriptions || [];
   prescriptions.forEach(recipe => {
-    if (!recipe.medicines || recipe.medicines.length === 0) return;
-
-    let bill = patientObj.billingHistory.find(b => b.id === recipe.billId) ||
-               patientObj.billingHistory.find(b => b.status === 'Pendiente' && b.date.substring(0, 10) === todayStr);
-
-    if (!bill) {
-      const details = recipe.medicines.map(m => {
-        const found = stateObj.medications && stateObj.medications.find(med => med.name === m.name);
-        const price = found ? parseFloat(found.price) : 50.00;
-        return {
-          description: `Medicamento Recetado: ${m.name} (${m.presentation || 'Tabletas'})`,
-          amount: price
-        };
-      });
-      const total = details.reduce((sum, d) => sum + d.amount, 0);
-
-      bill = {
-        id: 'FAC-REC-' + Date.now(),
-        date: recipe.date || new Date().toISOString(),
-        concept: `Receta Médica - Dr. ${recipe.doctorName || 'Médico Tratante'}`,
-        details,
-        diagnosis: 'Recetario Médico',
-        total,
-        status: 'Pendiente'
-      };
-      patientObj.billingHistory.unshift(bill);
-      recipe.billId = bill.id;
-      stateModified = true;
-    } else {
-      recipe.billId = bill.id;
-      recipe.medicines.forEach(m => {
-        const alreadyInBill = (bill.details || []).some(d => d.description.includes(m.name));
-        if (!alreadyInBill) {
-          const found = stateObj.medications && stateObj.medications.find(med => med.name === m.name);
-          const price = found ? parseFloat(found.price) : 50.00;
-          bill.details = bill.details || [];
-          bill.details.push({
-            description: `Medicamento Recetado: ${m.name} (${m.presentation || 'Tabletas'})`,
-            amount: price
-          });
-          bill.total = parseFloat(bill.total) + price;
-          stateModified = true;
-        }
-      });
-    }
-  });
-
-  // 2. Sincronizar Órdenes de Estudios (Laboratorio e Imagenología)
-  const studyOrders = patientObj.studyOrders || [];
-  studyOrders.forEach(order => {
-    if (!order.studies || order.studies.length === 0) return;
-
-    let bill = patientObj.billingHistory.find(b => b.id === order.billId) ||
-               patientObj.billingHistory.find(b => b.status === 'Pendiente' && b.date.substring(0, 10) === todayStr);
-
-    if (!bill) {
-      const details = order.studies.map(s => {
-        const price = s.type === 'lab' ? 125.00 : 300.00;
-        return {
-          description: `${s.type === 'lab' ? 'Examen de Laboratorio' : 'Estudio de Imagenología'}: ${s.name}`,
-          amount: price
-        };
-      });
-      const total = details.reduce((sum, d) => sum + d.amount, 0);
-
-      bill = {
-        id: 'FAC-EST-' + Date.now(),
-        date: order.date || new Date().toISOString(),
-        concept: `Órdenes de Estudios - Dr. ${order.doctorName || 'Médico Tratante'}`,
-        details,
-        diagnosis: 'Estudios de Apoyo',
-        total,
-        status: 'Pendiente'
-      };
-      patientObj.billingHistory.unshift(bill);
-      order.billId = bill.id;
-      stateModified = true;
-    } else {
-      order.billId = bill.id;
-      order.studies.forEach(s => {
-        const alreadyInBill = (bill.details || []).some(d => d.description.includes(s.name));
-        if (!alreadyInBill) {
-          const price = s.type === 'lab' ? 125.00 : 300.00;
-          bill.details = bill.details || [];
-          bill.details.push({
-            description: `${s.type === 'lab' ? 'Examen de Laboratorio' : 'Estudio de Imagenología'}: ${s.name}`,
-            amount: price
-          });
-          bill.total = parseFloat(bill.total) + price;
-          stateModified = true;
-        }
-      });
-    }
-  });
-
-  // 3. Sincronizar Estudios Locales de Laboratorio
-  const localLabs = patientObj.localLabs || [];
-  localLabs.forEach(lab => {
-    let bill = patientObj.billingHistory.find(b => b.id === lab.billId) ||
-               patientObj.billingHistory.find(b => b.status === 'Pendiente' && b.date.substring(0, 10) === todayStr);
-
-    if (!bill) {
-      const price = 125.00;
-      bill = {
-        id: 'FAC-LAB-' + Date.now(),
-        date: lab.date || new Date().toISOString(),
-        concept: `Estudio Local de Laboratorio - ${lab.name}`,
-        details: [{ description: `Análisis de Laboratorio: ${lab.name}`, amount: price }],
-        diagnosis: 'Laboratorio Clínico',
-        total: price,
-        status: 'Pendiente'
-      };
-      patientObj.billingHistory.unshift(bill);
-      lab.billId = bill.id;
-      stateModified = true;
-    } else {
-      lab.billId = bill.id;
-      const alreadyInBill = (bill.details || []).some(d => d.description.includes(lab.name));
-      if (!alreadyInBill) {
-        const price = 125.00;
-        bill.details = bill.details || [];
-        bill.details.push({ description: `Análisis de Laboratorio: ${lab.name}`, amount: price });
-        bill.total = parseFloat(bill.total) + price;
+    recipe.billId = pendingBill.id;
+    (recipe.medicines || []).forEach(m => {
+      if (!m || !m.name) return;
+      const medName = m.name.trim();
+      if (!isItemAlreadyRecorded(medName)) {
+        pendingBill.details.push({
+          description: `Medicamento Recetado: ${medName} (${m.presentation || 'Tabletas'})`,
+          amount: 0, // Se registra sin precio para asignarlo en facturación
+          serviceType: 'farmacia'
+        });
         stateModified = true;
       }
+    });
+  });
+
+  // 2. Sincronizar Órdenes de Estudios (Laboratorio e Imagenología sin precio)
+  const studyOrders = patientObj.studyOrders || [];
+  studyOrders.forEach(order => {
+    order.billId = pendingBill.id;
+    (order.studies || []).forEach(s => {
+      if (!s || !s.name) return;
+      const sName = s.name.trim();
+      const typeLabel = s.type === 'lab' ? 'Examen de Laboratorio' : 'Estudio de Imagenología';
+      if (!isItemAlreadyRecorded(sName)) {
+        pendingBill.details.push({
+          description: `${typeLabel}: ${sName}`,
+          amount: 0, // Se registra sin precio
+          serviceType: s.type || 'estudio'
+        });
+        stateModified = true;
+      }
+    });
+  });
+
+  // 3. Sincronizar Estudios Locales de Laboratorio (sin precio)
+  const localLabs = patientObj.localLabs || [];
+  localLabs.forEach(lab => {
+    if (!lab || !lab.name) return;
+    lab.billId = pendingBill.id;
+    const labName = lab.name.trim();
+    if (!isItemAlreadyRecorded(labName)) {
+      pendingBill.details.push({
+        description: `Análisis de Laboratorio: ${labName}`,
+        amount: 0, // Se registra sin precio
+        serviceType: 'laboratorio'
+      });
+      stateModified = true;
     }
   });
 
-  if (stateModified) {
+  // 4. Sincronizar Consultas Médicas y Procedimientos (sin precio)
+  const consultations = patientObj.consultations || [];
+  consultations.forEach(c => {
+    if (!c) return;
+    c.billId = pendingBill.id;
+    const consultUniqueKey = c.id ? `Ref: ${c.id}` : `Consulta (${c.specialty || 'General'})`;
+    if (!isItemAlreadyRecorded(consultUniqueKey)) {
+      pendingBill.details.push({
+        description: `Honorarios de Consulta Médica (${c.specialty || 'General'}) - ${c.doctor || 'Médico Tratante'} [${consultUniqueKey}]`,
+        amount: 0, // Se registra sin precio
+        serviceType: 'consulta'
+      });
+      stateModified = true;
+    }
+
+    // Procedimientos en consulta
+    (c.procedures || []).forEach(proc => {
+      if (!proc || !proc.name) return;
+      const pName = proc.name.trim();
+      if (!isItemAlreadyRecorded(pName)) {
+        pendingBill.details.push({
+          description: `Procedimiento en Consulta: ${pName}${proc.notes ? ` (${proc.notes})` : ''}`,
+          amount: 0, // Se registra sin precio
+          serviceType: 'procedimiento'
+        });
+        stateModified = true;
+      }
+    });
+  });
+
+  // Si hay detalles y la factura pendiente no estaba en billingHistory, agregarla al inicio
+  if (pendingBill.details.length > 0) {
+    pendingBill.total = pendingBill.details.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+    const existingIndex = patientObj.billingHistory.findIndex(b => b.id === pendingBill.id);
+    if (existingIndex === -1) {
+      patientObj.billingHistory.unshift(pendingBill);
+      stateModified = true;
+    }
+  }
+
+  if (stateModified && stateObj) {
     saveAppState(stateObj);
   }
+
+  return pendingBill;
 }
 
 export function isUserBillingAuthorized(user) {
@@ -3569,7 +3572,7 @@ function renderBilling(patient) {
 
   const currentPatient = stateObj.patients.find(p => p.id === patient.id) || patient;
 
-  // Sincronizar automáticamente cualquier receta u orden de estudios pendiente de cobro
+  // Sincronizar automáticamente cualquier servicio de los diferentes módulos sin precio
   syncPatientBilling(currentPatient, stateObj);
 
   tableBody.innerHTML = '';
@@ -3598,9 +3601,11 @@ function renderBilling(patient) {
     if (bill.status === 'Pendiente') {
       statusBadge = `<span class="badge" style="background: rgba(255, 152, 0, 0.15); color: #ff9800; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Pendiente</span>`;
       actionButtons = `
-        <button class="btn btn-success btn-small btn-pay-bill" data-id="${bill.id}" style="padding: 4px 8px; font-size: 0.8rem; margin-right: 5px;">
-          <span>💸</span> Cobrar
-        </button>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <button class="btn btn-success btn-small btn-pay-bill" data-id="${bill.id}" style="padding: 5px 10px; font-size: 0.8rem; width: 100%;">
+            <span>💸</span> Cobrar en Caja
+          </button>
+        </div>
       `;
     } else {
       statusBadge = `<span class="badge" style="background: rgba(76, 175, 80, 0.15); color: #4caf50; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Pagado</span>`;
@@ -3612,21 +3617,48 @@ function renderBilling(patient) {
     }
 
     const detailsList = (bill.details && Array.isArray(bill.details) && bill.details.length > 0)
-      ? `<ul style="margin: 6px 0 0 0; padding-left: 14px; font-size: 0.82rem; color: var(--text-muted); list-style: disc;">
-          ${bill.details.map(d => {
+      ? `<ul style="margin: 6px 0 0 0; padding-left: 0; font-size: 0.82rem; list-style: none;">
+          ${bill.details.map((d, dIdx) => {
             const desc = typeof d === 'string' ? d : (d.description || d.name || 'Servicio / Honorario');
-            const amt = (d && d.amount !== undefined && !isNaN(d.amount)) ? parseFloat(d.amount).toFixed(2) : ((bill.total !== undefined && !isNaN(bill.total)) ? parseFloat(bill.total).toFixed(2) : '50.00');
+            const amtNum = (d && d.amount !== undefined && !isNaN(d.amount)) ? parseFloat(d.amount) : 0;
+            const amtStr = amtNum.toFixed(2);
+            const isUnpriced = (amtNum === 0);
             
             const deleteAction = (bill.status === 'Pendiente')
-              ? `<button class="btn-delete-bill-item" data-bill-id="${bill.id}" data-desc="${desc}" style="background: none; border: none; color: var(--accent-danger); font-size: 0.75rem; cursor: pointer; padding: 0 4px; margin-left: 5px;" title="Eliminar del cobro">❌</button>`
+              ? `<button class="btn-delete-bill-item" data-bill-id="${bill.id}" data-desc="${desc}" style="background: none; border: none; color: var(--accent-danger); font-size: 0.75rem; cursor: pointer; padding: 0 4px; margin-left: 4px;" title="Eliminar del cobro">❌</button>`
               : '';
 
-            return `<li>${desc} — <strong style="color: var(--accent-secondary);">Q${amt}</strong>${deleteAction}</li>`;
+            if (bill.status === 'Pendiente') {
+              return `
+                <li style="display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; margin-bottom: 4px; background: rgba(255,255,255,0.02); border: 1px solid ${isUnpriced ? 'rgba(239, 68, 68, 0.35)' : 'rgba(255,255,255,0.08)'}; border-radius: 4px; gap: 8px;">
+                  <div style="flex: 1; min-width: 140px;">
+                    <span style="color: var(--text-primary); font-size: 0.82rem;">• ${desc}</span>
+                    ${isUnpriced ? `<span style="background: rgba(239, 68, 68, 0.18); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.35); padding: 1px 6px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; margin-left: 6px;">⚠️ Sin precio</span>` : ''}
+                  </div>
+                  <div style="display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;">
+                    <span style="font-size: 0.78rem; color: var(--text-muted); font-weight: bold;">Q</span>
+                    <input type="number" min="0" step="1" class="input-bill-item-amount" data-bill-id="${bill.id}" data-item-idx="${dIdx}" value="${amtNum > 0 ? amtNum : ''}" placeholder="0.00" style="width: 80px; padding: 3px 6px; font-size: 0.8rem; border: 1px solid ${amtNum > 0 ? 'var(--border-color)' : '#f87171'}; border-radius: 4px; background: var(--bg-card); color: var(--text-primary); text-align: right;" title="Colocar precio a este servicio">
+                    <button class="btn btn-secondary btn-small btn-save-item-price" data-bill-id="${bill.id}" data-item-idx="${dIdx}" style="padding: 2px 6px; font-size: 0.72rem; border-color: #38bdf8; color: #38bdf8;" title="Guardar precio y consolidar cuenta">💾</button>
+                    ${deleteAction}
+                  </div>
+                </li>
+              `;
+            } else {
+              return `<li style="padding: 2px 0;">• ${desc} — <strong style="color: var(--accent-secondary);">Q${amtStr}</strong></li>`;
+            }
           }).join('')}
-         </ul>`
+         </ul>
+         ${bill.status === 'Pendiente' ? `
+           <div style="margin-top: 8px; display: flex; gap: 8px;">
+             <button class="btn btn-secondary btn-small btn-add-custom-service" data-bill-id="${bill.id}" style="font-size: 0.72rem; padding: 3px 8px; border: 1px dashed var(--accent-primary); color: var(--accent-primary);">
+               ➕ Agregar Servicio a esta Cuenta
+             </button>
+           </div>
+         ` : ''}
+        `
       : '';
 
-    const billTotal = (bill.total !== undefined && !isNaN(bill.total)) ? bill.total : 50.00;
+    const billTotal = (bill.total !== undefined && !isNaN(bill.total)) ? bill.total : 0.00;
 
     row.innerHTML = `
       <td><strong>${bill.id}</strong></td>
@@ -3640,6 +3672,67 @@ function renderBilling(patient) {
       <td><strong style="color: var(--accent-success); font-size: 1.05rem;">Q ${parseFloat(billTotal).toFixed(2)}</strong></td>
       <td>${actionButtons}</td>
     `;
+
+    // Bind guardar precio de un servicio individual en la cuenta
+    row.querySelectorAll('.btn-save-item-price').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const bId = btn.getAttribute('data-bill-id');
+        const itemIdx = parseInt(btn.getAttribute('data-item-idx'), 10);
+        const input = row.querySelector(`.input-bill-item-amount[data-bill-id="${bId}"][data-item-idx="${itemIdx}"]`);
+        if (!input) return;
+
+        const newPrice = parseFloat(input.value) || 0;
+        const stateToSave = getAppState();
+        const pObj = stateToSave.patients.find(p => p.id === currentPatient.id);
+        const billObj = (pObj.billingHistory || []).find(b => b.id === bId);
+        if (!billObj || !billObj.details || !billObj.details[itemIdx]) return;
+
+        billObj.details[itemIdx].amount = newPrice;
+        billObj.total = billObj.details.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+
+        await saveAppState(stateToSave);
+        alert(`✅ Precio asignado (Q${newPrice.toFixed(2)}) y cuenta consolidada.\nTotal de la cuenta: Q${billObj.total.toFixed(2)}.`);
+        renderBilling(pObj);
+      });
+    });
+
+    // Enter en el campo de precio para guardar automáticamente
+    row.querySelectorAll('.input-bill-item-amount').forEach(input => {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const bId = input.getAttribute('data-bill-id');
+          const itemIdx = input.getAttribute('data-item-idx');
+          const saveBtn = row.querySelector(`.btn-save-item-price[data-bill-id="${bId}"][data-item-idx="${itemIdx}"]`);
+          if (saveBtn) saveBtn.click();
+        }
+      });
+    });
+
+    // Bind agregar servicio adicional sin precio
+    row.querySelectorAll('.btn-add-custom-service').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const bId = btn.getAttribute('data-bill-id');
+        const servName = prompt("Ingrese el nombre o descripción del servicio proporcionado al paciente:");
+        if (!servName || !servName.trim()) return;
+
+        const stateToSave = getAppState();
+        const pObj = stateToSave.patients.find(p => p.id === currentPatient.id);
+        const billObj = (pObj.billingHistory || []).find(b => b.id === bId);
+        if (!billObj) return;
+
+        billObj.details = billObj.details || [];
+        billObj.details.push({
+          description: servName.trim(),
+          amount: 0 // Se registra sin precio para que luego se le coloque
+        });
+
+        await saveAppState(stateToSave);
+        renderBilling(pObj);
+      });
+    });
 
     // Bind delete item from billing / recipe events
     row.querySelectorAll('.btn-delete-bill-item').forEach(btn => {

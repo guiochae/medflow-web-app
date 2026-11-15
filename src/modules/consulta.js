@@ -2730,8 +2730,7 @@ function renderConsultationForm(patient, doctors) {
             if (existingConsultation.acceptedStudies && existingConsultation.acceptedStudies.labs) {
               existingConsultation.acceptedStudies.labs.forEach(labName => {
                 const rawName = typeof labName === 'object' ? labName.name : labName;
-                const found = stateObj.laboratoryTests && stateObj.laboratoryTests.find(l => l.name === rawName);
-                const price = found ? parseFloat(found.price) : 125.00;
+                const price = 0; // Se registra sin precio para colocarlo en facturación
                 newDetails.push({ description: `Examen de Laboratorio: ${rawName}`, amount: price });
                 newTotal += price;
               });
@@ -2740,8 +2739,7 @@ function renderConsultationForm(patient, doctors) {
             if (existingConsultation.acceptedStudies && existingConsultation.acceptedStudies.imaging) {
               existingConsultation.acceptedStudies.imaging.forEach(imgName => {
                 const rawName = typeof imgName === 'object' ? imgName.name : imgName;
-                const found = stateObj.imagingStudies && stateObj.imagingStudies.find(i => i.name === rawName);
-                const price = found ? parseFloat(found.price) : 300.00;
+                const price = 0; // Se registra sin precio para colocarlo en facturación
                 newDetails.push({ description: `Estudio de Imagenología: ${rawName}`, amount: price });
                 newTotal += price;
               });
@@ -2750,8 +2748,7 @@ function renderConsultationForm(patient, doctors) {
             if (existingConsultation.acceptedTreatments) {
               existingConsultation.acceptedTreatments.forEach(med => {
                 const medName = typeof med === 'object' ? med.name : med;
-                const found = stateObj.medications && stateObj.medications.find(m => m.name === medName);
-                const price = found ? parseFloat(found.price) : 50.00;
+                const price = 0; // Se registra sin precio para colocarlo en facturación
                 newDetails.push({ description: `Medicamento Prescrito: ${medName}`, amount: price });
                 newTotal += price;
               });
@@ -2860,34 +2857,31 @@ function renderConsultationForm(patient, doctors) {
           });
         }
 
-        // Agregar laboratorios aceptados al cobro
+        // Agregar laboratorios aceptados al cobro (sin precio para colocarlo en facturación)
         if (newConsultation.acceptedStudies && newConsultation.acceptedStudies.labs) {
           newConsultation.acceptedStudies.labs.forEach(labName => {
             const rawName = typeof labName === 'object' ? labName.name : labName;
-            const found = stateObj.laboratoryTests && stateObj.laboratoryTests.find(l => l.name === rawName);
-            const price = found ? parseFloat(found.price) : 125.00;
+            const price = 0; // Se registra sin precio
             details.push({ description: `Examen de Laboratorio: ${rawName}`, amount: price });
             total += price;
           });
         }
 
-        // Agregar imagenología aceptada al cobro
+        // Agregar imagenología aceptada al cobro (sin precio para colocarlo en facturación)
         if (newConsultation.acceptedStudies && newConsultation.acceptedStudies.imaging) {
           newConsultation.acceptedStudies.imaging.forEach(imgName => {
             const rawName = typeof imgName === 'object' ? imgName.name : imgName;
-            const found = stateObj.imagingStudies && stateObj.imagingStudies.find(i => i.name === rawName);
-            const price = found ? parseFloat(found.price) : 300.00;
+            const price = 0; // Se registra sin precio
             details.push({ description: `Estudio de Imagenología: ${rawName}`, amount: price });
             total += price;
           });
         }
 
-        // Agregar tratamientos aceptados al cobro
+        // Agregar tratamientos aceptados al cobro (sin precio para colocarlo en facturación)
         if (newConsultation.acceptedTreatments) {
           newConsultation.acceptedTreatments.forEach(med => {
             const medName = typeof med === 'object' ? med.name : med;
-            const found = stateObj.medications && stateObj.medications.find(m => m.name === medName);
-            const price = found ? parseFloat(found.price) : 50.00;
+            const price = 0; // Se registra sin precio
             details.push({ description: `Medicamento Prescrito: ${medName}`, amount: price });
             total += price;
           });
