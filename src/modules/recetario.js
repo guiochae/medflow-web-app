@@ -370,15 +370,6 @@ function renderPatientList(query = '') {
   const currentUser = state.currentUser;
   let basePatients = state.patients || [];
 
-  const roleNorm = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const isDoctor = roleNorm.startsWith('medico');
-  if (currentUser && isDoctor) {
-    basePatients = basePatients.filter(p => 
-      p.assignedDoctorId === currentUser.id || 
-      p.assignedDoctorName === currentUser.name
-    );
-  }
-
   const filtered = basePatients.filter(p => {
     const nameVal = p.name ? String(p.name).toLowerCase() : '';
     const telVal = p.telephone ? String(p.telephone) : '';
@@ -426,18 +417,9 @@ function selectPatient(patientId) {
     currentPrescriptionMedicines = [];
   }
 
-  // Validar acceso si el usuario es médico (incluyendo Medico 1, Medico 2, Medico 3, etc.)
-  const roleNormSel = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const isDoctorSel = roleNormSel.startsWith('medico');
-  if (currentUser && isDoctorSel) {
-    if (patient && patient.assignedDoctorId !== currentUser.id && patient.assignedDoctorName !== currentUser.name) {
-      patient = null;
-    }
-  }
-
-  const doctors = state.users.filter(u => {
+  const doctors = (state.users || []).filter(u => {
     const r = String(u.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    return r === 'medico' || r === 'medico 1' || r === 'medico 2' || r === 'medico 3';
+    return r.includes('medico') || r.includes('doctor');
   });
 
   setActivePatientId(patientId);
@@ -723,6 +705,48 @@ function renderRecipeBuilder(patient, doctors) {
   const initialIndications = editingRecipe ? (editingRecipe.indications || '') : draftInds;
   const vitalsHeaderHtml = getPatientVitalsHeaderHtml(patient);
 
+  const stateObj = getAppState();
+  const doctorList = (Array.isArray(doctors) && doctors.length > 0)
+    ? doctors
+    : (stateObj.users || []).filter(u => {
+        const r = String(u.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        return r.includes('medico') || r.includes('doctor');
+      });
+  const currentUser = stateObj.currentUser;
+  const isUserDoctor = currentUser && String(currentUser.role || '').toLowerCase().includes('medico');
+
+  let defaultDoctorId = '';
+  let defaultDoctorName = '';
+
+  if (editingRecipe) {
+    defaultDoctorName = editingRecipe.doctorName || '';
+    const matchDoc = doctorList.find(d => d.name === defaultDoctorName || d.id === editingRecipe.doctorId);
+    if (matchDoc) {
+      defaultDoctorId = matchDoc.id;
+      defaultDoctorName = matchDoc.name;
+    } else {
+      defaultDoctorId = editingRecipe.doctorId || (doctorList[0] ? doctorList[0].id : 'u-1');
+    }
+  } else if (isUserDoctor && currentUser.id) {
+    defaultDoctorId = currentUser.id;
+    defaultDoctorName = currentUser.name;
+  } else if (patient.assignedDoctorId || patient.assignedDoctorName) {
+    const matchDoc = doctorList.find(d => d.id === patient.assignedDoctorId || d.name === patient.assignedDoctorName);
+    if (matchDoc) {
+      defaultDoctorId = matchDoc.id;
+      defaultDoctorName = matchDoc.name;
+    } else {
+      defaultDoctorId = patient.assignedDoctorId || (doctorList[0] ? doctorList[0].id : 'u-1');
+      defaultDoctorName = patient.assignedDoctorName || (doctorList[0] ? doctorList[0].name : 'Dr. Médico Tratante');
+    }
+  } else if (doctorList.length > 0) {
+    defaultDoctorId = doctorList[0].id;
+    defaultDoctorName = doctorList[0].name;
+  } else {
+    defaultDoctorId = 'u-1';
+    defaultDoctorName = 'Dr. Carlos Mendoza';
+  }
+
   container.innerHTML = `
     ${vitalsHeaderHtml}
     
@@ -771,9 +795,11 @@ function renderRecipeBuilder(patient, doctors) {
         <div>
           <!-- Doctor que receta (automático del paciente o de la receta) -->
           <div class="form-group" style="max-width: 400px; margin-bottom: 1.5rem;">
-            <label>Médico que Prescribe (Tratante)</label>
-            <input type="text" value="${editingRecipe ? (editingRecipe.doctorName || patient.assignedDoctorName) : (patient.assignedDoctorName || 'Dr. Carlos Mendoza')}" readonly style="background: rgba(255,255,255,0.05); cursor: not-allowed; font-weight: bold; color: ${editingRecipe ? '#f59e0b' : 'var(--accent-primary)'};">
-            <input type="hidden" id="r-doctor" value="${patient.assignedDoctorId || 'u-1'}">
+            <label for="r-doctor">Médico que Prescribe (Tratante)</label>
+            <select id="r-doctor" class="form-control" style="font-weight: bold; color: ${editingRecipe ? '#f59e0b' : 'var(--accent-primary)'};">
+              ${doctorList.map(doc => `<option value="${doc.id}" ${(doc.id === defaultDoctorId || doc.name === defaultDoctorName) ? 'selected' : ''}>${doc.name}${doc.specialty ? ` (${doc.specialty})` : ''}</option>`).join('')}
+              ${!doctorList.some(d => d.id === defaultDoctorId || d.name === defaultDoctorName) && defaultDoctorName ? `<option value="${defaultDoctorId || defaultDoctorName}" selected>${defaultDoctorName}</option>` : ''}
+            </select>
           </div>
 
           <!-- Formulario para agregar/modificar medicina a la receta -->
@@ -1317,26 +1343,29 @@ function renderRecipeBuilder(patient, doctors) {
   const btnApprove = document.getElementById('btn-approve-recipe');
   if (btnApprove) {
     btnApprove.addEventListener('click', async () => {
-      const docSelect = document.getElementById('r-doctor');
-      const doctorId = docSelect ? docSelect.value : '';
-      
-      if (!doctorId && !patient.assignedDoctorName) {
-        alert("Debe seleccionar un médico que prescriba la receta.");
-        return;
-      }
+      btnApprove.disabled = true;
+      btnApprove.textContent = activeEditingRecipeId ? 'Guardando Cambios...' : 'Emitiendo Receta...';
 
-      if (currentPrescriptionMedicines.length === 0) {
-        alert("Debe haber al menos un medicamento en la receta.");
-        return;
-      }
+      try {
+        const docSelect = document.getElementById('r-doctor');
+        const doctorId = docSelect ? docSelect.value : '';
+        const stateObj = getAppState();
+        const doctorObj = stateObj.users.find(u => u.id === doctorId) || 
+                          stateObj.users.find(u => u.name === doctorId || (u.name && u.name.toLowerCase().includes(String(doctorId).toLowerCase())));
+        
+        const doctorName = doctorObj ? doctorObj.name : (patient.assignedDoctorName || (stateObj.currentUser ? stateObj.currentUser.name : 'Dr. Médico Tratante'));
+        const doctorLicense = doctorObj ? (doctorObj.license || 'N/A') : 'N/A';
+        const doctorPhone = doctorObj ? (doctorObj.phone || 'N/A') : 'N/A';
+        
+        if (!doctorId && !doctorName) {
+          alert("Debe seleccionar un médico que prescriba la receta.");
+          return;
+        }
 
-      const stateObj = getAppState();
-      const doctorObj = stateObj.users.find(u => u.id === doctorId) || 
-                        stateObj.users.find(u => u.name === doctorId || (u.name && u.name.toLowerCase().includes(String(doctorId).toLowerCase())));
-      
-      const doctorName = doctorObj ? doctorObj.name : (patient.assignedDoctorName || 'Dr. Médico Tratante');
-      const doctorLicense = doctorObj ? (doctorObj.license || 'N/A') : 'N/A';
-      const doctorPhone = doctorObj ? (doctorObj.phone || 'N/A') : 'N/A';
+        if (currentPrescriptionMedicines.length === 0) {
+          alert("Debe haber al menos un medicamento en la receta.");
+          return;
+        }
       
       const indicationsVal = document.getElementById('r-indications') ? document.getElementById('r-indications').value : "";
       const patientObj = stateObj.patients.find(p => p.id === patient.id);
@@ -1383,7 +1412,7 @@ function renderRecipeBuilder(patient, doctors) {
               });
 
               // Preservar otros cobros en la misma factura (ej. honorarios de consulta o procedimientos)
-              const nonMedDetails = bill.details.filter(d => !d.description.startsWith('Medicamento Recetado:'));
+              const nonMedDetails = (bill.details || []).filter(d => d && d.description && !String(d.description).startsWith('Medicamento Recetado:'));
               bill.details = [...nonMedDetails, ...newDetails];
               bill.total = bill.details.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
             }
@@ -1392,7 +1421,7 @@ function renderRecipeBuilder(patient, doctors) {
           // Registrar en Demanda Real medicamentos no catalogados
           stateObj.demandaReal = stateObj.demandaReal || [];
           currentPrescriptionMedicines.forEach(m => {
-            const inCatalog = stateObj.medications && stateObj.medications.some(med => med.name.toLowerCase().trim() === m.name.toLowerCase().trim());
+            const inCatalog = stateObj.medications && stateObj.medications.some(med => med.name && med.name.toLowerCase().trim() === String(m.name || '').toLowerCase().trim());
             if (!inCatalog) {
               stateObj.demandaReal.push({
                 id: 'dr-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
@@ -1429,8 +1458,8 @@ function renderRecipeBuilder(patient, doctors) {
       // ===================================================================
       const todayStr = new Date().toISOString().substring(0, 10);
       let bill = patientObj.billingHistory.find(b => 
-        b.status === 'Pendiente' && 
-        b.date.substring(0, 10) === todayStr
+        b && b.status === 'Pendiente' && 
+        b.date && String(b.date).substring(0, 10) === todayStr
       );
 
       const details = [];
@@ -1443,7 +1472,7 @@ function renderRecipeBuilder(patient, doctors) {
           ? parseFloat(m.costo_calculado)
           : (catalogItem ? parseFloat(catalogItem.price) : 50.00);
         
-        const alreadyBilled = bill && bill.details.some(d => d.description.includes(m.name));
+        const alreadyBilled = bill && Array.isArray(bill.details) && bill.details.some(d => d && d.description && String(d.description).includes(m.name));
         
         if (!alreadyBilled) {
           const descSuffix = m.tipoPrescripcion === 'unidad' 
@@ -1461,8 +1490,8 @@ function renderRecipeBuilder(patient, doctors) {
       let billId = '';
 
       if (bill) {
-        bill.details = [...bill.details, ...details];
-        bill.total = parseFloat(bill.total) + total;
+        bill.details = [...(bill.details || []), ...details];
+        bill.total = parseFloat(bill.total || 0) + total;
         billId = bill.id;
       } else {
         billId = 'FAC-REC-' + Date.now();
@@ -1495,7 +1524,7 @@ function renderRecipeBuilder(patient, doctors) {
 
       stateObj.demandaReal = stateObj.demandaReal || [];
       currentPrescriptionMedicines.forEach(m => {
-        const inCatalog = stateObj.medications && stateObj.medications.some(med => med.name.toLowerCase().trim() === m.name.toLowerCase().trim());
+        const inCatalog = stateObj.medications && stateObj.medications.some(med => med.name && med.name.toLowerCase().trim() === String(m.name || '').toLowerCase().trim());
         if (!inCatalog) {
           stateObj.demandaReal.push({
             id: 'dr-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
@@ -1514,14 +1543,23 @@ function renderRecipeBuilder(patient, doctors) {
       showPrescriptionPreviewModal(patientObj, newRecipe);
 
       currentPrescriptionMedicines = [];
-      if (docSelect) docSelect.value = '';
       if (document.getElementById('r-indications')) {
         document.getElementById('r-indications').value = '';
       }
       renderCurrentMedicinesTable();
       renderRecipeHistory(patientObj);
-    });
-  }
+      alert("✅ Receta emitida y grabada exitosamente.");
+    } catch (err) {
+      console.error("Error al emitir/actualizar receta:", err);
+      alert("Ocurrió un error al procesar la receta: " + (err.message || err));
+    } finally {
+      if (btnApprove) {
+        btnApprove.disabled = false;
+        btnApprove.textContent = activeEditingRecipeId ? 'Guardar Cambios en Receta' : 'Aprobar y Emitir Receta';
+      }
+    }
+  });
+}
 
   // Inicializar la tabla de medicamentos con lo que esté cargado
   renderCurrentMedicinesTable();

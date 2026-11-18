@@ -43,36 +43,8 @@ export function normalizeDoctorName(name) {
 
 export function isPatientAccessibleByDoctor(patient, currentUser) {
   if (!currentUser || !patient) return true;
-  const roleNorm = String(currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (!roleNorm.includes('medico') && !roleNorm.includes('médico') && !roleNorm.includes('doctor')) {
-    return true;
-  }
-  // Si el paciente no tiene médico asignado, está en la lista de espera común para todos los médicos
-  if (!patient.assignedDoctorId && !patient.assignedDoctorName) {
-    return true;
-  }
-  // Coincidencia por ID de usuario
-  if (patient.assignedDoctorId && (patient.assignedDoctorId === currentUser.id || patient.assignedDoctorId === currentUser.name)) {
-    return true;
-  }
-  // Coincidencia por nombre normalizado
-  const userNorm = normalizeDoctorName(currentUser.name);
-  const assignedNorm = normalizeDoctorName(patient.assignedDoctorName);
-  if (userNorm && assignedNorm && (userNorm === assignedNorm || userNorm.includes(assignedNorm) || assignedNorm.includes(userNorm))) {
-    return true;
-  }
-  // Interconsultas / referencias médicas recibidas
-  if (Array.isArray(patient.referredDoctorIds) && patient.referredDoctorIds.includes(currentUser.id)) {
-    return true;
-  }
-  if (Array.isArray(patient.referredDoctorNames) && patient.referredDoctorNames.some(n => normalizeDoctorName(n) === userNorm)) {
-    return true;
-  }
-  // Si el médico ya atendió o recetó previamente a este paciente
-  if (Array.isArray(patient.consultations) && patient.consultations.some(c => c.doctor && (normalizeDoctorName(c.doctor) === userNorm || c.doctor === currentUser.name || c.doctor === currentUser.id))) {
-    return true;
-  }
-  return false;
+  // Todos los médicos tienen acceso expedito a cualquier paciente para consulta y prescripción
+  return true;
 }
 
 // Reconciliación y recuperación automática de consultas registradas hoy o previamente
@@ -1340,7 +1312,16 @@ function renderConsultationForm(patient, doctors) {
 
   shouldRedirectToPrescriptionOnSave = false;
 
-  let initialDoctor = patient.assignedDoctorName || 'Dr. Carlos Mendoza';
+  const stateObj = getAppState();
+  const doctorList = (Array.isArray(doctors) && doctors.length > 0)
+    ? doctors
+    : (stateObj.users || []).filter(u => String(u.role || '').toLowerCase().includes('medico'));
+  const currentUser = stateObj.currentUser;
+  const isUserDoctor = currentUser && String(currentUser.role || '').toLowerCase().includes('medico');
+
+  let initialDoctor = (isUserDoctor && currentUser.name)
+    ? currentUser.name
+    : (patient.assignedDoctorName || (doctorList[0] ? doctorList[0].name : 'Dr. Carlos Mendoza'));
   let initialSpecialty = 'Medicina General';
   let initialDate = new Date().toISOString().split('T')[0];
   let initialTime = new Date().toTimeString().split(' ')[0].substring(0, 5);
@@ -1452,7 +1433,10 @@ function renderConsultationForm(patient, doctors) {
         <div class="form-row">
           <div class="form-group">
             <label for="c-doctor">Médico Evaluador Tratante</label>
-            <input type="text" id="c-doctor" value="${initialDoctor}" readonly style="background: rgba(255,255,255,0.05); cursor: not-allowed; font-weight: bold; color: var(--accent-primary);">
+            <select id="c-doctor" required class="form-control" style="font-weight: bold; color: var(--accent-primary);">
+              ${doctorList.map(doc => `<option value="${doc.name}" ${doc.name === initialDoctor ? 'selected' : ''}>${doc.name}${doc.specialty ? ` (${doc.specialty})` : ''}</option>`).join('')}
+              ${!doctorList.some(d => d.name === initialDoctor) && initialDoctor ? `<option value="${initialDoctor}" selected>${initialDoctor}</option>` : ''}
+            </select>
           </div>
           <div class="form-group">
             <label for="c-specialty">Especialidad de Consulta</label>
@@ -3342,19 +3326,29 @@ function transferToRecetario() {
 
 // Analizador sintáctico sencillo de tratamientos a formato de medicamentos
 function parseTreatmentToMedicine(txString) {
-  let name = txString;
+  if (typeof txString === 'object' && txString !== null) {
+    return {
+      name: txString.name || '',
+      dosage: txString.dosage || "Ver indicaciones de consulta",
+      presentation: txString.presentation || "Tabletas",
+      duration: txString.duration || "Según indicación",
+      quantity: txString.quantity || "1 caja"
+    };
+  }
+
+  let name = String(txString || '');
   let dosage = "Ver indicaciones de consulta";
   let presentation = "Tabletas";
   let duration = "Según indicación";
 
-  if (txString.includes('(')) {
-    const parts = txString.split('(');
+  if (name.includes('(')) {
+    const parts = name.split('(');
     name = parts[0].trim();
     dosage = parts[1].replace(')', '').trim();
   }
 
   // Adivinar presentación
-  const lower = txString.toLowerCase();
+  const lower = name.toLowerCase();
   if (lower.includes('cápsula') || lower.includes('capsula')) presentation = 'Cápsulas';
   else if (lower.includes('jarabe')) presentation = 'Jarabe';
   else if (lower.includes('suspensión') || lower.includes('suspension')) presentation = 'Suspensión';
