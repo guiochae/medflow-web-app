@@ -584,6 +584,9 @@ function renderRecipeHistory(patient) {
         <span style="font-weight: 600;">${dateFormatted} ${r.updated_at ? '<small style="color: #f59e0b; font-size: 0.7rem;">(Modificada)</small>' : ''}</span>
         <div style="display: flex; align-items: center; gap: 6px;">
           <span style="font-size: 0.75rem; color: var(--text-muted);">${medsCount} med(s)</span>
+          <button type="button" class="btn-print-recipe-card" data-id="${r.id}" style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 4px; color: #10b981; cursor: pointer; padding: 2px 7px; font-size: 0.78rem; font-weight: 600; display: inline-flex; align-items: center; gap: 3px;" title="Imprimir Receta Médica Oficial">
+            <span>🖨️</span> Imprimir
+          </button>
           <button type="button" class="btn-edit-recipe-card" data-id="${r.id}" style="background: rgba(0, 242, 254, 0.12); border: 1px solid rgba(0, 242, 254, 0.4); border-radius: 4px; color: #00f2fe; cursor: pointer; padding: 2px 7px; font-size: 0.78rem; font-weight: 600; display: inline-flex; align-items: center; gap: 3px;" title="Modificar o editar medicamentos de esta receta">
             <span>✏️</span> Editar
           </button>
@@ -597,6 +600,14 @@ function renderRecipeHistory(patient) {
         <strong>Medicamentos:</strong> ${medsList}
       </div>
     `;
+
+    const printBtn = li.querySelector('.btn-print-recipe-card');
+    if (printBtn) {
+      printBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        printPrescriptionDocument(patient, r);
+      });
+    }
 
     const editBtn = li.querySelector('.btn-edit-recipe-card');
     if (editBtn) {
@@ -960,6 +971,9 @@ function renderRecipeBuilder(patient, doctors) {
           <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem; flex-wrap: wrap;">
             ${editingRecipe ? `
               <button type="button" class="btn btn-secondary" id="btn-cancel-edit-recipe">✕ Cancelar Edición</button>
+              <button type="button" class="btn btn-success" id="btn-print-active-recipe" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; background: #10b981; border: none; color: white;">
+                <span>🖨️</span> Imprimir Receta
+              </button>
               <button type="button" class="btn btn-warning" id="btn-approve-recipe" style="font-weight: 700; background: linear-gradient(135deg, #d97706, #f59e0b); color: #000; border: none; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3); display: inline-flex; align-items: center; gap: 6px;">
                 <span>💾</span> Guardar Cambios en Receta
               </button>
@@ -1338,6 +1352,13 @@ function renderRecipeBuilder(patient, doctors) {
 
   const btnCancelEditBottom = document.getElementById('btn-cancel-edit-recipe');
   if (btnCancelEditBottom) btnCancelEditBottom.addEventListener('click', handleCancelEditRecipe);
+
+  const btnPrintActive = document.getElementById('btn-print-active-recipe');
+  if (btnPrintActive && editingRecipe) {
+    btnPrintActive.addEventListener('click', () => {
+      printPrescriptionDocument(patient, editingRecipe);
+    });
+  }
 
   // Bind Aprobar o Guardar Cambios en Receta
   const btnApprove = document.getElementById('btn-approve-recipe');
@@ -1727,11 +1748,16 @@ function showPrescriptionPreviewModal(patient, recipe) {
   }
 
   // Formatear fecha
-  const dateFormatted = new Date(recipe.date).toLocaleDateString('es-GT', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric'
-  });
+  let dateFormatted = 'Reciente';
+  try {
+    if (recipe && recipe.date) {
+      dateFormatted = new Date(recipe.date).toLocaleDateString('es-GT', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+    }
+  } catch(e) {}
 
   // Calcular edad
   const dob = new Date(patient.birthdate || patient.birthDate);
@@ -1778,7 +1804,7 @@ function showPrescriptionPreviewModal(patient, recipe) {
                   </div>
                   <div style="text-align: right;">
                     <strong>Fecha:</strong> ${dateFormatted} ${recipe.updated_at ? '<small style="color: #666;">(Modificada)</small>' : ''}<br>
-                    <strong>No. Receta:</strong> ${recipe.id.replace('r-', '')}
+                    <strong>No. Receta:</strong> ${String(recipe.id || '').replace('r-', '')}
                   </div>
                 </div>
 
@@ -1794,26 +1820,34 @@ function showPrescriptionPreviewModal(patient, recipe) {
                     </tr>
                   </thead>
                   <tbody>
-                    ${(recipe.medicines || []).map(m => `
-                      <tr>
-                        <td style="text-align: left; padding: 12px 8px; vertical-align: top;">
-                          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 3px; flex-wrap: wrap;">
-                            <strong style="color: #000; font-size: 1.15rem; text-transform: uppercase;">${m.name} (${m.presentation})</strong>
-                            ${m.schedule ? `
-                              <span class="prescription-med-schedule" style="font-size: 1.05rem; font-weight: 700; color: #0284c7; white-space: nowrap; font-family: system-ui, -apple-system, sans-serif;">
-                                ${m.schedule}
-                              </span>
-                            ` : ''}
-                          </div>
-                          <div class="prescription-preview-indications" style="text-transform: uppercase; font-size: 0.92rem; color: #222; line-height: 1.4;">
-                            ${m.dosage} — ${m.duration}
-                          </div>
-                        </td>
-                        <td style="text-align: right; font-weight: 700; padding: 12px 8px; font-size: 1.12rem; color: #111; vertical-align: top; text-transform: uppercase;">
-                          ${m.quantity}
-                        </td>
-                      </tr>
-                    `).join('')}
+                    ${(recipe.medicines || []).map(m => {
+                      const medName = typeof m === 'object' ? (m.name || '') : String(m || '');
+                      const medPres = (typeof m === 'object' && m.presentation) ? ` (${m.presentation})` : '';
+                      const medSched = (typeof m === 'object' && m.schedule) ? m.schedule : '';
+                      const medDosage = (typeof m === 'object' && m.dosage) ? m.dosage : '';
+                      const medDur = (typeof m === 'object' && m.duration) ? m.duration : '';
+                      const medQty = (typeof m === 'object' && m.quantity) ? m.quantity : '1';
+                      return `
+                        <tr>
+                          <td style="text-align: left; padding: 12px 8px; vertical-align: top;">
+                            <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 3px; flex-wrap: wrap;">
+                              <strong style="color: #000; font-size: 1.15rem; text-transform: uppercase;">${medName}${medPres}</strong>
+                              ${medSched ? `
+                                <span class="prescription-med-schedule" style="font-size: 1.05rem; font-weight: 700; color: #0284c7; white-space: nowrap; font-family: system-ui, -apple-system, sans-serif;">
+                                  ${medSched}
+                                </span>
+                              ` : ''}
+                            </div>
+                            <div class="prescription-preview-indications" style="text-transform: uppercase; font-size: 0.92rem; color: #222; line-height: 1.4;">
+                              ${medDosage}${medDosage && medDur ? ' — ' : ''}${medDur}
+                            </div>
+                          </td>
+                          <td style="text-align: right; font-weight: 700; padding: 12px 8px; font-size: 1.12rem; color: #111; vertical-align: top; text-transform: uppercase;">
+                            ${medQty}
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
                   </tbody>
                 </table>
 
@@ -1847,11 +1881,340 @@ function showPrescriptionPreviewModal(patient, recipe) {
     </div>
   `;
 
-  // Bind de impresión real
+  // Bind de impresión oficial
   printActionBtn.onclick = () => {
-    window.print();
+    printPrescriptionDocument(patient, recipe);
   };
 
   modal.style.display = 'flex';
 }
+
+// Función para impresión directa, emergente o fallback de receta médica oficial
+export function printPrescriptionDocument(patient, recipe) {
+  if (!recipe || !patient) return;
+
+  const state = getAppState();
+  const clinic = state.clinicInfo || { 
+    name: 'Hospital Privado Multimédica Sayaxché', 
+    address: 'Sayaxché, Petén', 
+    phone: '+502 5555-5555', 
+    email: 'info@multimedica.gt' 
+  };
+
+  let dateFormatted = 'Reciente';
+  try {
+    if (recipe.date) {
+      dateFormatted = new Date(recipe.date).toLocaleDateString('es-GT', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+    }
+  } catch(e) {}
+
+  const dob = new Date(patient.birthdate || patient.birthDate);
+  const age = isNaN(dob.getTime()) ? 'N/D' : Math.abs(new Date(Date.now() - dob.getTime()).getUTCFullYear() - 1970);
+  const recipeNumber = String(recipe.id || '').replace('r-', '');
+
+  const printWindow = window.open('', '_blank');
+  
+  const contentHtml = `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <title>Receta Médica - ${patient.name} - No. ${recipeNumber}</title>
+      <style>
+        @page {
+          size: letter;
+          margin: 15mm;
+        }
+        * {
+          box-sizing: border-box;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        body {
+          margin: 0;
+          padding: 20px;
+          background: #fff;
+          color: #111;
+          font-family: Arial, Helvetica, sans-serif;
+          font-size: 14px;
+          line-height: 1.4;
+        }
+        .prescription-container {
+          max-width: 800px;
+          margin: 0 auto;
+        }
+        .header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 2px solid #222;
+          padding-bottom: 12px;
+          margin-bottom: 16px;
+        }
+        .header-brand {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .clinic-name {
+          font-size: 1.3rem;
+          font-weight: 800;
+          color: #0f172a;
+          margin: 0;
+        }
+        .clinic-sub {
+          font-size: 0.85rem;
+          font-weight: 600;
+          color: #475569;
+          margin-top: 2px;
+        }
+        .clinic-details {
+          text-align: right;
+          font-size: 0.8rem;
+          color: #334155;
+          line-height: 1.4;
+        }
+        .patient-bar {
+          background: #f1f5f9;
+          border-radius: 6px;
+          padding: 10px 14px;
+          margin-bottom: 16px;
+          display: flex;
+          justify-content: space-between;
+          font-size: 0.9rem;
+          border-left: 4px solid #0284c7;
+        }
+        .rx-symbol {
+          font-family: 'Times New Roman', serif;
+          font-size: 2.2rem;
+          font-weight: bold;
+          font-style: italic;
+          color: #0f172a;
+          margin: 10px 0;
+        }
+        table.meds-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 20px;
+        }
+        table.meds-table th {
+          border-bottom: 2px solid #0f172a;
+          padding: 8px 6px;
+          text-align: left;
+          font-size: 0.85rem;
+          font-weight: 800;
+          color: #0f172a;
+        }
+        table.meds-table td {
+          border-bottom: 1px solid #e2e8f0;
+          padding: 12px 6px;
+          vertical-align: top;
+        }
+        .med-name {
+          font-size: 1.1rem;
+          font-weight: 800;
+          color: #000;
+          text-transform: uppercase;
+        }
+        .med-sched {
+          font-size: 1rem;
+          font-weight: 700;
+          color: #0284c7;
+        }
+        .med-dosage {
+          font-size: 0.95rem;
+          color: #334155;
+          margin-top: 3px;
+          text-transform: uppercase;
+        }
+        .med-qty {
+          text-align: right;
+          font-size: 1.1rem;
+          font-weight: 800;
+          color: #000;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+        .indications-box {
+          margin-top: 15px;
+          border-top: 1px dashed #cbd5e1;
+          padding-top: 12px;
+        }
+        .indications-title {
+          font-weight: 700;
+          font-size: 0.95rem;
+          color: #0f172a;
+          margin-bottom: 4px;
+        }
+        .indications-text {
+          margin: 0;
+          font-size: 0.92rem;
+          color: #334155;
+          white-space: pre-wrap;
+          line-height: 1.45;
+        }
+        .footer-sign {
+          margin-top: 50px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+          page-break-inside: avoid;
+        }
+        .sign-line {
+          width: 220px;
+          border-top: 1.5px solid #334155;
+          margin-bottom: 8px;
+        }
+        .doc-name {
+          font-size: 0.95rem;
+          font-weight: 800;
+          color: #000;
+        }
+        .doc-lic {
+          font-size: 0.85rem;
+          color: #475569;
+          margin-top: 2px;
+        }
+        .no-print-bar {
+          background: #0f172a;
+          color: #fff;
+          padding: 10px 16px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 20px;
+          border-radius: 6px;
+        }
+        @media print {
+          .no-print-bar {
+            display: none !important;
+          }
+          body {
+            padding: 0;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="no-print-bar">
+        <span>📄 Vista de Impresión Oficial de Receta Médica</span>
+        <div>
+          <button onclick="window.print()" style="padding: 6px 16px; background: #10b981; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.9rem;">
+            🖨️ Imprimir Ahora
+          </button>
+          <button onclick="window.close()" style="margin-left: 8px; padding: 6px 12px; background: #64748b; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem;">
+            Cerrar
+          </button>
+        </div>
+      </div>
+
+      <div class="prescription-container">
+        <div class="header">
+          <div class="header-brand">
+            ${clinic.logoData 
+              ? `<img src="${clinic.logoData}" style="max-height: 80px; max-width: 200px; object-fit: contain;">` 
+              : `<img src="${logoUrl}" style="max-height: 80px; max-width: 200px; object-fit: contain;">`}
+            <div>
+              <div class="clinic-name">${clinic.name}</div>
+              <div class="clinic-sub">Atención Médica Profesional</div>
+            </div>
+          </div>
+          <div class="clinic-details">
+            📍 ${clinic.address}<br>
+            📞 Tel: ${clinic.phone}<br>
+            ✉️ ${clinic.email}
+          </div>
+        </div>
+
+        <div class="patient-bar">
+          <div>
+            <strong>Paciente:</strong> ${patient.name}<br>
+            <strong>Edad:</strong> ${age} años | <strong>Género:</strong> ${patient.gender || 'No especificado'}
+          </div>
+          <div style="text-align: right;">
+            <strong>Fecha:</strong> ${dateFormatted} ${recipe.updated_at ? '<small>(Modificada)</small>' : ''}<br>
+            <strong>No. Receta:</strong> ${recipeNumber}
+          </div>
+        </div>
+
+        <div class="rx-symbol">Rp.</div>
+
+        <table class="meds-table">
+          <thead>
+            <tr>
+              <th style="width: 72%;">MEDICAMENTO Y DOSIS</th>
+              <th style="width: 28%; text-align: right;">CANTIDAD</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(recipe.medicines || []).map(m => {
+              const medName = typeof m === 'object' ? (m.name || '') : String(m || '');
+              const medPres = (typeof m === 'object' && m.presentation) ? ` (${m.presentation})` : '';
+              const medSched = (typeof m === 'object' && m.schedule) ? m.schedule : '';
+              const medDosage = (typeof m === 'object' && m.dosage) ? m.dosage : '';
+              const medDur = (typeof m === 'object' && m.duration) ? m.duration : '';
+              const medQty = (typeof m === 'object' && m.quantity) ? m.quantity : '1';
+              return `
+                <tr>
+                  <td>
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 10px;">
+                      <span class="med-name">${medName}${medPres}</span>
+                      ${medSched ? `<span class="med-sched">${medSched}</span>` : ''}
+                    </div>
+                    <div class="med-dosage">
+                      ${medDosage}${medDosage && medDur ? ' — ' : ''}${medDur}
+                    </div>
+                  </td>
+                  <td class="med-qty">${medQty}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+
+        ${recipe.indications ? `
+          <div class="indications-box">
+            <div class="indications-title">Indicaciones y Recomendaciones Generales:</div>
+            <p class="indications-text">${recipe.indications}</p>
+          </div>
+        ` : ''}
+
+        <div class="footer-sign">
+          <div class="sign-line"></div>
+          <div class="doc-name">${recipe.doctorName || 'Médico Tratante'}</div>
+          <div class="doc-lic">Colegiado Activo No. ${recipe.doctorLicense || 'N/A'}</div>
+          ${recipe.doctorPhone ? `<div class="doc-lic">Tel: ${recipe.doctorPhone}</div>` : ''}
+        </div>
+      </div>
+
+      <script>
+        window.onload = function() {
+          setTimeout(function() {
+            window.print();
+          }, 350);
+        };
+      </script>
+    </body>
+    </html>
+  `;
+
+  if (printWindow) {
+    printWindow.document.write(contentHtml);
+    printWindow.document.close();
+  } else {
+    // Si el navegador bloqueó la ventana emergente, usamos el modal en pantalla como fallback
+    showPrescriptionPreviewModal(patient, recipe);
+    setTimeout(() => {
+      window.print();
+    }, 400);
+  }
+}
+
+window.printPrescriptionDocument = printPrescriptionDocument;
+window.showPrescriptionPreviewModal = showPrescriptionPreviewModal;
 

@@ -1240,9 +1240,9 @@ tbody tr:hover {
     position: static !important;
     padding: 0 !important;
   }
-  /* Mostrar únicamente el modal de impresión activo */
-  #prescription-print-modal.modal-overlay,
-  #clinical-history-modal.modal-overlay {
+  /* Mostrar únicamente el modal de impresión que esté efectivamente abierto */
+  #prescription-print-modal.modal-overlay:not([style*="display: none"]),
+  #clinical-history-modal.modal-overlay:not([style*="display: none"]) {
     display: block !important;
     position: absolute !important;
     top: 0 !important;
