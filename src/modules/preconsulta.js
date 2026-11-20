@@ -106,9 +106,13 @@ export function renderPreconsulta(container) {
 
   // Escuchar eventos en tiempo real de pacientes (para reflejar nuevos pacientes instantáneamente en todas las estaciones)
   if (!window._preconsultaPatientsChangedHandler) {
+    let _patientsDebounceTimer = null;
     window._preconsultaPatientsChangedHandler = () => {
-      const searchInput = document.getElementById('patient-search');
-      renderPatientList(searchInput ? searchInput.value : '');
+      if (_patientsDebounceTimer) clearTimeout(_patientsDebounceTimer);
+      _patientsDebounceTimer = setTimeout(() => {
+        const searchInput = document.getElementById('patient-search');
+        renderPatientList(searchInput ? searchInput.value : '');
+      }, 50);
     };
     window.addEventListener('patients-changed', window._preconsultaPatientsChangedHandler);
   }
@@ -159,7 +163,11 @@ function renderPatientList(query = '') {
 
   const activeId = getActivePatientId();
 
-  filtered.forEach(p => {
+  // Optimización de rendimiento: Renderizar en bloques para evitar congelar el navegador con cientos de pacientes
+  const displayLimit = query.trim() ? 100 : 50;
+  const itemsToRender = filtered.slice(0, displayLimit);
+
+  itemsToRender.forEach(p => {
     const li = document.createElement('li');
     li.className = `patient-item ${p.id === activeId ? 'selected' : ''}`;
     
@@ -187,6 +195,13 @@ function renderPatientList(query = '') {
     
     listContainer.appendChild(li);
   });
+
+  if (filtered.length > itemsToRender.length) {
+    const infoLi = document.createElement('li');
+    infoLi.style.cssText = 'padding: 8px 12px; color: var(--text-muted); font-size: 0.78rem; text-align: center; border-top: 1px dashed var(--border-color, #e2e8f0); list-style: none;';
+    infoLi.textContent = `Mostrando ${itemsToRender.length} de ${filtered.length} pacientes. Use el buscador para filtrar.`;
+    listContainer.appendChild(infoLi);
+  }
 }
 
 // Mostrar el formulario de nuevo paciente en el área de detalles

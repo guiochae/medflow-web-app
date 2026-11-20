@@ -237,54 +237,60 @@ function loadStateFromLocalCache() {
   firestoreState.isLoaded = true;
 }
 
+let _saveCacheTimer = null;
 export function saveStateToLocalCache() {
-  try {
-    localStorage.setItem('medflow_firestore_cache', JSON.stringify({
-      users: firestoreState.users,
-      patients: firestoreState.patients,
-      medications: firestoreState.medications,
-      pharmacySales: firestoreState.pharmacySales,
-      laboratoryTests: firestoreState.laboratoryTests,
-      imagingStudies: firestoreState.imagingStudies,
-      consultationTypes: firestoreState.consultationTypes,
-      roomRates: firestoreState.roomRates,
-      encamamiento: firestoreState.encamamiento,
-      emergencias: firestoreState.emergencias,
-      bajasInventario: firestoreState.bajasInventario,
-      almacenKardexPEPS: firestoreState.almacenKardexPEPS,
-      recepcionesTecnicas: firestoreState.recepcionesTecnicas,
-      requisicionesHospitalarias: firestoreState.requisicionesHospitalarias,
-      bajasDisposicion: firestoreState.bajasDisposicion,
-      bitacoraTemperatura: firestoreState.bitacoraTemperatura,
-      unidosis24h: firestoreState.unidosis24h,
-      liquidacionesUnidosis: firestoreState.liquidacionesUnidosis,
-      auditoriasInventario: firestoreState.auditoriasInventario,
-      autorizacionesEspeciales: firestoreState.autorizacionesEspeciales,
-      administracion_compras: firestoreState.administracion_compras,
-      administracion_contabilidad: firestoreState.administracion_contabilidad,
-      administracion_rrhh: firestoreState.administracion_rrhh,
-      administracion_caja: firestoreState.administracion_caja,
-      administracion_employees: firestoreState.administracion_employees,
-      administracion_nominas: firestoreState.administracion_nominas,
-      administracion_liquidaciones: firestoreState.administracion_liquidaciones,
-      administracion_bancos: firestoreState.administracion_bancos,
-      administracion_activos_fijos: firestoreState.administracion_activos_fijos,
-      administracion_asistencias: firestoreState.administracion_asistencias,
-      administracion_asistencias_audit: firestoreState.administracion_asistencias_audit,
-      administracion_enfermeria_roles: firestoreState.administracion_enfermeria_roles,
-      administracion_enfermeria_cambios: firestoreState.administracion_enfermeria_cambios,
-      administracion_enfermeria_permisos: firestoreState.administracion_enfermeria_permisos,
-      external_doctors: firestoreState.external_doctors,
-      accounts_payable: firestoreState.accounts_payable,
-      clinicInfo: firestoreState.clinicInfo
-    }));
+  if (_saveCacheTimer) clearTimeout(_saveCacheTimer);
+  _saveCacheTimer = setTimeout(() => {
+    try {
+      // Guardar catálogos y configuraciones. Omitimos 'patients' de localStorage porque
+      // Firestore ya persiste pacientes en IndexedDB nativo y guardar cientos de pacientes
+      // con historiales clínicos excede el límite de 5MB de localStorage y congela la pestaña.
+      localStorage.setItem('medflow_firestore_cache', JSON.stringify({
+        users: firestoreState.users,
+        medications: firestoreState.medications,
+        pharmacySales: firestoreState.pharmacySales,
+        laboratoryTests: firestoreState.laboratoryTests,
+        imagingStudies: firestoreState.imagingStudies,
+        consultationTypes: firestoreState.consultationTypes,
+        roomRates: firestoreState.roomRates,
+        encamamiento: firestoreState.encamamiento,
+        emergencias: firestoreState.emergencias,
+        bajasInventario: firestoreState.bajasInventario,
+        almacenKardexPEPS: firestoreState.almacenKardexPEPS,
+        recepcionesTecnicas: firestoreState.recepcionesTecnicas,
+        requisicionesHospitalarias: firestoreState.requisicionesHospitalarias,
+        bajasDisposicion: firestoreState.bajasDisposicion,
+        bitacoraTemperatura: firestoreState.bitacoraTemperatura,
+        unidosis24h: firestoreState.unidosis24h,
+        liquidacionesUnidosis: firestoreState.liquidacionesUnidosis,
+        auditoriasInventario: firestoreState.auditoriasInventario,
+        autorizacionesEspeciales: firestoreState.autorizacionesEspeciales,
+        administracion_compras: firestoreState.administracion_compras,
+        administracion_contabilidad: firestoreState.administracion_contabilidad,
+        administracion_rrhh: firestoreState.administracion_rrhh,
+        administracion_caja: firestoreState.administracion_caja,
+        administracion_employees: firestoreState.administracion_employees,
+        administracion_nominas: firestoreState.administracion_nominas,
+        administracion_liquidaciones: firestoreState.administracion_liquidaciones,
+        administracion_bancos: firestoreState.administracion_bancos,
+        administracion_activos_fijos: firestoreState.administracion_activos_fijos,
+        administracion_asistencias: firestoreState.administracion_asistencias,
+        administracion_asistencias_audit: firestoreState.administracion_asistencias_audit,
+        administracion_enfermeria_roles: firestoreState.administracion_enfermeria_roles,
+        administracion_enfermeria_cambios: firestoreState.administracion_enfermeria_cambios,
+        administracion_enfermeria_permisos: firestoreState.administracion_enfermeria_permisos,
+        external_doctors: firestoreState.external_doctors,
+        accounts_payable: firestoreState.accounts_payable,
+        clinicInfo: firestoreState.clinicInfo
+      }));
 
-    if (Array.isArray(firestoreState.administracion_liquidaciones) && firestoreState.administracion_liquidaciones.length > 0) {
-      localStorage.setItem('medflow_liquidaciones', JSON.stringify(firestoreState.administracion_liquidaciones));
+      if (Array.isArray(firestoreState.administracion_liquidaciones) && firestoreState.administracion_liquidaciones.length > 0) {
+        localStorage.setItem('medflow_liquidaciones', JSON.stringify(firestoreState.administracion_liquidaciones));
+      }
+    } catch (e) {
+      console.warn("No se pudo guardar en localStorage:", e);
     }
-  } catch (e) {
-    console.warn("No se pudo guardar en localStorage:", e);
-  }
+  }, 300);
 }
 
 // Cargar estado inicial desde caché local por prevención
@@ -392,17 +398,26 @@ export async function deletePatientFromFirestore(patientId) {
   }
 }
 
+let _notifyTimer = null;
 function notifySubscribers() {
   saveStateToLocalCache();
 
-  try {
-    window.dispatchEvent(new CustomEvent('patients-changed', {
-      detail: { patients: firestoreState.patients }
-    }));
-  } catch (e) {}
+  if (_notifyTimer) {
+    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(_notifyTimer);
+    else clearTimeout(_notifyTimer);
+  }
 
-  updateSubscribers.forEach(cb => {
-    try { cb(firestoreState); } catch (err) { console.error(err); }
+  const scheduleFn = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : setTimeout;
+  _notifyTimer = scheduleFn(() => {
+    try {
+      window.dispatchEvent(new CustomEvent('patients-changed', {
+        detail: { patients: firestoreState.patients }
+      }));
+    } catch (e) {}
+
+    updateSubscribers.forEach(cb => {
+      try { cb(firestoreState); } catch (err) { console.error(err); }
+    });
   });
 }
 

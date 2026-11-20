@@ -367,9 +367,9 @@ export async function saveAppState(state) {
   saveStateToLocalCache();
 
   try {
-    // Si lastSyncedState no se ha inicializado, usar objeto vacío para registrar todos los cambios pendientes
+    // Inicializar lastSyncedState con el estado actual si aún no existe
     if (!lastSyncedState) {
-      lastSyncedState = {};
+      lastSyncedState = JSON.parse(JSON.stringify(state));
     }
 
     const batch = writeBatch(db);
@@ -393,18 +393,8 @@ export async function saveAppState(state) {
       hasWrites = true;
     }
 
-    // 1. Sincronizar Pacientes con Firestore (solo modificados)
-    if (state.patients && Array.isArray(state.patients)) {
-      state.patients.forEach(p => {
-        if (p && p.id) {
-          const prevP = lastSyncedState && lastSyncedState.patients && lastSyncedState.patients.find(x => x.id === p.id);
-          const hasChanged = !prevP || JSON.stringify(prevP) !== JSON.stringify(p);
-          if (hasChanged) {
-            addWriteToBatch('patients', p.id, p);
-          }
-        }
-      });
-    }
+    // (Nota: Los pacientes se sincronizan individualmente a través de savePatientToFirestore
+    // para evitar saturar el límite de 500 operaciones por batch y eliminar bloqueos del hilo principal)
 
     // 2. Sincronizar Inventario de Farmacia (Catálogo Completo Empaquetado)
     if (state.medications && Array.isArray(state.medications)) {
@@ -1503,10 +1493,7 @@ document.addEventListener('DOMContentLoaded', () => {
           pBadge.textContent = `${updatedState.patients.length} registrados`;
         }
 
-        // Emitir evento global de actualización de pacientes para sincronización instantánea en vistas activas
-        window.dispatchEvent(new CustomEvent('patients-changed', {
-          detail: { patients: updatedState.patients }
-        }));
+        // (patients-changed ya es emitido de manera optimizada por notifySubscribers en firebase.js)
 
         // Evitar reiniciar el formulario si el usuario está interactuando o escribiendo
         const activeEl = document.activeElement;

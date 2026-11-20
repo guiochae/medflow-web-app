@@ -469,9 +469,13 @@ export function renderConsulta(container) {
 
   // Escuchar cambios de pacientes en tiempo real de otras estaciones
   if (!window._consultaPatientsChangedHandler) {
+    let _consultDebounceTimer = null;
     window._consultaPatientsChangedHandler = () => {
-      const sInput = document.getElementById('consult-patient-search');
-      renderPatientList(sInput ? sInput.value : '');
+      if (_consultDebounceTimer) clearTimeout(_consultDebounceTimer);
+      _consultDebounceTimer = setTimeout(() => {
+        const sInput = document.getElementById('consult-patient-search');
+        renderPatientList(sInput ? sInput.value : '');
+      }, 50);
     };
     window.addEventListener('patients-changed', window._consultaPatientsChangedHandler);
   }
@@ -517,7 +521,11 @@ function renderPatientList(query = '') {
 
   const activeId = getActivePatientId();
 
-  filtered.forEach(p => {
+  // Optimización de rendimiento: Renderizar en bloques para fluidez instantánea
+  const displayLimit = query.trim() ? 100 : 50;
+  const itemsToRender = filtered.slice(0, displayLimit);
+
+  itemsToRender.forEach(p => {
     const li = document.createElement('li');
     li.className = `patient-item ${p.id === activeId ? 'selected' : ''}`;
     
@@ -535,6 +543,13 @@ function renderPatientList(query = '') {
 
     listContainer.appendChild(li);
   });
+
+  if (filtered.length > itemsToRender.length) {
+    const infoLi = document.createElement('li');
+    infoLi.style.cssText = 'padding: 8px 12px; color: var(--text-muted); font-size: 0.78rem; text-align: center; border-top: 1px dashed var(--border-color, #e2e8f0); list-style: none;';
+    infoLi.textContent = `Mostrando ${itemsToRender.length} de ${filtered.length} pacientes. Use el buscador para filtrar.`;
+    listContainer.appendChild(infoLi);
+  }
 }
 
 // Renderizar notificaciones de interconsultas/referencias recibidas para el médico en sesión
