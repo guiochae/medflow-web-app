@@ -1,5 +1,6 @@
 // src/modules/quirofano.js
 import { getAppState, saveAppState, setActivePatientId } from '../main.js';
+import { savePatientToFirestore } from '../firebase.js';
 import { findExistingPatientByDpi, showDuplicatePatientModal } from '../utils/patientDpiValidator.js';
 
 // Catálogo de Procedimientos Quirúrgicos Comunes
@@ -915,7 +916,7 @@ export function renderQuirofano(container) {
 
   const extForm = document.getElementById('q-external-patient-form');
   if (extForm) {
-    extForm.addEventListener('submit', (e) => {
+    extForm.addEventListener('submit', async (e) => {
       e.preventDefault();
 
       const name = document.getElementById('q-ext-name').value.trim();
@@ -975,7 +976,8 @@ export function renderQuirofano(container) {
       };
 
       state.patients.push(newPatient);
-      saveAppState(state);
+      await savePatientToFirestore(newPatient);
+      await saveAppState(state);
       extModal.style.display = 'none';
       alert(`Paciente Externo ${name} registrado con éxito.`);
       renderCandidatos();

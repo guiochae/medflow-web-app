@@ -1,5 +1,6 @@
 // src/modules/consulta.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
+import { savePatientToFirestore } from '../firebase.js';
 import { searchDiagnosticSuggestions } from '../data/cie10.js';
 import { openDocumentViewerModal } from './laboratorio.js';
 import logoUrl from '../assets/logo.jpg';
@@ -465,6 +466,15 @@ export function renderConsulta(container) {
 
   // Inicializar lista de pacientes y cargar paciente seleccionado si existe
   renderPatientList();
+
+  // Escuchar cambios de pacientes en tiempo real de otras estaciones
+  if (!window._consultaPatientsChangedHandler) {
+    window._consultaPatientsChangedHandler = () => {
+      const sInput = document.getElementById('consult-patient-search');
+      renderPatientList(sInput ? sInput.value : '');
+    };
+    window.addEventListener('patients-changed', window._consultaPatientsChangedHandler);
+  }
   
   const activeId = getActivePatientId();
   if (activeId) {

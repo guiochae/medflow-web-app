@@ -367,9 +367,9 @@ export async function saveAppState(state) {
   saveStateToLocalCache();
 
   try {
-    // Si lastSyncedState no se ha inicializado, usar copia del estado actual para solo sincronizar cambios reales
+    // Si lastSyncedState no se ha inicializado, usar objeto vacío para registrar todos los cambios pendientes
     if (!lastSyncedState) {
-      lastSyncedState = JSON.parse(JSON.stringify(state));
+      lastSyncedState = {};
     }
 
     const batch = writeBatch(db);
@@ -1474,11 +1474,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 1. Iniciar Escuchadores en Tiempo Real de Firebase Firestore
   initRealtimeFirestore((initialState) => {
-    const wasModified = migrateLaboratoryTestsCategories(initialState);
-    const wasBackfilled = backfillEmployeeCodes(initialState);
-    if (wasModified || wasBackfilled) {
-      saveAppState(initialState);
-    }
+    migrateLaboratoryTestsCategories(initialState);
+    backfillEmployeeCodes(initialState);
     lastSyncedState = JSON.parse(JSON.stringify(initialState));
     // Suscribir render a cambios en tiempo real
     subscribeToStateUpdates((updatedState) => {
@@ -1500,25 +1497,32 @@ document.addEventListener('DOMContentLoaded', () => {
         updateSidebarInfo(updatedState);
         initQrWidget();
         
-        // Evitar re-renderizar la vista si el usuario está interactuando o escribiendo en un formulario
+        // Actualizar contador visual de pacientes registrados si existe en el DOM
+        const pBadge = document.getElementById('patient-count-badge');
+        if (pBadge && updatedState.patients) {
+          pBadge.textContent = `${updatedState.patients.length} registrados`;
+        }
+
+        // Emitir evento global de actualización de pacientes para sincronización instantánea en vistas activas
+        window.dispatchEvent(new CustomEvent('patients-changed', {
+          detail: { patients: updatedState.patients }
+        }));
+
+        // Evitar reiniciar el formulario si el usuario está interactuando o escribiendo
         const activeEl = document.activeElement;
         const isTyping = activeEl && (
           activeEl.tagName === 'INPUT' || 
           activeEl.tagName === 'TEXTAREA' || 
-          activeEl.tagName === 'SELECT'
+          (activeEl.tagName === 'SELECT' && activeEl.matches(':focus'))
         );
         
         // O si hay algún modal abierto en pantalla
         const isModalOpen = Array.from(document.querySelectorAll('.modal-overlay')).some(m => m.style.display === 'flex');
-        
-        // O si algún input de formulario tiene foco o datos
-        const hasActiveFormInput = Array.from(document.querySelectorAll('form input, form textarea, form select')).some(el => {
-          if (el.id === 'search-patient' || el.id === 'part-time') return false; 
-          return el === activeEl || (el.value !== '' && el.type !== 'submit' && el.type !== 'button' && el.type !== 'hidden' && el.value !== '100');
-        });
 
-        if (isTyping || isModalOpen || hasActiveFormInput) {
-          console.log("[StateUpdate] Usuario está editando. Se pospone la re-renderización automática.");
+        // Solo re-enrutar si no hay formularios activos y si es una ruta administrativa donde los listados no tienen eventos específicos
+        const clinicalRoutes = ['preconsulta', 'consulta', 'recetario'];
+        if (isTyping || isModalOpen || clinicalRoutes.includes(currentRoute)) {
+          console.log("[StateUpdate] Sincronización en segundo plano completada sin interrupción de la interfaz activa.");
         } else {
           router(currentRoute);
         }

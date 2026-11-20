@@ -1,4 +1,5 @@
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
+import { savePatientToFirestore, deletePatientFromFirestore } from '../firebase.js';
 import { showLocalLabReportPrintWindow, openDocumentViewerModal } from './laboratorio.js';
 import { initPartogramaChart } from './partogramaChart.js';
 import { 
@@ -102,6 +103,15 @@ export function renderPreconsulta(container) {
   // Initial render of patient list and detail area
   renderPatientList();
   renderPatientDetails();
+
+  // Escuchar eventos en tiempo real de pacientes (para reflejar nuevos pacientes instantáneamente en todas las estaciones)
+  if (!window._preconsultaPatientsChangedHandler) {
+    window._preconsultaPatientsChangedHandler = () => {
+      const searchInput = document.getElementById('patient-search');
+      renderPatientList(searchInput ? searchInput.value : '');
+    };
+    window.addEventListener('patients-changed', window._preconsultaPatientsChangedHandler);
+  }
 
   // Sincronización automática de estudios pendientes de laboratorio/imagenología hacia el médico vía WhatsApp
   autoSyncAllPendingStudiesFromBridge();
@@ -307,8 +317,14 @@ function showNewPatientForm() {
 
   document.getElementById('btn-cancel-new-patient').addEventListener('click', renderPatientDetails);
 
-  document.getElementById('new-patient-form').addEventListener('submit', (e) => {
+  document.getElementById('new-patient-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Guardando...';
+    }
+
     const stateObj = getAppState();
 
     const bdate = birthdateInput.value;
@@ -326,6 +342,10 @@ function showNewPatientForm() {
     // VALIDACIÓN ESTRICTA ANTI-DUPLICADOS POR DPI
     const existingPatient = findExistingPatientByDpi(finalDpi, stateObj.patients);
     if (existingPatient) {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Guardar Paciente';
+      }
       showDuplicatePatientModal(existingPatient, (selectedPat) => {
         setActivePatientId(selectedPat.id);
         renderPatientList();
@@ -344,18 +364,18 @@ function showNewPatientForm() {
     
     const consultReason = (document.getElementById('p-reason')?.value || '').trim();
     
-    const newId = 'p-' + (stateObj.patients.length + 1) + '-' + Math.random().toString(36).substr(2, 4);
+    const newId = 'p-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
     const newPatient = {
       id: newId,
-      name: document.getElementById('p-name').value,
+      name: document.getElementById('p-name').value.trim(),
       birthdate: bdate,
       gender: document.getElementById('p-gender').value,
       dpi: finalDpi,
       assignedDoctorId: assignedDoctorId,
       assignedDoctorName: assignedDoctorName,
-      telephone: document.getElementById('p-telephone').value,
-      address: document.getElementById('p-address').value,
-      email: document.getElementById('p-email').value || 'No provisto',
+      telephone: document.getElementById('p-telephone').value.trim(),
+      address: document.getElementById('p-address').value.trim(),
+      email: document.getElementById('p-email').value?.trim() || 'No provisto',
       currentReason: consultReason,
       reasonForConsultation: consultReason,
       vitalSigns: [],
@@ -366,8 +386,11 @@ function showNewPatientForm() {
       appointments: []
     };
 
-    stateObj.patients.push(newPatient);
-    saveAppState(stateObj);
+    // 1. Guardar de inmediato en Firestore de forma directa y atómica
+    await savePatientToFirestore(newPatient);
+
+    // 2. Sincronizar estado completo de la aplicación
+    await saveAppState(stateObj);
 
     // Enviar notificación al médico asignado de forma asíncrona a través de WhatsApp local
     const doctorPhone = (docObj && (docObj.phone || docObj.telefono || docObj.whatsapp_number)) || '';
@@ -505,8 +528,14 @@ function showEditPatientForm(patient) {
 
   document.getElementById('btn-cancel-edit-patient').addEventListener('click', renderPatientDetails);
 
-  document.getElementById('edit-patient-form').addEventListener('submit', (e) => {
+  document.getElementById('edit-patient-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Guardando...';
+    }
+
     const stateObj = getAppState();
     const pObj = stateObj.patients.find(p => p.id === patient.id);
     if (!pObj) return;
@@ -526,6 +555,10 @@ function showEditPatientForm(patient) {
     // VALIDACIÓN ESTRICTA ANTI-DUPLICADOS POR DPI AL EDITAR
     const existingPatient = findExistingPatientByDpi(finalDpi, stateObj.patients, patient.id);
     if (existingPatient) {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Guardar Cambios';
+      }
       showDuplicatePatientModal(existingPatient, (selectedPat) => {
         setActivePatientId(selectedPat.id);
         renderPatientList();
@@ -543,15 +576,15 @@ function showEditPatientForm(patient) {
     const docObj = (stateObj.users || []).find(u => u.id === assignedDoctorId);
     const assignedDoctorName = docObj ? docObj.name : 'Dr. Carlos Mendoza';
 
-    pObj.name = document.getElementById('ep-name').value;
+    pObj.name = document.getElementById('ep-name').value.trim();
     pObj.birthdate = bdate;
     pObj.gender = document.getElementById('ep-gender').value;
     pObj.dpi = finalDpi;
     pObj.assignedDoctorId = assignedDoctorId;
     pObj.assignedDoctorName = assignedDoctorName;
-    pObj.telephone = document.getElementById('ep-telephone').value;
-    pObj.email = document.getElementById('ep-email').value || 'No provisto';
-    pObj.address = document.getElementById('ep-address').value;
+    pObj.telephone = document.getElementById('ep-telephone').value.trim();
+    pObj.email = document.getElementById('ep-email').value?.trim() || 'No provisto';
+    pObj.address = document.getElementById('ep-address').value.trim();
 
     const epReasonEl = document.getElementById('ep-reason');
     if (epReasonEl) {
@@ -562,7 +595,9 @@ function showEditPatientForm(patient) {
       patient.reasonForConsultation = epVal;
     }
 
-    saveAppState(stateObj);
+    // Guardar cambios directamente en Firestore de forma atómica
+    await savePatientToFirestore(pObj);
+    await saveAppState(stateObj);
 
     // Si se asignó o modificó el médico asignado, enviar notificación automática por WhatsApp
     if (assignedDoctorId && assignedDoctorId !== prevDoctorId) {
@@ -1081,6 +1116,7 @@ function renderPatientDetails() {
       if (confirmDelete) {
         const stateObj = getAppState();
         stateObj.patients = stateObj.patients.filter(p => p.id !== patient.id);
+        await deletePatientFromFirestore(patient.id);
         await saveAppState(stateObj);
         alert("🗑️ Paciente eliminado exitosamente.");
         setActivePatientId(null);

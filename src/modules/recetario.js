@@ -1,5 +1,6 @@
 // src/modules/recetario.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
+import { savePatientToFirestore } from '../firebase.js';
 import { medicationsDatabase } from '../data/medicamentos.js';
 import { showPastConsultationDetail } from './consulta.js';
 import { syncPatientBilling } from './preconsulta.js';
@@ -348,6 +349,15 @@ export function renderRecetario(container) {
 
   // Inicializar lista
   renderPatientList();
+
+  // Escuchar cambios de pacientes en tiempo real de otras estaciones
+  if (!window._recetarioPatientsChangedHandler) {
+    window._recetarioPatientsChangedHandler = () => {
+      const sInput = document.getElementById('recipe-patient-search');
+      renderPatientList(sInput ? sInput.value : '');
+    };
+    window.addEventListener('patients-changed', window._recetarioPatientsChangedHandler);
+  }
 
   const activeId = getActivePatientId();
   if (activeId && state.patients.some(p => p.id === activeId)) {

@@ -299,8 +299,104 @@ export function subscribeToStateUpdates(callback) {
   }
 }
 
+// Sincronización entre pestañas locales mediante BroadcastChannel
+let crossTabSyncChannel = null;
+try {
+  if (typeof BroadcastChannel !== 'undefined') {
+    crossTabSyncChannel = new BroadcastChannel('medflow_cross_tab_sync');
+    crossTabSyncChannel.onmessage = (event) => {
+      const payload = event.data;
+      if (!payload) return;
+      if (payload.type === 'patient_saved' && payload.patient && payload.patient.id) {
+        if (!firestoreState.patients) firestoreState.patients = [];
+        const idx = firestoreState.patients.findIndex(p => p.id === payload.patient.id);
+        if (idx >= 0) {
+          firestoreState.patients[idx] = { ...firestoreState.patients[idx], ...payload.patient };
+        } else {
+          firestoreState.patients.unshift(payload.patient);
+        }
+        notifySubscribers();
+      } else if (payload.type === 'patient_deleted' && payload.patientId) {
+        if (firestoreState.patients) {
+          firestoreState.patients = firestoreState.patients.filter(p => p.id !== payload.patientId);
+        }
+        notifySubscribers();
+      }
+    };
+  }
+} catch (e) {
+  console.warn("BroadcastChannel error:", e);
+}
+
+function broadcastCrossTab(type, data) {
+  if (crossTabSyncChannel) {
+    try {
+      crossTabSyncChannel.postMessage({ type, ...data, timestamp: Date.now() });
+    } catch (e) {}
+  }
+}
+
+// Guardar paciente de forma directa, atómica e instantánea en Firestore
+export async function savePatientToFirestore(patient) {
+  if (!patient || !patient.id) return false;
+
+  // 1. Actualizar inmediatamente estado local para disponibilidad instantánea
+  if (!firestoreState.patients) firestoreState.patients = [];
+  const idx = firestoreState.patients.findIndex(p => p.id === patient.id);
+  if (idx >= 0) {
+    firestoreState.patients[idx] = { ...firestoreState.patients[idx], ...patient };
+  } else {
+    firestoreState.patients.unshift(patient);
+  }
+
+  // Notificar inmediatamente en esta ventana
+  notifySubscribers();
+
+  // Transmitir a todas las demás pestañas/ventanas abiertas
+  broadcastCrossTab('patient_saved', { patient });
+
+  // 2. Persistir de forma directa en Firestore (multimedica_pacientes)
+  try {
+    const docRef = doc(db, 'multimedica_pacientes', patient.id);
+    await setDoc(docRef, patient, { merge: true });
+    console.log(`[Firestore] Paciente "${patient.name}" (${patient.id}) guardado con éxito.`);
+    return true;
+  } catch (err) {
+    console.warn("[Firestore] Advertencia al guardar paciente directo en la nube:", err);
+    return false;
+  }
+}
+
+// Eliminar paciente de forma directa en Firestore
+export async function deletePatientFromFirestore(patientId) {
+  if (!patientId) return false;
+
+  if (firestoreState.patients) {
+    firestoreState.patients = firestoreState.patients.filter(p => p.id !== patientId);
+  }
+  notifySubscribers();
+  broadcastCrossTab('patient_deleted', { patientId });
+
+  try {
+    const docRef = doc(db, 'multimedica_pacientes', patientId);
+    await deleteDoc(docRef);
+    console.log(`[Firestore] Paciente ${patientId} eliminado de la nube.`);
+    return true;
+  } catch (err) {
+    console.warn("[Firestore] Advertencia al eliminar paciente de la nube:", err);
+    return false;
+  }
+}
+
 function notifySubscribers() {
   saveStateToLocalCache();
+
+  try {
+    window.dispatchEvent(new CustomEvent('patients-changed', {
+      detail: { patients: firestoreState.patients }
+    }));
+  } catch (e) {}
+
   updateSubscribers.forEach(cb => {
     try { cb(firestoreState); } catch (err) { console.error(err); }
   });
@@ -336,41 +432,12 @@ export function initRealtimeFirestore(onFirstLoad) {
   signInAnonymously(auth).then(() => {
     console.log("Firestore autenticado anónimamente.");
 
-    // 1. Escuchador de Usuarios (colección 'multimedica_users')
-    onSnapshot(collection(db, 'multimedica_users'), async (snapshot) => {
+    // 1. Escuchador de Usuarios (colección 'multimedica_users') - Modo solo lectura
+    onSnapshot(collection(db, 'multimedica_users'), (snapshot) => {
       if (snapshot.empty) {
-        const official = getOfficialUsers();
-        firestoreState.users = official;
-        try {
-          const userBatch = writeBatch(db);
-          official.forEach(u => {
-            userBatch.set(doc(db, 'multimedica_users', u.id), u, { merge: true });
-          });
-          await userBatch.commit();
-        } catch (e) {
-          console.warn("No se pudo sembrar usuarios oficiales en Firestore:", e);
-        }
+        firestoreState.users = getOfficialUsers();
       } else {
-        const loadedUsers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        if (loadedUsers.length < 5) {
-          const official = getOfficialUsers();
-          const merged = [...loadedUsers];
-          official.forEach(ou => {
-            if (!merged.some(u => u.id === ou.id)) {
-              merged.push(ou);
-            }
-          });
-          firestoreState.users = merged;
-          try {
-            const userBatch = writeBatch(db);
-            official.forEach(ou => {
-              userBatch.set(doc(db, 'multimedica_users', ou.id), ou, { merge: true });
-            });
-            await userBatch.commit();
-          } catch (e) {}
-        } else {
-          firestoreState.users = loadedUsers;
-        }
+        firestoreState.users = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       }
       notifySubscribers();
       checkFirstLoad();
@@ -391,20 +458,15 @@ export function initRealtimeFirestore(onFirstLoad) {
       checkFirstLoad();
     });
 
-    // 2. Escuchador de Pacientes (colección 'multimedica_pacientes')
-    onSnapshot(collection(db, 'multimedica_pacientes'), async (snapshot) => {
+    // 2. Escuchador de Pacientes (colección 'multimedica_pacientes') - Modo solo lectura
+    onSnapshot(collection(db, 'multimedica_pacientes'), (snapshot) => {
       if (snapshot.empty) {
-        if (medflowDb && Array.isArray(medflowDb.patients) && medflowDb.patients.length > 0) {
-          firestoreState.patients = JSON.parse(JSON.stringify(medflowDb.patients));
-          try {
-            const batch = writeBatch(db);
-            medflowDb.patients.forEach(p => {
-              batch.set(doc(db, 'multimedica_pacientes', p.id), p, { merge: true });
-            });
-            await batch.commit();
-          } catch (e) {}
-        } else {
-          firestoreState.patients = [];
+        if (!firestoreState.patients || firestoreState.patients.length === 0) {
+          if (medflowDb && Array.isArray(medflowDb.patients) && medflowDb.patients.length > 0) {
+            firestoreState.patients = JSON.parse(JSON.stringify(medflowDb.patients));
+          } else {
+            firestoreState.patients = [];
+          }
         }
       } else {
         firestoreState.patients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
