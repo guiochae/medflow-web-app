@@ -1,5 +1,6 @@
 // src/modules/laboratorio.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
+import { savePatientToFirestore } from '../firebase.js';
 import { showPastConsultationDetail } from './consulta.js';
 import { sendLabResultsToDoctor } from '../utils/whatsapp.js';
 import { syncPatientBilling } from './preconsulta.js';
@@ -2527,10 +2528,9 @@ export function openResultsModal(study, customPatient, onSaveCallback) {
         sObj.parameters = [];
 
         try { syncPatientBilling(pObj, stateObj); } catch(e){}
-        await saveAppState(stateObj);
       }
 
-      // Enviar resultados vía WhatsApp al médico asignado automáticamente
+      // Enviar resultados vía WhatsApp al médico asignado de forma única e inmediata al grabar resultados
       try {
         const sendRes = await sendLabResultsToDoctor(doctorName, doctorPhone, customPatient.name, sObj || study, {
           documentUrl: selectedFileData,
@@ -2541,11 +2541,14 @@ export function openResultsModal(study, customPatient, onSaveCallback) {
         if (sendRes && sendRes.success && sObj) {
           sObj.whatsappSentToDoctor = true;
           sObj.whatsappSentAt = new Date().toISOString();
-          await saveAppState(stateObj);
         }
       } catch (waErr) {
         console.warn("Aviso al enviar WhatsApp de resultados:", waErr);
       }
+
+      // Guardar de inmediato paciente en Firestore y sincronizar estado global
+      await savePatientToFirestore(pObj);
+      await saveAppState(stateObj);
 
       alert(`✅ ¡Resultados escaneados guardados exitosamente!\n\nLa orden #${study.id} se ha marcado como COMPLETADA.\nLos resultados ya están disponibles en el expediente del paciente, facturación e historial clínico, y se notificó al médico asignado (${doctorName}).`);
 

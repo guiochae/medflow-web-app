@@ -1293,58 +1293,12 @@ export async function checkAndSend48hAppointmentReminders() {
 }
 
 /**
- * Muestra notificación de fallback si el microservicio de WhatsApp no está disponible
- * para enviar los resultados de laboratorio.
+ * Función silenciosa: no muestra notificaciones emergentes repetidas ni botones flotantes
  */
 function showLabWhatsAppFallbackToast(doctorName, cleanPhone, patientName, order, documentInfo, messageText) {
   const existing = document.getElementById('lab-whatsapp-fallback-toast');
   if (existing) existing.remove();
-
-  const toast = document.createElement('div');
-  toast.id = 'lab-whatsapp-fallback-toast';
-  toast.style.position = 'fixed';
-  toast.style.bottom = '20px';
-  toast.style.right = '20px';
-  toast.style.zIndex = '99999';
-  toast.style.background = 'rgba(23, 23, 37, 0.98)';
-  toast.style.border = '1px solid var(--accent-primary)';
-  toast.style.borderRadius = '8px';
-  toast.style.padding = '16px';
-  toast.style.maxWidth = '400px';
-  toast.style.boxShadow = '0 10px 30px rgba(0,0,0,0.6)';
-  toast.style.color = 'var(--text-primary)';
-  toast.style.fontFamily = 'var(--font-sans)';
-  toast.style.display = 'flex';
-  toast.style.flexDirection = 'column';
-  toast.style.gap = '10px';
-
-  const waUrl = cleanPhone 
-    ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(messageText)}`
-    : `https://wa.me/?text=${encodeURIComponent(messageText)}`;
-
-  toast.innerHTML = `
-    <div style="display: flex; align-items: center; justify-content: space-between;">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="font-size: 1.3rem;">🔬📲</span>
-        <strong style="color: var(--accent-primary); font-size: 0.9rem;">Resultados Listos para el Médico</strong>
-      </div>
-      <button id="btn-close-lab-toast" style="background: none; border: none; color: var(--text-muted); font-size: 1.1rem; cursor: pointer;">&times;</button>
-    </div>
-    <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0; line-height: 1.4;">
-      Se completaron los resultados del paciente <strong>${patientName}</strong> (Orden #${order.id}). Puede enviar el aviso directo al médico vía WhatsApp Web.
-    </p>
-    <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; flex-wrap: wrap;">
-      ${documentInfo.documentUrl ? `
-        <a href="${documentInfo.documentUrl}" download="${documentInfo.fileName || 'Resultados.pdf'}" target="_blank" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border-color); color: var(--text-primary); padding: 6px 12px; border-radius: 4px; font-size: 0.78rem; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">📥 Descargar PDF</a>
-      ` : ''}
-      <a href="${waUrl}" target="_blank" style="background: #25D366; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 0.78rem; font-weight: bold; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">💬 Abrir WhatsApp</a>
-    </div>
-  `;
-
-  document.body.appendChild(toast);
-  const closeBtn = toast.querySelector('#btn-close-lab-toast');
-  if (closeBtn) closeBtn.onclick = () => toast.remove();
-  setTimeout(() => { if (toast.parentNode) toast.remove(); }, 15000);
+  console.info(`[WhatsApp] Envío en segundo plano para ${patientName} no pudo conectar al bridge.`);
 }
 
 /**
@@ -1450,7 +1404,6 @@ export async function sendLabResultsToDoctor(doctorName, doctorPhone, patientNam
     }
   } catch (error) {
     console.warn('⚠️ No se pudo enviar por puente WhatsApp automático:', error.message);
-    showLabWhatsAppFallbackToast(doctorName, cleanPhone, patientName, order, documentInfo, customMessage);
     return { success: false, error: error.message };
   }
 }
