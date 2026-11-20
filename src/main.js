@@ -840,7 +840,7 @@ export async function saveAppState(state) {
     // Confirmar y realizar todas las escrituras de forma atómica en un único lote con timeout de seguridad
     if (hasWrites) {
       const commitTimeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Firestore batch.commit timeout")), 4000)
+        setTimeout(() => reject(new Error("Firestore batch.commit timeout")), 2000)
       );
       await Promise.race([batch.commit(), commitTimeout]);
     }

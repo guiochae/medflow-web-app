@@ -976,11 +976,11 @@ export function renderQuirofano(container) {
       };
 
       state.patients.push(newPatient);
-      await savePatientToFirestore(newPatient);
-      await saveAppState(state);
       extModal.style.display = 'none';
       alert(`Paciente Externo ${name} registrado con éxito.`);
       renderCandidatos();
+      savePatientToFirestore(newPatient).catch(err => console.warn(err));
+      saveAppState(state).catch(err => console.warn(err));
     });
   }
 

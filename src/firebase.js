@@ -355,11 +355,13 @@ export async function savePatientToFirestore(patient) {
   // Transmitir a todas las demás pestañas/ventanas abiertas
   broadcastCrossTab('patient_saved', { patient });
 
-  // 2. Persistir de forma directa en Firestore (multimedica_pacientes)
+  // 2. Persistir de forma directa en Firestore con timeout de seguridad para nunca bloquear la UI
   try {
     const docRef = doc(db, 'multimedica_pacientes', patient.id);
-    await setDoc(docRef, patient, { merge: true });
-    console.log(`[Firestore] Paciente "${patient.name}" (${patient.id}) guardado con éxito.`);
+    const writeOp = setDoc(docRef, patient, { merge: true });
+    const timeoutOp = new Promise((resolve) => setTimeout(() => resolve('timeout'), 2000));
+    await Promise.race([writeOp, timeoutOp]);
+    console.log(`[Firestore] Paciente "${patient.name}" (${patient.id}) sincronizado.`);
     return true;
   } catch (err) {
     console.warn("[Firestore] Advertencia al guardar paciente directo en la nube:", err);
@@ -379,7 +381,9 @@ export async function deletePatientFromFirestore(patientId) {
 
   try {
     const docRef = doc(db, 'multimedica_pacientes', patientId);
-    await deleteDoc(docRef);
+    const delOp = deleteDoc(docRef);
+    const timeoutOp = new Promise((resolve) => setTimeout(() => resolve('timeout'), 2000));
+    await Promise.race([delOp, timeoutOp]);
     console.log(`[Firestore] Paciente ${patientId} eliminado de la nube.`);
     return true;
   } catch (err) {

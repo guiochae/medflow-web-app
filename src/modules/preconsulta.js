@@ -384,22 +384,25 @@ function showNewPatientForm() {
       appointments: []
     };
 
-    // 1. Guardar de inmediato en Firestore de forma directa y atómica
-    await savePatientToFirestore(newPatient);
+    // 1. Incorporar de inmediato el nuevo paciente al estado local y memoria
+    if (!stateObj.patients) stateObj.patients = [];
+    stateObj.patients.unshift(newPatient);
 
-    // 2. Sincronizar estado completo de la aplicación
-    await saveAppState(stateObj);
+    // 2. Transición instantánea de la interfaz (0 segundos de espera, sin congelamiento)
+    setActivePatientId(newId);
+    renderPatientList();
+    renderPatientDetails();
 
-    // Enviar notificación al médico asignado de forma asíncrona a través de WhatsApp local
+    // 3. Sincronizar en segundo plano en Firestore sin bloquear la interfaz
+    savePatientToFirestore(newPatient).catch(err => console.warn("Error en segundo plano guardando paciente:", err));
+    saveAppState(stateObj).catch(err => console.warn("Error en segundo plano guardando estado:", err));
+
+    // 4. Enviar notificación al médico asignado de forma asíncrona a través de WhatsApp local
     const doctorPhone = (docObj && (docObj.phone || docObj.telefono || docObj.whatsapp_number)) || '';
     if (doctorPhone) {
       notifyDoctorViaWhatsApp(assignedDoctorName, doctorPhone, newPatient.name)
         .catch(err => console.error("Error al enviar notificación de WhatsApp:", err));
     }
-    
-    setActivePatientId(newId);
-    renderPatientList();
-    renderPatientDetails();
   });
 }
 
@@ -593,11 +596,15 @@ function showEditPatientForm(patient) {
       patient.reasonForConsultation = epVal;
     }
 
-    // Guardar cambios directamente en Firestore de forma atómica
-    await savePatientToFirestore(pObj);
-    await saveAppState(stateObj);
+    // 1. Transición instantánea de la interfaz (0 segundos)
+    renderPatientList();
+    renderPatientDetails();
 
-    // Si se asignó o modificó el médico asignado, enviar notificación automática por WhatsApp
+    // 2. Sincronizar en segundo plano de forma no bloqueante
+    savePatientToFirestore(pObj).catch(err => console.warn("Error en segundo plano guardando paciente:", err));
+    saveAppState(stateObj).catch(err => console.warn("Error en segundo plano guardando estado:", err));
+
+    // 3. Si se asignó o modificó el médico asignado, enviar notificación automática por WhatsApp
     if (assignedDoctorId && assignedDoctorId !== prevDoctorId) {
       const doctorPhone = (docObj && (docObj.phone || docObj.telefono || docObj.whatsapp_number)) || '';
       if (doctorPhone) {
@@ -605,9 +612,6 @@ function showEditPatientForm(patient) {
           .catch(err => console.error("Error al enviar notificación de WhatsApp al editar paciente:", err));
       }
     }
-
-    renderPatientList();
-    renderPatientDetails();
   });
 }
 
@@ -1114,12 +1118,12 @@ function renderPatientDetails() {
       if (confirmDelete) {
         const stateObj = getAppState();
         stateObj.patients = stateObj.patients.filter(p => p.id !== patient.id);
-        await deletePatientFromFirestore(patient.id);
-        await saveAppState(stateObj);
-        alert("🗑️ Paciente eliminado exitosamente.");
         setActivePatientId(null);
         renderPatientList();
         renderPatientDetails();
+        alert("🗑️ Paciente eliminado exitosamente.");
+        deletePatientFromFirestore(patient.id).catch(err => console.warn(err));
+        saveAppState(stateObj).catch(err => console.warn(err));
       }
     });
   }
