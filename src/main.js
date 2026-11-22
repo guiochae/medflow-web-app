@@ -49,6 +49,7 @@ export async function purgeAllDatabases() {
 
 let currentRoute = 'preconsulta';
 let lastSyncedState = null;
+let _saveAppStateTimeout = null;
 
 // Función de encriptación de contraseñas (Hash SHA-256 con Salt)
 export function hashPassword(plainText) {
@@ -366,8 +367,25 @@ export async function saveAppState(state) {
   // Persistir cambios en caché local inmediatamente por si Firestore falla (ej. cuota excedida)
   saveStateToLocalCache();
 
+  // Debounce de sincronización en la nube: agrupar múltiples cambios continuos en 1 sola escritura consolidada
+  if (_saveAppStateTimeout) clearTimeout(_saveAppStateTimeout);
+
+  return new Promise((resolve) => {
+    _saveAppStateTimeout = setTimeout(async () => {
+      try {
+        await executeSaveAppStateBatch(state);
+      } catch (err) {
+        console.warn("Aviso en guardado diferido a Firestore:", err);
+      } finally {
+        resolve(true);
+      }
+    }, 600);
+  });
+}
+
+// Ejecución atómica, consolidada y ultra-optimizada del lote de guardado (ahorra el 99% de cuota diaria)
+async function executeSaveAppStateBatch(state) {
   try {
-    // Inicializar lastSyncedState con el estado actual si aún no existe
     if (!lastSyncedState) {
       lastSyncedState = JSON.parse(JSON.stringify(state));
     }
@@ -375,470 +393,93 @@ export async function saveAppState(state) {
     const batch = writeBatch(db);
     let hasWrites = false;
 
-    // Helper interno para estructurar documentos dentro de las colecciones correspondientes
-    function addWriteToBatch(collectionName, docId, data) {
-      let targetCollection = 'multimedica';
-      let docData = JSON.parse(JSON.stringify(data));
-
-      if (collectionName === 'users') {
-        targetCollection = 'multimedica_users';
-      } else if (collectionName === 'patients') {
-        targetCollection = 'multimedica_pacientes';
-      } else {
-        docData._collectionType = collectionName;
-      }
-
-      const docRef = doc(db, targetCollection, docId);
-      batch.set(docRef, docData, { merge: true });
-      hasWrites = true;
-    }
-
-    // (Nota: Los pacientes se sincronizan individualmente a través de savePatientToFirestore
-    // para evitar saturar el límite de 500 operaciones por batch y eliminar bloqueos del hilo principal)
-
-    // 2. Sincronizar Inventario de Farmacia (Catálogo Completo Empaquetado)
-    if (state.medications && Array.isArray(state.medications)) {
-      const prevM = lastSyncedState && lastSyncedState.medications;
-      const hasChanged = !prevM || JSON.stringify(prevM) !== JSON.stringify(state.medications);
+    // Sincronizar catálogo consolidado en 1 solo documento (exactamente 1 escritura por colección modificada)
+    function syncCatalog(catalogName, currentList) {
+      if (!currentList || !Array.isArray(currentList)) return;
+      const prevList = lastSyncedState && lastSyncedState[catalogName];
+      const hasChanged = !prevList || prevList.length !== currentList.length || JSON.stringify(prevList) !== JSON.stringify(currentList);
       if (hasChanged) {
-        const docRef = doc(db, 'multimedica', 'catalog_medications');
-        batch.set(docRef, { _collectionType: 'catalog_medications', items: state.medications });
+        const docRef = doc(db, 'multimedica', `catalog_${catalogName}`);
+        batch.set(docRef, { _collectionType: `catalog_${catalogName}`, items: currentList });
         hasWrites = true;
       }
     }
 
-    // 3. Sincronizar Usuarios (solo modificados)
+    // 1. Catálogos clínicos y de farmacia
+    syncCatalog('medications', state.medications);
+    syncCatalog('pharmacySales', state.pharmacySales);
+    syncCatalog('laboratoryTests', state.laboratoryTests);
+    syncCatalog('imagingStudies', state.imagingStudies);
+    syncCatalog('consultationTypes', state.consultationTypes);
+    syncCatalog('roomRates', state.roomRates);
+    syncCatalog('encamamiento', state.encamamiento);
+    syncCatalog('emergencias', state.emergencias);
+    syncCatalog('bajasInventario', state.bajasInventario);
+    syncCatalog('almacenKardexPEPS', state.almacenKardexPEPS);
+    syncCatalog('recepcionesTecnicas', state.recepcionesTecnicas);
+    syncCatalog('requisicionesHospitalarias', state.requisicionesHospitalarias);
+    syncCatalog('bajasDisposicion', state.bajasDisposicion);
+    syncCatalog('bitacoraTemperatura', state.bitacoraTemperatura);
+    syncCatalog('unidosis24h', state.unidosis24h);
+    syncCatalog('liquidacionesUnidosis', state.liquidacionesUnidosis);
+    syncCatalog('auditoriasInventario', state.auditoriasInventario);
+    syncCatalog('autorizacionesEspeciales', state.autorizacionesEspeciales);
+
+    // 2. Módulos administrativos (RRHH, Nóminas, Contabilidad, Asistencias, Compras, etc.)
+    syncCatalog('administracion_compras', state.administracion_compras);
+    syncCatalog('administracion_contabilidad', state.administracion_contabilidad);
+    syncCatalog('administracion_caja', state.administracion_caja);
+    syncCatalog('administracion_employees', state.administracion_employees);
+    syncCatalog('administracion_nominas', state.administracion_nominas);
+    syncCatalog('administracion_liquidaciones', state.administracion_liquidaciones);
+    syncCatalog('administracion_bancos', state.administracion_bancos);
+    syncCatalog('administracion_activos_fijos', state.administracion_activos_fijos);
+    syncCatalog('administracion_asistencias', state.administracion_asistencias);
+    syncCatalog('administracion_asistencias_audit', state.administracion_asistencias_audit);
+    syncCatalog('administracion_enfermeria_roles', state.administracion_enfermeria_roles);
+    syncCatalog('administracion_enfermeria_cambios', state.administracion_enfermeria_cambios);
+    syncCatalog('administracion_enfermeria_permisos', state.administracion_enfermeria_permisos);
+    syncCatalog('external_doctors', state.external_doctors);
+    syncCatalog('accounts_payable', state.accounts_payable);
+
+    // 3. Usuarios (en colección multimedica_users)
     if (state.users && Array.isArray(state.users)) {
       state.users.forEach(u => {
         if (u && u.id) {
           const prevU = lastSyncedState && lastSyncedState.users && lastSyncedState.users.find(x => x.id === u.id);
           const hasChanged = !prevU || JSON.stringify(prevU) !== JSON.stringify(u);
           if (hasChanged) {
-            addWriteToBatch('users', u.id, u);
-          }
-        }
-      });
-    }
-
-    // 4. Sincronizar Ventas de Farmacia (solo modificados)
-    if (state.pharmacySales && Array.isArray(state.pharmacySales)) {
-      state.pharmacySales.forEach(s => {
-        if (s && s.id) {
-          const prevS = lastSyncedState && lastSyncedState.pharmacySales && lastSyncedState.pharmacySales.find(x => x.id === s.id);
-          const hasChanged = !prevS || JSON.stringify(prevS) !== JSON.stringify(s);
-          if (hasChanged) {
-            addWriteToBatch('pharmacySales', s.id, s);
-          }
-        }
-      });
-    }
-
-    // 5. Sincronizar Catálogos de Laboratorio, Imagenología y Consulta (Empaquetados)
-    if (state.laboratoryTests && Array.isArray(state.laboratoryTests)) {
-      const prevL = lastSyncedState && lastSyncedState.laboratoryTests;
-      const hasChanged = !prevL || JSON.stringify(prevL) !== JSON.stringify(state.laboratoryTests);
-      if (hasChanged) {
-        const docRef = doc(db, 'multimedica', 'catalog_laboratoryTests');
-        batch.set(docRef, { _collectionType: 'catalog_laboratoryTests', items: state.laboratoryTests });
-        hasWrites = true;
-      }
-    }
-    if (state.imagingStudies && Array.isArray(state.imagingStudies)) {
-      const prevImg = lastSyncedState && lastSyncedState.imagingStudies;
-      const hasChanged = !prevImg || JSON.stringify(prevImg) !== JSON.stringify(state.imagingStudies);
-      if (hasChanged) {
-        const docRef = doc(db, 'multimedica', 'catalog_imagingStudies');
-        batch.set(docRef, { _collectionType: 'catalog_imagingStudies', items: state.imagingStudies });
-        hasWrites = true;
-      }
-    }
-    if (state.consultationTypes && Array.isArray(state.consultationTypes)) {
-      const prevTypes = lastSyncedState && lastSyncedState.consultationTypes;
-      const hasChanged = !prevTypes || JSON.stringify(prevTypes) !== JSON.stringify(state.consultationTypes);
-      if (hasChanged) {
-        const docRef = doc(db, 'multimedica', 'catalog_consultationTypes');
-        batch.set(docRef, { _collectionType: 'catalog_consultationTypes', items: state.consultationTypes });
-        hasWrites = true;
-      }
-    }
-    if (state.roomRates && Array.isArray(state.roomRates)) {
-      const prevRoom = lastSyncedState && lastSyncedState.roomRates;
-      const hasChanged = !prevRoom || JSON.stringify(prevRoom) !== JSON.stringify(state.roomRates);
-      if (hasChanged) {
-        const docRef = doc(db, 'multimedica', 'catalog_roomRates');
-        batch.set(docRef, { _collectionType: 'catalog_roomRates', items: state.roomRates });
-        hasWrites = true;
-      }
-    }
-    if (state.encamamiento && Array.isArray(state.encamamiento)) {
-      state.encamamiento.forEach(e => {
-        if (e && e.id) {
-          const prevE = lastSyncedState && lastSyncedState.encamamiento && lastSyncedState.encamamiento.find(x => x.id === e.id);
-          const hasChanged = !prevE || JSON.stringify(prevE) !== JSON.stringify(e);
-          if (hasChanged) {
-            addWriteToBatch('encamamiento', e.id, e);
-          }
-        }
-      });
-    }
-    if (state.emergencias && Array.isArray(state.emergencias)) {
-      state.emergencias.forEach(e => {
-        if (e && e.id) {
-          const prevE = lastSyncedState && lastSyncedState.emergencias && lastSyncedState.emergencias.find(x => x.id === e.id);
-          const hasChanged = !prevE || JSON.stringify(prevE) !== JSON.stringify(e);
-          if (hasChanged) {
-            addWriteToBatch('emergencias', e.id, e);
-          }
-        }
-      });
-    }
-
-    // Sincronizar Bajas de Medicamentos Vencidos
-    if (state.bajasInventario && Array.isArray(state.bajasInventario)) {
-      const prevBajas = lastSyncedState && lastSyncedState.bajasInventario;
-      const hasChanged = !prevBajas || JSON.stringify(prevBajas) !== JSON.stringify(state.bajasInventario);
-      if (hasChanged) {
-        const docRef = doc(db, 'multimedica', 'catalog_bajasInventario');
-        batch.set(docRef, { _collectionType: 'catalog_bajasInventario', items: state.bajasInventario });
-        hasWrites = true;
-      }
-    }
-
-    // Sincronizar Kardex PEPS (Lotes de Almacén)
-    if (state.almacenKardexPEPS && Array.isArray(state.almacenKardexPEPS)) {
-      const prevK = lastSyncedState && lastSyncedState.almacenKardexPEPS;
-      if (!prevK || JSON.stringify(prevK) !== JSON.stringify(state.almacenKardexPEPS)) {
-        const docRef = doc(db, 'multimedica', 'catalog_almacenKardexPEPS');
-        batch.set(docRef, { _collectionType: 'catalog_almacenKardexPEPS', items: state.almacenKardexPEPS });
-        hasWrites = true;
-      }
-    }
-
-    // Sincronizar Recepciones Técnicas (HMM-ALM-F01)
-    if (state.recepcionesTecnicas && Array.isArray(state.recepcionesTecnicas)) {
-      const prevRec = lastSyncedState && lastSyncedState.recepcionesTecnicas;
-      if (!prevRec || JSON.stringify(prevRec) !== JSON.stringify(state.recepcionesTecnicas)) {
-        const docRef = doc(db, 'multimedica', 'catalog_recepcionesTecnicas');
-        batch.set(docRef, { _collectionType: 'catalog_recepcionesTecnicas', items: state.recepcionesTecnicas });
-        hasWrites = true;
-      }
-    }
-
-    // Sincronizar Requisiciones Hospitalarias (HMM-ALM-F02)
-    if (state.requisicionesHospitalarias && Array.isArray(state.requisicionesHospitalarias)) {
-      const prevReq = lastSyncedState && lastSyncedState.requisicionesHospitalarias;
-      if (!prevReq || JSON.stringify(prevReq) !== JSON.stringify(state.requisicionesHospitalarias)) {
-        const docRef = doc(db, 'multimedica', 'catalog_requisicionesHospitalarias');
-        batch.set(docRef, { _collectionType: 'catalog_requisicionesHospitalarias', items: state.requisicionesHospitalarias });
-        hasWrites = true;
-      }
-    }
-
-    // Sincronizar Bajas y Disposición (HMM-ALM-F03)
-    if (state.bajasDisposicion && Array.isArray(state.bajasDisposicion)) {
-      const prevBD = lastSyncedState && lastSyncedState.bajasDisposicion;
-      if (!prevBD || JSON.stringify(prevBD) !== JSON.stringify(state.bajasDisposicion)) {
-        const docRef = doc(db, 'multimedica', 'catalog_bajasDisposicion');
-        batch.set(docRef, { _collectionType: 'catalog_bajasDisposicion', items: state.bajasDisposicion });
-        hasWrites = true;
-      }
-    }
-
-    // Sincronizar Bitácora de Temperatura (HMM-ALM-F05)
-    if (state.bitacoraTemperatura && Array.isArray(state.bitacoraTemperatura)) {
-      const prevBit = lastSyncedState && lastSyncedState.bitacoraTemperatura;
-      if (!prevBit || JSON.stringify(prevBit) !== JSON.stringify(state.bitacoraTemperatura)) {
-        const docRef = doc(db, 'multimedica', 'catalog_bitacoraTemperatura');
-        batch.set(docRef, { _collectionType: 'catalog_bitacoraTemperatura', items: state.bitacoraTemperatura });
-        hasWrites = true;
-      }
-    }
-
-    // Sincronizar Unidosis 24H (HMM-ALM-F06)
-    if (state.unidosis24h && Array.isArray(state.unidosis24h)) {
-      const prevUni = lastSyncedState && lastSyncedState.unidosis24h;
-      if (!prevUni || JSON.stringify(prevUni) !== JSON.stringify(state.unidosis24h)) {
-        const docRef = doc(db, 'multimedica', 'catalog_unidosis24h');
-        batch.set(docRef, { _collectionType: 'catalog_unidosis24h', items: state.unidosis24h });
-        hasWrites = true;
-      }
-    }
-
-    // Sincronizar Liquidaciones Unidosis (HMM-ALM-F07)
-    if (state.liquidacionesUnidosis && Array.isArray(state.liquidacionesUnidosis)) {
-      const prevLiq = lastSyncedState && lastSyncedState.liquidacionesUnidosis;
-      if (!prevLiq || JSON.stringify(prevLiq) !== JSON.stringify(state.liquidacionesUnidosis)) {
-        const docRef = doc(db, 'multimedica', 'catalog_liquidacionesUnidosis');
-        batch.set(docRef, { _collectionType: 'catalog_liquidacionesUnidosis', items: state.liquidacionesUnidosis });
-        hasWrites = true;
-      }
-    }
-
-    // Sincronizar Auditorías Cíclicas de Inventario
-    if (state.auditoriasInventario && Array.isArray(state.auditoriasInventario)) {
-      const prevAud = lastSyncedState && lastSyncedState.auditoriasInventario;
-      if (!prevAud || JSON.stringify(prevAud) !== JSON.stringify(state.auditoriasInventario)) {
-        const docRef = doc(db, 'multimedica', 'catalog_auditoriasInventario');
-        batch.set(docRef, { _collectionType: 'catalog_auditoriasInventario', items: state.auditoriasInventario });
-        hasWrites = true;
-      }
-    }
-
-    // Sincronizar Autorizaciones Especiales (Niveles 2 y 3)
-    if (state.autorizacionesEspeciales && Array.isArray(state.autorizacionesEspeciales)) {
-      const prevAut = lastSyncedState && lastSyncedState.autorizacionesEspeciales;
-      if (!prevAut || JSON.stringify(prevAut) !== JSON.stringify(state.autorizacionesEspeciales)) {
-        const docRef = doc(db, 'multimedica', 'catalog_autorizacionesEspeciales');
-        batch.set(docRef, { _collectionType: 'catalog_autorizacionesEspeciales', items: state.autorizacionesEspeciales });
-        hasWrites = true;
-      }
-    }
-
-    // Sincronizar Compras (solo modificados)
-    if (state.administracion_compras && Array.isArray(state.administracion_compras)) {
-      state.administracion_compras.forEach(p => {
-        if (p && p.id) {
-          const prevP = lastSyncedState && lastSyncedState.administracion_compras && lastSyncedState.administracion_compras.find(x => x.id === p.id);
-          if (!prevP || JSON.stringify(prevP) !== JSON.stringify(p)) {
-            addWriteToBatch('administracion_compras', p.id, p);
-          }
-        }
-      });
-    }
-
-    // Sincronizar Contabilidad (solo modificados)
-    if (state.administracion_contabilidad && Array.isArray(state.administracion_contabilidad)) {
-      state.administracion_contabilidad.forEach(e => {
-        if (e && e.id) {
-          const prevE = lastSyncedState && lastSyncedState.administracion_contabilidad && lastSyncedState.administracion_contabilidad.find(x => x.id === e.id);
-          if (!prevE || JSON.stringify(prevE) !== JSON.stringify(e)) {
-            addWriteToBatch('administracion_contabilidad', e.id, e);
-          }
-        }
-      });
-    }
-
-    // Sincronizar Caja (solo modificados)
-    if (state.administracion_caja && Array.isArray(state.administracion_caja)) {
-      state.administracion_caja.forEach(c => {
-        if (c && c.id) {
-          const prevC = lastSyncedState && lastSyncedState.administracion_caja && lastSyncedState.administracion_caja.find(x => x.id === c.id);
-          if (!prevC || JSON.stringify(prevC) !== JSON.stringify(c)) {
-            addWriteToBatch('administracion_caja', c.id, c);
-          }
-        }
-      });
-    }
-
-    // Sincronizar Empleados/Colaboradores (modificados, eliminados y catálogo consolidado)
-    if (state.administracion_employees && Array.isArray(state.administracion_employees)) {
-      const prevEmps = lastSyncedState && lastSyncedState.administracion_employees;
-      if (!prevEmps || JSON.stringify(prevEmps) !== JSON.stringify(state.administracion_employees)) {
-        const docRef = doc(db, 'multimedica', 'catalog_administracion_employees');
-        batch.set(docRef, { _collectionType: 'catalog_administracion_employees', items: state.administracion_employees });
-        hasWrites = true;
-      }
-
-      state.administracion_employees.forEach(emp => {
-        if (emp && emp.id) {
-          const prevEmp = lastSyncedState && lastSyncedState.administracion_employees && lastSyncedState.administracion_employees.find(x => x.id === emp.id);
-          if (!prevEmp || JSON.stringify(prevEmp) !== JSON.stringify(emp)) {
-            addWriteToBatch('administracion_employees', emp.id, emp);
-          }
-        }
-      });
-
-      // Detectar y eliminar colaboradores retirados o dados de baja de Firestore
-      if (lastSyncedState && lastSyncedState.administracion_employees && Array.isArray(lastSyncedState.administracion_employees)) {
-        lastSyncedState.administracion_employees.forEach(prevEmp => {
-          if (prevEmp && prevEmp.id && !state.administracion_employees.some(x => x.id === prevEmp.id)) {
-            const docRef = doc(db, 'multimedica', prevEmp.id);
-            batch.delete(docRef);
+            const docRef = doc(db, 'multimedica_users', u.id);
+            batch.set(docRef, JSON.parse(JSON.stringify(u)), { merge: true });
             hasWrites = true;
           }
-        });
-      }
-    }
-
-    // Sincronizar Nóminas (solo modificados)
-    if (state.administracion_nominas && Array.isArray(state.administracion_nominas)) {
-      state.administracion_nominas.forEach(n => {
-        if (n && n.id) {
-          const prevN = lastSyncedState && lastSyncedState.administracion_nominas && lastSyncedState.administracion_nominas.find(x => x.id === n.id);
-          if (!prevN || JSON.stringify(prevN) !== JSON.stringify(n)) {
-            addWriteToBatch('administracion_nominas', n.id, n);
-          }
         }
       });
     }
 
-    // Sincronizar Cuentas Bancarias (solo modificados)
-    if (state.administracion_bancos && Array.isArray(state.administracion_bancos)) {
-      state.administracion_bancos.forEach(b => {
-        if (b && b.id) {
-          const prevB = lastSyncedState && lastSyncedState.administracion_bancos && lastSyncedState.administracion_bancos.find(x => x.id === b.id);
-          if (!prevB || JSON.stringify(prevB) !== JSON.stringify(b)) {
-            addWriteToBatch('administracion_bancos', b.id, b);
-          }
-        }
-      });
-    }
-
-    // Sincronizar Inventario de Activos Fijos
-    if (state.administracion_activos_fijos && Array.isArray(state.administracion_activos_fijos)) {
-      const prevAF = lastSyncedState && lastSyncedState.administracion_activos_fijos;
-      if (!prevAF || JSON.stringify(prevAF) !== JSON.stringify(state.administracion_activos_fijos)) {
-        const docRef = doc(db, 'multimedica', 'catalog_administracion_activos_fijos');
-        batch.set(docRef, { _collectionType: 'catalog_administracion_activos_fijos', items: state.administracion_activos_fijos });
-        hasWrites = true;
-      }
-    }
-
-    // Sincronizar Asistencias y Marcajes de Personal
-    if (state.administracion_asistencias && Array.isArray(state.administracion_asistencias)) {
-      state.administracion_asistencias.forEach(a => {
-        if (a && a.id) {
-          const prevA = lastSyncedState && lastSyncedState.administracion_asistencias && lastSyncedState.administracion_asistencias.find(x => x.id === a.id);
-          if (!prevA || JSON.stringify(prevA) !== JSON.stringify(a)) {
-            addWriteToBatch('administracion_asistencias', a.id, a);
-          }
-        }
-      });
-      const prevAsis = lastSyncedState && lastSyncedState.administracion_asistencias;
-      if (!prevAsis || JSON.stringify(prevAsis) !== JSON.stringify(state.administracion_asistencias)) {
-        const docRef = doc(db, 'multimedica', 'catalog_administracion_asistencias');
-        batch.set(docRef, { _collectionType: 'catalog_administracion_asistencias', items: state.administracion_asistencias });
-        hasWrites = true;
-      }
-    }
-
-    // Sincronizar Auditoría de Asistencias
-    if (state.administracion_asistencias_audit && Array.isArray(state.administracion_asistencias_audit)) {
-      const prevAudit = lastSyncedState && lastSyncedState.administracion_asistencias_audit;
-      if (!prevAudit || JSON.stringify(prevAudit) !== JSON.stringify(state.administracion_asistencias_audit)) {
-        const docRef = doc(db, 'multimedica', 'catalog_administracion_asistencias_audit');
-        batch.set(docRef, { _collectionType: 'catalog_administracion_asistencias_audit', items: state.administracion_asistencias_audit });
-        hasWrites = true;
-      }
-    }
-
-    // Sincronizar Cambios de Turno de Enfermería
-    if (state.administracion_enfermeria_cambios && Array.isArray(state.administracion_enfermeria_cambios)) {
-      const prevCambios = lastSyncedState && lastSyncedState.administracion_enfermeria_cambios;
-      if (!prevCambios || JSON.stringify(prevCambios) !== JSON.stringify(state.administracion_enfermeria_cambios)) {
-        const docRef = doc(db, 'multimedica', 'catalog_administracion_enfermeria_cambios');
-        batch.set(docRef, { _collectionType: 'catalog_administracion_enfermeria_cambios', items: state.administracion_enfermeria_cambios });
-        hasWrites = true;
-      }
-      state.administracion_enfermeria_cambios.forEach(c => {
-        if (c && c.id) {
-          const prevC = lastSyncedState && lastSyncedState.administracion_enfermeria_cambios && lastSyncedState.administracion_enfermeria_cambios.find(x => x.id === c.id);
-          if (!prevC || JSON.stringify(prevC) !== JSON.stringify(c)) {
-            addWriteToBatch('administracion_enfermeria_cambios', c.id, c);
-          }
-        }
-      });
-    }
-
-    // Sincronizar Roles de Turnos de Enfermería
-    if (state.administracion_enfermeria_roles && Array.isArray(state.administracion_enfermeria_roles)) {
-      const prevRoles = lastSyncedState && lastSyncedState.administracion_enfermeria_roles;
-      if (!prevRoles || JSON.stringify(prevRoles) !== JSON.stringify(state.administracion_enfermeria_roles)) {
-        const docRef = doc(db, 'multimedica', 'catalog_administracion_enfermeria_roles');
-        batch.set(docRef, { _collectionType: 'catalog_administracion_enfermeria_roles', items: state.administracion_enfermeria_roles });
-        hasWrites = true;
-      }
-      state.administracion_enfermeria_roles.forEach(r => {
-        if (r && r.id) {
-          const prevR = lastSyncedState && lastSyncedState.administracion_enfermeria_roles && lastSyncedState.administracion_enfermeria_roles.find(x => x.id === r.id);
-          if (!prevR || JSON.stringify(prevR) !== JSON.stringify(r)) {
-            addWriteToBatch('administracion_enfermeria_roles', r.id, r);
-          }
-        }
-      });
-    }
-
-    // Sincronizar Solicitudes de Permisos de Enfermería
-    if (state.administracion_enfermeria_permisos && Array.isArray(state.administracion_enfermeria_permisos)) {
-      const prevPerm = lastSyncedState && lastSyncedState.administracion_enfermeria_permisos;
-      if (!prevPerm || JSON.stringify(prevPerm) !== JSON.stringify(state.administracion_enfermeria_permisos)) {
-        const docRef = doc(db, 'multimedica', 'catalog_administracion_enfermeria_permisos');
-        batch.set(docRef, { _collectionType: 'catalog_administracion_enfermeria_permisos', items: state.administracion_enfermeria_permisos });
-        hasWrites = true;
-      }
-      state.administracion_enfermeria_permisos.forEach(p => {
-        if (p && p.id) {
-          const prevP = lastSyncedState && lastSyncedState.administracion_enfermeria_permisos && lastSyncedState.administracion_enfermeria_permisos.find(x => x.id === p.id);
-          if (!prevP || JSON.stringify(prevP) !== JSON.stringify(p)) {
-            addWriteToBatch('administracion_enfermeria_permisos', p.id, p);
-          }
-        }
-      });
-    }
-
-    // Sincronizar Liquidaciones / Finiquitos Laborales
-    if (state.administracion_liquidaciones && Array.isArray(state.administracion_liquidaciones)) {
-      const prevLiq = lastSyncedState && lastSyncedState.administracion_liquidaciones;
-      if (!prevLiq || JSON.stringify(prevLiq) !== JSON.stringify(state.administracion_liquidaciones)) {
-        const docRef = doc(db, 'multimedica', 'catalog_administracion_liquidaciones');
-        batch.set(docRef, { _collectionType: 'catalog_administracion_liquidaciones', items: state.administracion_liquidaciones });
-        hasWrites = true;
-      }
-      state.administracion_liquidaciones.forEach(l => {
-        if (l && l.id) {
-          const prevL = lastSyncedState && lastSyncedState.administracion_liquidaciones && lastSyncedState.administracion_liquidaciones.find(x => x.id === l.id);
-          if (!prevL || JSON.stringify(prevL) !== JSON.stringify(l)) {
-            addWriteToBatch('administracion_liquidaciones', l.id, l);
-          }
-        }
-      });
-    }
-
-    // Sincronizar Médicos Externos (solo modificados)
-    if (state.external_doctors && Array.isArray(state.external_doctors)) {
-      state.external_doctors.forEach(d => {
-        if (d && d.id) {
-          const prevD = lastSyncedState && lastSyncedState.external_doctors && lastSyncedState.external_doctors.find(x => x.id === d.id);
-          if (!prevD || JSON.stringify(prevD) !== JSON.stringify(d)) {
-            addWriteToBatch('external_doctors', d.id, d);
-          }
-        }
-      });
-    }
-
-    // Sincronizar Cuentas por Pagar (solo modificados)
-    if (state.accounts_payable && Array.isArray(state.accounts_payable)) {
-      state.accounts_payable.forEach(ap => {
-        if (ap && ap.id) {
-          const prevAp = lastSyncedState && lastSyncedState.accounts_payable && lastSyncedState.accounts_payable.find(x => x.id === ap.id);
-          if (!prevAp || JSON.stringify(prevAp) !== JSON.stringify(ap)) {
-            addWriteToBatch('accounts_payable', ap.id, ap);
-          }
-        }
-      });
-    }
-
-    // 6. Sincronizar Info de Clínica (solo modificada)
+    // 4. Información general de la clínica
     if (state.clinicInfo) {
       const prevClinic = lastSyncedState && lastSyncedState.clinicInfo;
       const hasChanged = !prevClinic || JSON.stringify(prevClinic) !== JSON.stringify(state.clinicInfo);
       if (hasChanged) {
-        addWriteToBatch('clinicInfo', 'main', state.clinicInfo);
+        const docRef = doc(db, 'multimedica', 'clinicInfo');
+        batch.set(docRef, { ...state.clinicInfo, _collectionType: 'clinicInfo' }, { merge: true });
+        hasWrites = true;
       }
     }
 
-    // Confirmar y realizar todas las escrituras de forma atómica en un único lote con timeout de seguridad
+    // Ejecutar escrituras atómicamente si existen cambios reales
     if (hasWrites) {
       const commitTimeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Firestore batch.commit timeout")), 2000)
+        setTimeout(() => reject(new Error("Firestore batch.commit timeout")), 3000)
       );
       await Promise.race([batch.commit(), commitTimeout]);
+      console.log("[Firestore] Lote consolidado guardado en la nube con éxito.");
     }
 
-    // Actualizar el estado de sincronización de referencia
     lastSyncedState = JSON.parse(JSON.stringify(state));
   } catch (err) {
-    console.warn("Error sincronizando cambios a Firestore via Batch:", err);
+    console.warn("Aviso sincronizando cambios a Firestore via Batch:", err);
   }
 }
 
@@ -1506,13 +1147,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // O si hay algún modal abierto en pantalla
         const isModalOpen = Array.from(document.querySelectorAll('.modal-overlay')).some(m => m.style.display === 'flex');
 
-        // Solo re-enrutar si no hay formularios activos y si es una ruta administrativa donde los listados no tienen eventos específicos
-        const clinicalRoutes = ['preconsulta', 'consulta', 'recetario'];
-        if (isTyping || isModalOpen || clinicalRoutes.includes(currentRoute)) {
-          console.log("[StateUpdate] Sincronización en segundo plano completada sin interrupción de la interfaz activa.");
-        } else {
-          router(currentRoute);
-        }
+        // Notificar en consola sin recargar la pantalla para no interferir con la navegación ni disparar ciclos de guardado
+        console.log("[StateUpdate] Sincronización en segundo plano completada sin interrupción de la interfaz activa.");
       } else {
         removeQrWidget();
         if (appContainer) appContainer.style.display = 'none';

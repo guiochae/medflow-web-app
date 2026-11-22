@@ -585,11 +585,7 @@ export async function recordAttendance({ employeeCode, type, method = 'QR', ipAd
   // 4. Guardar de forma atómica y esperada en Firestore (con timeout de protección para red móvil lenta)
   const firestoreSavePromise = (async () => {
     try {
-      // 4.1 Guardar documento individual independiente
-      const indRef = doc(db, 'multimedica', newAttendance.id);
-      await setDoc(indRef, { ...newAttendance, _collectionType: 'administracion_asistencias' }, { merge: true });
-
-      // 4.2 Actualización no destructiva del catálogo consolidado
+      // 4. Actualización consolidada del catálogo de asistencias (exactamente 1 escritura en Firestore)
       try {
         let mergedItems = [...state.administracion_asistencias];
         const catSnap = await getDoc(doc(db, 'multimedica', 'catalog_administracion_asistencias'));

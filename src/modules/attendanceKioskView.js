@@ -1360,13 +1360,7 @@ function initSupervisorPinModal() {
           }
           emp.face_enrolled_at = new Date().toISOString();
 
-          // Guardar asíncrono en Firestore en segundo plano
-          saveStateToLocalCache();
-          const docRef = doc(db, 'multimedica', 'catalog_administracion_employees');
-          setDoc(docRef, { _collectionType: 'catalog_administracion_employees', items: state.administracion_employees }, { merge: true }).catch(console.warn);
-
-          const indRef = doc(db, 'multimedica', emp.id);
-          setDoc(indRef, { ...emp, _collectionType: 'administracion_employees' }, { merge: true }).catch(console.warn);
+          // Guardar en segundo plano de forma consolidada
           saveAppState(state).catch(console.warn);
 
           playAttendanceFeedbackSound('success');

@@ -2144,11 +2144,6 @@ function openFaceEnrollmentModal(emp, state, onComplete) {
         delete emp.face_photo;
         delete emp.face_enrolled_at;
 
-        saveStateToLocalCache();
-        const docRef = doc(db, 'multimedica', 'catalog_administracion_employees');
-        setDoc(docRef, { _collectionType: 'catalog_administracion_employees', items: state.administracion_employees }, { merge: true });
-        const indRef = doc(db, 'multimedica', emp.id);
-        setDoc(indRef, { ...emp, _collectionType: 'administracion_employees' }, { merge: true });
         saveAppState(state).catch(console.warn);
 
         alert(`Biometría facial eliminada para ${emp.name}.`);
@@ -2240,11 +2235,6 @@ function openFaceEnrollmentModal(emp, state, onComplete) {
       playAttendanceFeedbackSound('success');
 
       // 5. Guardado asíncrono en Firestore en segundo plano (no bloquea al usuario)
-      saveStateToLocalCache();
-      const docRef = doc(db, 'multimedica', 'catalog_administracion_employees');
-      setDoc(docRef, { _collectionType: 'catalog_administracion_employees', items: state.administracion_employees }, { merge: true }).catch(console.warn);
-      const indRef = doc(db, 'multimedica', emp.id);
-      setDoc(indRef, { ...emp, _collectionType: 'administracion_employees' }, { merge: true }).catch(console.warn);
       saveAppState(state).catch(console.warn);
 
       // Cerrar modal rápidamente en 500ms

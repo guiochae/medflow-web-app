@@ -677,6 +677,18 @@ export function initRealtimeFirestore(onFirstLoad) {
           payables.push(...(dData.items || []));
           return;
         }
+        if (dId === 'catalog_pharmacySales') {
+          sales.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_encamamiento') {
+          encamamientosList.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_emergencias') {
+          emergenciasList.push(...(dData.items || []));
+          return;
+        }
 
         const cleanDoc = { id: dId, ...dData };
         delete cleanDoc._collectionType;
@@ -717,14 +729,24 @@ export function initRealtimeFirestore(onFirstLoad) {
         else if (type === 'clinicInfo') clinic = cleanDoc;
       });
 
-      firestoreState.medications = meds;
-      firestoreState.pharmacySales = sales;
-      firestoreState.laboratoryTests = labs;
-      firestoreState.imagingStudies = imgs;
-      firestoreState.consultationTypes = types;
-      firestoreState.roomRates = roomRatesList;
-      firestoreState.encamamiento = encamamientosList;
-      firestoreState.emergencias = emergenciasList;
+      const dedupeList = (arr) => {
+        const seen = new Set();
+        return (arr || []).filter(item => {
+          if (!item || !item.id) return false;
+          if (seen.has(item.id)) return false;
+          seen.add(item.id);
+          return true;
+        });
+      };
+
+      firestoreState.medications = dedupeList(meds);
+      firestoreState.pharmacySales = dedupeList(sales);
+      firestoreState.laboratoryTests = dedupeList(labs);
+      firestoreState.imagingStudies = dedupeList(imgs);
+      firestoreState.consultationTypes = dedupeList(types);
+      firestoreState.roomRates = dedupeList(roomRatesList);
+      firestoreState.encamamiento = dedupeList(encamamientosList);
+      firestoreState.emergencias = dedupeList(emergenciasList);
       firestoreState.bajasInventario = bajasList;
       firestoreState.almacenKardexPEPS = kardexList;
       firestoreState.recepcionesTecnicas = recepcionesList;
@@ -1088,6 +1110,18 @@ export function initRealtimeFirestore(onFirstLoad) {
               payables.push(...(dData.items || []));
               return;
             }
+            if (dId === 'catalog_pharmacySales') {
+              sales.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_encamamiento') {
+              encamamientosList.push(...(dData.items || []));
+              return;
+            }
+            if (dId === 'catalog_emergencias') {
+              emergenciasList.push(...(dData.items || []));
+              return;
+            }
 
             const cleanDoc = { id: dId, ...dData };
             delete cleanDoc._collectionType;
@@ -1128,14 +1162,24 @@ export function initRealtimeFirestore(onFirstLoad) {
             else if (type === 'clinicInfo') clinic = cleanDoc;
           });
 
-          firestoreState.medications = meds;
-          firestoreState.pharmacySales = sales;
-          firestoreState.laboratoryTests = labs;
-          firestoreState.imagingStudies = imgs;
-          firestoreState.consultationTypes = types;
-          firestoreState.roomRates = roomRatesList;
-          firestoreState.encamamiento = encamamientosList;
-          firestoreState.emergencias = emergenciasList;
+          const dedupeList = (arr) => {
+            const seen = new Set();
+            return (arr || []).filter(item => {
+              if (!item || !item.id) return false;
+              if (seen.has(item.id)) return false;
+              seen.add(item.id);
+              return true;
+            });
+          };
+
+          firestoreState.medications = dedupeList(meds);
+          firestoreState.pharmacySales = dedupeList(sales);
+          firestoreState.laboratoryTests = dedupeList(labs);
+          firestoreState.imagingStudies = dedupeList(imgs);
+          firestoreState.consultationTypes = dedupeList(types);
+          firestoreState.roomRates = dedupeList(roomRatesList);
+          firestoreState.encamamiento = dedupeList(encamamientosList);
+          firestoreState.emergencias = dedupeList(emergenciasList);
           firestoreState.bajasInventario = bajasList;
           firestoreState.almacenKardexPEPS = kardexList;
           firestoreState.recepcionesTecnicas = recepcionesList;
