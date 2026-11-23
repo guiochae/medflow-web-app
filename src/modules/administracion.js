@@ -2253,7 +2253,7 @@ function openFaceEnrollmentModal(emp, state, onComplete) {
 }
 
 // Vista Preliminar e Impresión de Nómina
-function showPayrollPrintPreview(payroll, state) {
+export function showPayrollPrintPreview(payroll, state, initialMode = 'all') {
   const modal = document.getElementById('prescription-print-modal');
   const modalTitle = modal ? modal.querySelector('.modal-header h2') : null;
   const previewContainer = document.getElementById('prescription-preview-content');
@@ -2268,7 +2268,9 @@ function showPayrollPrintPreview(payroll, state) {
 
   const clinic = state.clinicInfo || {};
   const logoUrl = 'assets/logo-Db6-vjaU.jpg';
-  const dateFormatted = new Date(payroll.date).toLocaleDateString('es-GT', {
+  const dateFormatted = payroll.date ? new Date(payroll.date).toLocaleDateString('es-GT', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  }) : new Date().toLocaleDateString('es-GT', {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
   });
 
@@ -2530,6 +2532,9 @@ function showPayrollPrintPreview(payroll, state) {
   if (btnModeVouchers) btnModeVouchers.onclick = () => updatePrintMode('vouchers');
   if (btnModeMaster) btnModeMaster.onclick = () => updatePrintMode('master');
 
+  // Inicializar en el modo solicitado ('all', 'vouchers', 'master')
+  updatePrintMode(initialMode || 'all');
+
   printActionBtn.onclick = () => {
     window.print();
   };
@@ -2620,18 +2625,18 @@ function renderRrhhNomina(container, state) {
 
   const parts = selectedPayrollMonth.split(' ');
   const monthName = parts[0].toLowerCase();
-  const year = parseInt(parts[1]);
+  const year = parseInt(parts[1], 10) || 2026;
   
   const monthMap = {
     enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5,
     julio: 6, agosto: 7, septiembre: 8, octubre: 9, noviembre: 10, diciembre: 11
   };
-  const monthIndex = monthMap[monthName];
+  const monthIndex = monthMap[monthName] !== undefined ? monthMap[monthName] : 10;
   const totalDays = new Date(year, monthIndex + 1, 0).getDate();
 
   // Helper para obtener el sueldo prorrateado si ingresó a trabajar a mitad del mes
   const getProratedSalary = (emp) => {
-    let baseSalary = emp.salary;
+    let baseSalary = emp.salary || 0;
     if (emp.hireDate) {
       const hireDate = new Date(emp.hireDate);
       const hireYear = hireDate.getUTCFullYear();
@@ -2645,6 +2650,40 @@ function renderRrhhNomina(container, state) {
     }
     return baseSalary;
   };
+
+  // Ordenar nóminas en orden cronológico descendente (el mes más reciente al principio)
+  const monthOrderMap = {
+    enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
+    julio: 7, agosto: 8, septiembre: 9, octubre: 10, noviembre: 11, diciembre: 12
+  };
+  const parsePayrollMonth = (monthStr) => {
+    if (!monthStr) return { year: 0, month: 0 };
+    const p = String(monthStr).trim().toLowerCase().split(/\s+/);
+    const m = monthOrderMap[p[0]] || 0;
+    const y = parseInt(p[1], 10) || 0;
+    return { year: y, month: m };
+  };
+
+  const sortedNominas = [...state.administracion_nominas].sort((a, b) => {
+    const pA = parsePayrollMonth(a.month);
+    const pB = parsePayrollMonth(b.month);
+    if (pA.year !== pB.year) return pB.year - pA.year;
+    if (pA.month !== pB.month) return pB.month - pA.month;
+    const dateA = a.date ? new Date(a.date).getTime() : 0;
+    const dateB = b.date ? new Date(b.date).getTime() : 0;
+    return dateB - dateA;
+  });
+
+  // Verificar si la nómina del mes actual ya fue generada y archivada
+  const existingPayroll = sortedNominas.find(n => {
+    if (!n || !n.month) return false;
+    return n.month.trim().toLowerCase() === selectedPayrollMonth.trim().toLowerCase();
+  });
+
+  // Si ya fue cerrada, mostrar la lista de empleados guardada en la nómina para reflejar montos y descuentos archivados
+  const displayEmployees = (existingPayroll && Array.isArray(existingPayroll.employees) && existingPayroll.employees.length > 0)
+    ? existingPayroll.employees
+    : employees;
 
   container.innerHTML = `
     <!-- Barra Superior de Sub-Pestañas de Nómina -->
@@ -2666,10 +2705,15 @@ function renderRrhhNomina(container, state) {
       
       <!-- Creador de Nómina -->
       <div class="glass-card" style="padding: 1.25rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-          <h3 style="font-size: 1rem; color: var(--accent-primary); margin: 0;">Planilla de Sueldos Mensual</h3>
-          <div style="display: flex; gap: 8px;">
-            <select id="payroll-month" class="form-control" style="padding: 4px 8px; font-size: 0.85rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <h3 style="font-size: 1.05rem; color: var(--accent-primary); margin: 0; font-weight: 700;">Planilla de Sueldos Mensual</h3>
+            <p style="margin: 2px 0 0 0; font-size: 0.75rem; color: var(--text-muted);">
+              ${existingPayroll ? `Nómina cerrada de <strong style="color: var(--accent-secondary);">${selectedPayrollMonth}</strong> (${existingPayroll.employees.length} colaboradores)` : `Cálculo y preparación para <strong style="color: var(--accent-secondary);">${selectedPayrollMonth}</strong>`}
+            </p>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <select id="payroll-month" class="form-control" style="padding: 5px 8px; font-size: 0.85rem; font-weight: 600;">
               <option value="Enero 2026" ${selectedPayrollMonth === 'Enero 2026' ? 'selected' : ''}>Enero 2026</option>
               <option value="Febrero 2026" ${selectedPayrollMonth === 'Febrero 2026' ? 'selected' : ''}>Febrero 2026</option>
               <option value="Marzo 2026" ${selectedPayrollMonth === 'Marzo 2026' ? 'selected' : ''}>Marzo 2026</option>
@@ -2683,9 +2727,50 @@ function renderRrhhNomina(container, state) {
               <option value="Noviembre 2026" ${selectedPayrollMonth === 'Noviembre 2026' ? 'selected' : ''}>Noviembre 2026</option>
               <option value="Diciembre 2026" ${selectedPayrollMonth === 'Diciembre 2026' ? 'selected' : ''}>Diciembre 2026</option>
             </select>
-            <button class="btn btn-primary btn-small" id="btn-generate-payroll"><span>⚙️</span> Procesar Planilla</button>
+            ${existingPayroll ? `
+              <button class="btn btn-primary btn-small btn-open-payroll-modal" data-id="${existingPayroll.id}" style="padding: 6px 14px; font-size: 0.85rem; font-weight: 600; background: linear-gradient(135deg, #0284c7, #0369a1); border: 1px solid #38bdf8; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(2, 132, 199, 0.35);">
+                <span>👁️</span> <span>Ver e Imprimir Nómina</span>
+              </button>
+              <button class="btn btn-secondary btn-small btn-open-vouchers-modal" data-id="${existingPayroll.id}" style="padding: 6px 12px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 5px;">
+                <span>🎟️</span> <span>Vouchers</span>
+              </button>
+              <button class="btn btn-secondary btn-small" id="btn-reprocess-payroll" style="padding: 5px 8px; font-size: 0.78rem; opacity: 0.85;" title="Recalcular con las modificaciones actuales">
+                <span>🔄</span> <span>Recalcular</span>
+              </button>
+            ` : `
+              <button class="btn btn-secondary btn-small" id="btn-preview-draft-payroll" style="padding: 6px 12px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 5px;">
+                <span>👁️</span> <span>Vista Previa</span>
+              </button>
+              <button class="btn btn-primary btn-small" id="btn-generate-payroll" style="padding: 6px 14px; font-size: 0.85rem; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+                <span>⚙️</span> <span>Procesar Planilla</span>
+              </button>
+            `}
           </div>
         </div>
+
+        ${existingPayroll ? `
+          <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(6, 182, 212, 0.12)); border: 1.5px solid #10b981; border-radius: 8px; padding: 12px 16px; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 1.6rem;">✅</span>
+              <div>
+                <div style="font-weight: 700; color: #10b981; font-size: 0.95rem;">
+                  Nómina de ${selectedPayrollMonth} Emitida y Cerrada
+                </div>
+                <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
+                  Fecha de Emisión: <strong>${new Date(existingPayroll.date).toLocaleDateString('es-GT', { day: '2-digit', month: 'short', year: 'numeric' })}</strong> &bull; Total Neto: <strong style="color: var(--accent-secondary); font-family: var(--font-mono); font-size: 0.95rem;">Q${parseFloat(existingPayroll.totalNet).toFixed(2)}</strong> &bull; <strong>${(existingPayroll.employees || []).length}</strong> colaboradores incluidos
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <button class="btn btn-primary btn-small btn-open-payroll-modal" data-id="${existingPayroll.id}" style="font-size: 0.85rem; padding: 6px 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+                <span>👁️</span> <span>Ver e Imprimir Planilla</span>
+              </button>
+              <button class="btn btn-secondary btn-small btn-open-vouchers-modal" data-id="${existingPayroll.id}" style="font-size: 0.85rem; padding: 6px 12px; display: inline-flex; align-items: center; gap: 5px;">
+                <span>🎟️</span> <span>Vouchers (6 por hoja)</span>
+              </button>
+            </div>
+          </div>
+        ` : ''}
 
         <div style="background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 6px; padding: 8px 12px; margin-bottom: 1rem; font-size: 0.78rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px;">
           <span style="font-size: 1rem;">🩺</span>
@@ -2704,19 +2789,19 @@ function renderRrhhNomina(container, state) {
               </tr>
             </thead>
             <tbody>
-              ${employees.length === 0 
+              ${displayEmployees.length === 0 
                 ? `<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted); font-style: italic;">No hay colaboradores activos para liquidar nómina.</td></tr>`
-                : employees.map(emp => {
-                    const proratedSalary = getProratedSalary(emp);
-                    const discount = 0;
-                    const net = proratedSalary - discount;
+                : displayEmployees.map(emp => {
+                    const proratedSalary = emp.salary !== undefined ? parseFloat(emp.salary) : getProratedSalary(emp);
+                    const discount = emp.discount !== undefined ? parseFloat(emp.discount) : 0;
+                    const net = emp.netSalary !== undefined ? parseFloat(emp.netSalary) : Math.max(0, proratedSalary - discount);
                     return `
                       <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
                         <td style="padding: 6px;"><strong>${emp.name}</strong></td>
                         <td style="padding: 6px; color: var(--text-muted);">${emp.position}</td>
-                        <td style="padding: 6px; text-align: right; font-family: var(--font-mono);">Q${parseFloat(proratedSalary).toFixed(2)}</td>
+                        <td style="padding: 6px; text-align: right; font-family: var(--font-mono);">Q${proratedSalary.toFixed(2)}</td>
                         <td style="padding: 6px; text-align: right;">
-                          <input type="number" min="0" value="0.00" step="any" class="payroll-discount-input" data-id="${emp.id}" style="width: 90px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: right;">
+                          <input type="number" min="0" value="${discount.toFixed(2)}" step="any" class="payroll-discount-input" data-id="${emp.id}" style="width: 90px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: right;">
                         </td>
                         <td style="padding: 6px; text-align: right; font-family: var(--font-mono); font-weight: bold; color: var(--accent-secondary);" class="row-net-pay" data-id="${emp.id}">Q${net.toFixed(2)}</td>
                       </tr>
@@ -2731,32 +2816,48 @@ function renderRrhhNomina(container, state) {
       <!-- Historial de Planillas Generadas -->
       <div class="glass-card" style="padding: 1.25rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 8px;">
-          <h3 style="font-size: 1rem; color: var(--accent-primary); margin: 0;">Nóminas Cerradas y Emitidas</h3>
-          <button class="btn btn-secondary btn-small" id="btn-purge-nominas" style="font-size: 0.72rem; padding: 3px 8px; color: #38bdf8; border-color: rgba(56,189,248,0.3);" title="Depurar médicos y colaboradores con finiquito de nóminas archivadas">🧹 Depurar Nóminas (Médicos y Finiquitos)</button>
+          <div>
+            <h3 style="font-size: 1rem; color: var(--accent-primary); margin: 0; font-weight: 700;">Nóminas Cerradas y Emitidas</h3>
+            <span style="font-size: 0.72rem; color: var(--text-muted);">${sortedNominas.length} nóminas archivadas (más recientes arriba)</span>
+          </div>
+          <button class="btn btn-secondary btn-small" id="btn-purge-nominas" style="font-size: 0.72rem; padding: 3px 8px; color: #38bdf8; border-color: rgba(56,189,248,0.3);" title="Depurar médicos y colaboradores con finiquito de nóminas archivadas">🧹 Depurar Nóminas</button>
         </div>
         
-        <div style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
-          ${state.administracion_nominas.length === 0 
+        <div style="max-height: 480px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 2px;">
+          ${sortedNominas.length === 0 
             ? `<div style="text-align: center; color: var(--text-muted); font-style: italic; padding: 20px 0; font-size: 0.85rem;">No se registran nóminas archivadas.</div>`
-            : state.administracion_nominas.map(n => `
-                <div style="border: 1px solid var(--border-color); border-radius: 6px; background: rgba(255,255,255,0.01); padding: 10px; font-size: 0.82rem;">
-                  <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; margin-bottom: 4px; font-size: 0.72rem; color: var(--text-muted);">
-                    <strong>NÓMINA MÓDULO</strong>
-                    <span>📅 Emitida: ${new Date(n.date).toLocaleDateString('es-GT')}</span>
-                  </div>
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
-                    <div>
-                      <span style="font-weight: bold; color: var(--text-primary);">${n.month}</span><br>
-                      <span style="font-size: 0.75rem; color: var(--text-muted);">${n.employees.length} colaboradores incluidos</span>
+            : sortedNominas.map(n => {
+                const isCurrentSelected = n.month && n.month.trim().toLowerCase() === selectedPayrollMonth.trim().toLowerCase();
+                return `
+                  <div style="border: ${isCurrentSelected ? '1.5px solid var(--accent-secondary)' : '1px solid var(--border-color)'}; border-radius: 8px; background: ${isCurrentSelected ? 'rgba(0, 242, 254, 0.06)' : 'rgba(255,255,255,0.01)'}; padding: 10px 12px; font-size: 0.82rem; transition: all 0.2s ease;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; margin-bottom: 6px; font-size: 0.72rem; color: var(--text-muted);">
+                      <div style="display: flex; align-items: center; gap: 6px;">
+                        <strong style="color: ${isCurrentSelected ? 'var(--accent-secondary)' : 'inherit'};">NÓMINA MÓDULO</strong>
+                        ${isCurrentSelected ? '<span style="background: rgba(0, 242, 254, 0.2); color: #38bdf8; font-size: 0.65rem; padding: 1px 6px; border-radius: 3px; font-weight: bold;">SELECCIONADO</span>' : ''}
+                      </div>
+                      <span>📅 Emitida: ${new Date(n.date).toLocaleDateString('es-GT', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                      <strong style="color: var(--accent-secondary); font-size: 0.95rem;">Q${parseFloat(n.totalNet).toFixed(2)}</strong>
-                      <button class="btn btn-secondary btn-small btn-print-payroll" data-id="${n.id}" style="padding: 4px 8px; font-size: 0.75rem;" title="Imprimir Nómina">🖨️</button>
-                      <button class="btn btn-danger btn-small btn-delete-payroll" data-id="${n.id}" style="padding: 4px 8px; font-size: 0.75rem;" title="Eliminar Nómina">🗑️</button>
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                      <div>
+                        <span style="font-weight: 700; font-size: 0.95rem; color: var(--text-primary);">${n.month}</span><br>
+                        <span style="font-size: 0.75rem; color: var(--text-muted);">${(n.employees || []).length} colaboradores incluidos</span>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                        <strong style="color: var(--accent-secondary); font-size: 0.95rem; font-family: var(--font-mono); margin-right: 4px;">Q${parseFloat(n.totalNet).toFixed(2)}</strong>
+                        <button class="btn btn-primary btn-small btn-print-payroll" data-id="${n.id}" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="Ver e Imprimir Nómina y Vouchers">
+                          <span>👁️</span> <span>Ver / Imprimir</span>
+                        </button>
+                        <button class="btn btn-secondary btn-small btn-vouchers-payroll" data-id="${n.id}" style="padding: 4px 8px; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 3px;" title="Imprimir Comprobantes de Pago (Vouchers)">
+                          <span>🎟️</span> <span>Vouchers</span>
+                        </button>
+                        <button class="btn btn-danger btn-small btn-delete-payroll" data-id="${n.id}" style="padding: 4px 7px; font-size: 0.75rem;" title="Eliminar Nómina">
+                          <span>🗑️</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              `).join('')
+                `;
+              }).join('')
           }
         </div>
       </div>
@@ -2800,9 +2901,9 @@ function renderRrhhNomina(container, state) {
   discountInputs.forEach(input => {
     input.addEventListener('input', () => {
       const empId = input.dataset.id;
-      const emp = employees.find(e => e.id === empId);
+      const emp = displayEmployees.find(e => e.id === empId) || employees.find(e => e.id === empId);
       if (emp) {
-        const proratedSalary = getProratedSalary(emp);
+        const proratedSalary = emp.salary !== undefined ? parseFloat(emp.salary) : getProratedSalary(emp);
         const val = parseFloat(input.value) || 0;
         const net = Math.max(0, proratedSalary - val);
         const netCell = container.querySelector(`.row-net-pay[data-id="${empId}"]`);
@@ -2813,22 +2914,161 @@ function renderRrhhNomina(container, state) {
     });
   });
 
-  // Bind Print Payroll Click
-  const printBtns = container.querySelectorAll('.btn-print-payroll');
-  printBtns.forEach(btn => {
+  // Helper para abrir la modal de impresión
+  const openPayrollModal = (payrollId, mode = 'all') => {
+    const payroll = (state.administracion_nominas || []).find(n => n.id === payrollId);
+    if (payroll) {
+      showPayrollPrintPreview(payroll, state, mode);
+    }
+  };
+
+  // Botones para ver e imprimir nómina completa (hoja maestra + vouchers)
+  container.querySelectorAll('.btn-print-payroll, .btn-open-payroll-modal').forEach(btn => {
     btn.addEventListener('click', () => {
       const payrollId = btn.dataset.id;
-      const payroll = state.administracion_nominas.find(n => n.id === payrollId);
-      if (payroll) {
-        showPayrollPrintPreview(payroll, state);
-      }
+      openPayrollModal(payrollId, 'all');
     });
   });
+
+  // Botones para ver e imprimir específicamente vouchers individuales
+  container.querySelectorAll('.btn-vouchers-payroll, .btn-open-vouchers-modal').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const payrollId = btn.dataset.id;
+      openPayrollModal(payrollId, 'vouchers');
+    });
+  });
+
+  // Botón para vista previa de borrador (meses no generados aún)
+  const btnPreviewDraft = document.getElementById('btn-preview-draft-payroll');
+  if (btnPreviewDraft) {
+    btnPreviewDraft.addEventListener('click', () => {
+      const eligibleEmployees = employees.filter(emp => 
+        !isPermanentlyExcludedEmployeeCode(emp.employee_code) &&
+        !isEmployeeResignedOrLiquidated(emp, selectedPayrollMonth, state)
+      );
+
+      if (eligibleEmployees.length === 0) {
+        alert("No hay colaboradores activos en el listado para calcular la nómina.");
+        return;
+      }
+
+      let totalGross = 0;
+      let totalNet = 0;
+      let totalDiscounts = 0;
+      const payrollEmployees = eligibleEmployees.map(emp => {
+        const proratedSalary = getProratedSalary(emp);
+        const inputDisc = container.querySelector(`.payroll-discount-input[data-id="${emp.id}"]`);
+        const discount = inputDisc ? (parseFloat(inputDisc.value) || 0) : 0;
+        const net = Math.max(0, proratedSalary - discount);
+        totalGross += proratedSalary;
+        totalDiscounts += discount;
+        totalNet += net;
+
+        return {
+          id: emp.id,
+          employee_code: emp.employee_code || 'EMP-S/C',
+          name: emp.name,
+          position: emp.position,
+          salary: proratedSalary,
+          bonus: 0,
+          igssLaboral: 0,
+          discount: discount,
+          netSalary: net
+        };
+      });
+
+      const draftPayroll = {
+        id: 'BORRADOR-' + Date.now(),
+        date: new Date().toISOString(),
+        month: selectedPayrollMonth + ' (Borrador)',
+        employees: payrollEmployees,
+        totalGross: totalGross,
+        totalDiscounts: totalDiscounts,
+        totalNet: totalNet
+      };
+
+      showPayrollPrintPreview(draftPayroll, state, 'all');
+    });
+  }
+
+  // Botón para recalcular nómina ya archivada
+  const btnReprocess = document.getElementById('btn-reprocess-payroll');
+  if (btnReprocess) {
+    btnReprocess.addEventListener('click', async () => {
+      if (!confirm(`¿Desea recalcular y actualizar la nómina archivada de ${selectedPayrollMonth} con los colaboradores y descuentos actuales? Se actualizará el registro y los comprobantes de pago.`)) {
+        return;
+      }
+
+      // Eliminar nómina anterior y sus asientos
+      const existingIdx = state.administracion_nominas.findIndex(n => 
+        n.month && n.month.trim().toLowerCase() === selectedPayrollMonth.trim().toLowerCase()
+      );
+      if (existingIdx !== -1) {
+        const oldPayroll = state.administracion_nominas[existingIdx];
+        state.administracion_caja = (state.administracion_caja || []).filter(c => c.refId !== oldPayroll.id);
+        state.administracion_contabilidad = (state.administracion_contabilidad || []).filter(entry => 
+          !(entry.concept && entry.concept.includes(`Periodo: ${oldPayroll.month}`))
+        );
+        state.administracion_nominas.splice(existingIdx, 1);
+      }
+
+      const eligibleEmployees = employees.filter(emp => 
+        !isPermanentlyExcludedEmployeeCode(emp.employee_code) &&
+        !isEmployeeResignedOrLiquidated(emp, selectedPayrollMonth, state)
+      );
+
+      if (eligibleEmployees.length === 0) {
+        alert("No hay colaboradores activos en el listado para calcular la nómina.");
+        return;
+      }
+
+      let totalGross = 0;
+      let totalNet = 0;
+      let totalDiscounts = 0;
+      const payrollEmployees = eligibleEmployees.map(emp => {
+        const proratedSalary = getProratedSalary(emp);
+        const inputDisc = container.querySelector(`.payroll-discount-input[data-id="${emp.id}"]`);
+        const discount = inputDisc ? (parseFloat(inputDisc.value) || 0) : 0;
+        const net = Math.max(0, proratedSalary - discount);
+        totalGross += proratedSalary;
+        totalDiscounts += discount;
+        totalNet += net;
+
+        return {
+          id: emp.id,
+          employee_code: emp.employee_code || 'EMP-S/C',
+          name: emp.name,
+          position: emp.position,
+          salary: proratedSalary,
+          bonus: 0,
+          igssLaboral: 0,
+          discount: discount,
+          netSalary: net
+        };
+      });
+
+      const newPayroll = {
+        id: 'PAYROLL-' + Date.now(),
+        date: new Date().toISOString(),
+        month: selectedPayrollMonth,
+        employees: payrollEmployees,
+        totalGross: totalGross,
+        totalDiscounts: totalDiscounts,
+        totalNet: totalNet
+      };
+
+      state.administracion_nominas.unshift(newPayroll);
+      simulateOnPayrollGenerated(newPayroll, state);
+      await saveAppState(state);
+      renderRrhhNomina(container, state);
+      showPayrollPrintPreview(newPayroll, state, 'all');
+    });
+  }
 
   // Bind Delete Payroll Click
   const deleteBtns = container.querySelectorAll('.btn-delete-payroll');
   deleteBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const payrollId = btn.dataset.id;
       const payroll = state.administracion_nominas.find(n => n.id === payrollId);
       if (payroll) {
@@ -2838,7 +3078,7 @@ function renderRrhhNomina(container, state) {
           state.administracion_contabilidad = (state.administracion_contabilidad || []).filter(entry => 
             !(entry.concept && entry.concept.includes(`Periodo: ${payroll.month}`))
           );
-          saveAppState(state);
+          await saveAppState(state);
           alert(`Nómina de ${payroll.month} eliminada correctamente.`);
           renderRrhhNomina(container, state);
         }
@@ -2849,7 +3089,7 @@ function renderRrhhNomina(container, state) {
   // Bind Generate Payroll Click
   const btnGen = document.getElementById('btn-generate-payroll');
   if (btnGen) {
-    btnGen.addEventListener('click', () => {
+    btnGen.addEventListener('click', async () => {
       const month = document.getElementById('payroll-month').value;
 
       // Filtrar estrictamente solo colaboradores activos que no hayan renunciado ni tengan finiquito
@@ -2859,12 +3099,14 @@ function renderRrhhNomina(container, state) {
       );
 
       if (eligibleEmployees.length === 0) {
-        alert("No hay empleados activos en el listado para calcular la nómina.");
+        alert("No hay colaboradores activos en el listado para calcular la nómina.");
         return;
       }
 
       // Verificar que la nómina de este mes no se haya generado ya
-      const alreadyExists = state.administracion_nominas.some(n => n.month === month);
+      const alreadyExists = state.administracion_nominas.some(n => 
+        n.month && n.month.trim().toLowerCase() === month.trim().toLowerCase()
+      );
       if (alreadyExists) {
         alert(`La nómina de ${month} ya ha sido generada y cerrada previamente.`);
         return;
@@ -2907,12 +3149,15 @@ function renderRrhhNomina(container, state) {
 
       state.administracion_nominas.unshift(newPayroll);
 
-      // Ejecutar Cloud Function local para la provisión en segundo plano
+      // Ejecutar provisión en segundo plano
       simulateOnPayrollGenerated(newPayroll, state);
 
-      saveAppState(state);
+      await saveAppState(state);
 
       renderRrhhNomina(container, state);
+
+      // Auto-abrir inmediatamente la vista preliminar para imprimir y revisar
+      showPayrollPrintPreview(newPayroll, state, 'all');
     });
   }
 }
