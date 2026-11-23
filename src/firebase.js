@@ -140,6 +140,7 @@ export const firestoreState = {
   administracion_employees: [],
   administracion_nominas: [],
   administracion_liquidaciones: [],
+  administracion_anticipos: [],
   administracion_bancos: [],
   administracion_activos_fijos: [],
   administracion_asistencias: [],
@@ -192,6 +193,7 @@ function loadStateFromLocalCache() {
         if (Array.isArray(parsed.administracion_employees)) firestoreState.administracion_employees = parsed.administracion_employees;
         if (Array.isArray(parsed.administracion_nominas)) firestoreState.administracion_nominas = parsed.administracion_nominas;
         if (Array.isArray(parsed.administracion_liquidaciones)) firestoreState.administracion_liquidaciones = parsed.administracion_liquidaciones;
+        if (Array.isArray(parsed.administracion_anticipos)) firestoreState.administracion_anticipos = parsed.administracion_anticipos;
         if (!firestoreState.administracion_liquidaciones || firestoreState.administracion_liquidaciones.length === 0) {
           try {
             const rawLiq = localStorage.getItem('medflow_liquidaciones');
@@ -272,6 +274,7 @@ export function saveStateToLocalCache() {
         administracion_employees: firestoreState.administracion_employees,
         administracion_nominas: firestoreState.administracion_nominas,
         administracion_liquidaciones: firestoreState.administracion_liquidaciones,
+        administracion_anticipos: firestoreState.administracion_anticipos,
         administracion_bancos: firestoreState.administracion_bancos,
         administracion_activos_fijos: firestoreState.administracion_activos_fijos,
         administracion_asistencias: firestoreState.administracion_asistencias,
@@ -539,6 +542,7 @@ export function initRealtimeFirestore(onFirstLoad) {
       const employees = [];
       const nominas = [];
       const administracionLiquidaciones = [];
+      const administracionAnticipos = [];
       const bancos = [];
       const activosFijos = [];
       const asistencias = [];
@@ -629,6 +633,10 @@ export function initRealtimeFirestore(onFirstLoad) {
           administracionLiquidaciones.push(...(dData.items || []));
           return;
         }
+        if (dId === 'catalog_administracion_anticipos') {
+          administracionAnticipos.push(...(dData.items || []));
+          return;
+        }
         if (dId === 'catalog_administracion_bancos') {
           bancos.push(...(dData.items || []));
           return;
@@ -717,6 +725,7 @@ export function initRealtimeFirestore(onFirstLoad) {
         else if (type === 'administracion_employees') employees.push(cleanDoc);
         else if (type === 'administracion_nominas') nominas.push(cleanDoc);
         else if (type === 'administracion_liquidaciones') administracionLiquidaciones.push(cleanDoc);
+        else if (type === 'administracion_anticipos') administracionAnticipos.push(cleanDoc);
         else if (type === 'administracion_bancos') bancos.push(cleanDoc);
         else if (type === 'administracion_activos_fijos') activosFijos.push(cleanDoc);
         else if (type === 'administracion_asistencias') asistencias.push(cleanDoc);
@@ -937,6 +946,7 @@ export function initRealtimeFirestore(onFirstLoad) {
       firestoreState.administracion_enfermeria_cambios = uniqueCambios;
       firestoreState.administracion_enfermeria_permisos = uniquePermisos;
       firestoreState.administracion_liquidaciones = uniqueLiquidaciones;
+      firestoreState.administracion_anticipos = administracionAnticipos;
       firestoreState.external_doctors = doctors;
       firestoreState.accounts_payable = payables;
       if (clinic) firestoreState.clinicInfo = clinic;
@@ -972,6 +982,7 @@ export function initRealtimeFirestore(onFirstLoad) {
           const employees = [];
           const nominas = [];
           const administracionLiquidaciones = [];
+          const administracionAnticipos = [];
           const bancos = [];
           const activosFijos = [];
           const asistencias = [];
@@ -1062,6 +1073,10 @@ export function initRealtimeFirestore(onFirstLoad) {
               administracionLiquidaciones.push(...(dData.items || []));
               return;
             }
+            if (dId === 'catalog_administracion_anticipos') {
+              administracionAnticipos.push(...(dData.items || []));
+              return;
+            }
             if (dId === 'catalog_administracion_bancos') {
               bancos.push(...(dData.items || []));
               return;
@@ -1150,6 +1165,7 @@ export function initRealtimeFirestore(onFirstLoad) {
             else if (type === 'administracion_employees') employees.push(cleanDoc);
             else if (type === 'administracion_nominas') nominas.push(cleanDoc);
             else if (type === 'administracion_liquidaciones') administracionLiquidaciones.push(cleanDoc);
+        else if (type === 'administracion_anticipos') administracionAnticipos.push(cleanDoc);
             else if (type === 'administracion_bancos') bancos.push(cleanDoc);
             else if (type === 'administracion_activos_fijos') activosFijos.push(cleanDoc);
             else if (type === 'administracion_asistencias') asistencias.push(cleanDoc);
@@ -1285,6 +1301,7 @@ export function initRealtimeFirestore(onFirstLoad) {
           firestoreState.administracion_enfermeria_cambios = uniqueCambiosFb;
           firestoreState.administracion_enfermeria_permisos = uniquePermisosFb;
           firestoreState.administracion_liquidaciones = uniqueLiqFb;
+          firestoreState.administracion_anticipos = administracionAnticipos;
           firestoreState.external_doctors = doctors;
           firestoreState.accounts_payable = payables;
           if (clinic) firestoreState.clinicInfo = clinic;
@@ -1474,6 +1491,7 @@ export async function purgeAllFirestoreData() {
     firestoreState.administracion_employees = [];
     firestoreState.administracion_nominas = [];
     firestoreState.administracion_liquidaciones = [];
+    firestoreState.administracion_anticipos = [];
     firestoreState.administracion_bancos = [];
     firestoreState.administracion_activos_fijos = [];
     firestoreState.external_doctors = [];

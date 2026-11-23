@@ -18,7 +18,8 @@ let activeCajaSubTab = 'cobros'; // 'cobros', 'cxp', 'nominas'
 let activeContabilidadSubTab = 'diario'; // 'diario', 'impuestos'
 let activeRrhhSubTab = 'empleados'; // 'empleados', 'asistencia', 'reportes', 'nomina'
 let activeRrhhReportSubTab = 'diario'; // 'diario', 'mensual', 'anual', 'empleado'
-let activeNominaSubTab = 'planilla'; // 'planilla', 'liquidaciones'
+let activeNominaSubTab = 'planilla'; // 'planilla', 'anticipos', 'liquidaciones'
+let anticipoFilterMonth = 'todos';
 let editingEmployeeId = null;
 const curMonthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 const nowInit = new Date();
@@ -2278,17 +2279,29 @@ export function showPayrollPrintPreview(payroll, state, initialMode = 'all') {
   const totalGross = payroll.totalGross || 0;
   const totalDiscounts = payroll.totalDiscounts || 0;
   const totalNet = payroll.totalNet || 0;
+  let totalAnticipos = payroll.totalAnticipos || 0;
+  let totalOtherDiscounts = payroll.totalOtherDiscounts || 0;
+
+  if (!payroll.totalAnticipos) {
+    (payroll.employees || []).forEach(e => {
+      totalAnticipos += (parseFloat(e.anticipos) || 0);
+    });
+  }
 
   // Generar filas de la tabla general
-  const rowsHtml = (payroll.employees || []).map(emp => `
+  const rowsHtml = (payroll.employees || []).map(emp => {
+    const anticipos = parseFloat(emp.anticipos || 0);
+    const otherDisc = parseFloat(emp.discount || 0);
+    return `
     <tr style="border-bottom: 1px solid #ddd;">
       <td style="padding: 8px; border: 1px solid #ddd; text-align: left;"><strong>${emp.name}</strong></td>
       <td style="padding: 8px; border: 1px solid #ddd; text-align: left; color: #555;">${emp.position}</td>
       <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-family: monospace;">Q${parseFloat(emp.salary).toFixed(2)}</td>
-      <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-family: monospace; color: #c00;">Q${parseFloat(emp.discount || 0).toFixed(2)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-family: monospace; color: #ea580c;">Q${anticipos.toFixed(2)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-family: monospace; color: #c00;">Q${otherDisc.toFixed(2)}</td>
       <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-family: monospace; font-weight: bold;">Q${parseFloat(emp.netSalary).toFixed(2)}</td>
     </tr>
-  `).join('');
+  `}).join('');
 
   // Agrupar empleados de 6 en 6 exactamente para los vouchers individuales (2 columnas x 3 filas por página)
   const payslipsHtmlChunks = [];
@@ -2334,10 +2347,18 @@ export function showPayrollPrintPreview(payroll, state, initialMode = 'all') {
                   <td style="padding: 2px 4px; border-bottom: 1px dashed #e2e8f0;">Sueldo Base / Devengado</td>
                   <td style="padding: 2px 4px; text-align: right; font-family: monospace; border-bottom: 1px dashed #e2e8f0;">Q${parseFloat(emp.salary).toFixed(2)}</td>
                 </tr>
-                <tr>
-                  <td style="padding: 2px 4px; border-bottom: 1px dashed #e2e8f0; color: #b91c1c;">(-) Descuentos / Deducciones</td>
-                  <td style="padding: 2px 4px; text-align: right; font-family: monospace; border-bottom: 1px dashed #e2e8f0; color: #b91c1c;">Q${parseFloat(emp.discount || 0).toFixed(2)}</td>
-                </tr>
+                ${(parseFloat(emp.anticipos) || 0) > 0 ? `
+                  <tr style="color: #c2410c;">
+                    <td style="padding: 2px 4px; border-bottom: 1px dashed #e2e8f0;">(-) Anticipos de Sueldo</td>
+                    <td style="padding: 2px 4px; text-align: right; font-family: monospace; border-bottom: 1px dashed #e2e8f0;">- Q${parseFloat(emp.anticipos).toFixed(2)}</td>
+                  </tr>
+                ` : ''}
+                ${(parseFloat(emp.discount) || 0) > 0 ? `
+                  <tr style="color: #b91c1c;">
+                    <td style="padding: 2px 4px; border-bottom: 1px dashed #e2e8f0;">(-) Otras Deducciones</td>
+                    <td style="padding: 2px 4px; text-align: right; font-family: monospace; border-bottom: 1px dashed #e2e8f0;">- Q${parseFloat(emp.discount).toFixed(2)}</td>
+                  </tr>
+                ` : ''}
                 <tr style="background: #f0fdf4; font-weight: bold; border-top: 1.5px solid #0f172a; border-bottom: 1px solid #0f172a;">
                   <td style="padding: 2px 4px; text-transform: uppercase; color: #15803d;">LÍQUIDO A RECIBIR (CHEQUE)</td>
                   <td style="padding: 2px 4px; text-align: right; font-family: monospace; font-size: 0.74rem; color: #15803d;">Q${parseFloat(emp.netSalary).toFixed(2)}</td>
@@ -2349,7 +2370,7 @@ export function showPayrollPrintPreview(payroll, state, initialMode = 'all') {
           <!-- Declaración de Recibo de Cheque y Firmas -->
           <div style="margin-top: 2px;">
             <div style="font-size: 0.55rem; color: #475569; text-align: justify; line-height: 1.1; margin-bottom: 4px;">
-              Recibí a mi entera conformidad cheque/pago por la cantidad líquida descrita en concepto de sueldo correspondiente al período indicado.
+              Recibí a mi entera conformidad cheque/pago por la cantidad líquida descrita en concepto de sueldo correspondiente al período indicado${(parseFloat(emp.anticipos) || 0) > 0 ? ' (habiendo sido deducido el anticipo de sueldo otorgado)' : ''}.
             </div>
             
             <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 8px; align-items: flex-end; margin-top: 8px;">
@@ -2439,7 +2460,8 @@ export function showPayrollPrintPreview(payroll, state, initialMode = 'all') {
                       <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Nombre Colaborador</th>
                       <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Puesto</th>
                       <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Sueldo Base</th>
-                      <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Descuentos</th>
+                      <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">(-) Anticipos</th>
+                      <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">(-) Otros Desc.</th>
                       <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Neto Recibido</th>
                     </tr>
                   </thead>
@@ -2449,7 +2471,8 @@ export function showPayrollPrintPreview(payroll, state, initialMode = 'all') {
                     <tr style="background-color: #fafafa; font-weight: bold; border-top: 2px solid #333; border-bottom: 2px solid #333;">
                       <td colspan="2" style="padding: 10px; border: 1px solid #ddd; text-align: left; text-transform: uppercase;">Total General</td>
                       <td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-family: monospace;">Q${totalGross.toFixed(2)}</td>
-                      <td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-family: monospace; color: #c00;">Q${totalDiscounts.toFixed(2)}</td>
+                      <td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-family: monospace; color: #ea580c;">Q${totalAnticipos.toFixed(2)}</td>
+                      <td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-family: monospace; color: #c00;">Q${(totalDiscounts >= totalAnticipos ? totalDiscounts - totalAnticipos : totalOtherDiscounts).toFixed(2)}</td>
                       <td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-family: monospace; color: var(--accent-success);">Q${totalNet.toFixed(2)}</td>
                     </tr>
                   </tbody>
@@ -2542,6 +2565,118 @@ export function showPayrollPrintPreview(payroll, state, initialMode = 'all') {
   modal.style.display = "flex";
 }
 
+// Vista Preliminar e Impresión de Vale de Anticipo de Sueldo
+export function showAnticipoPrintVoucher(anticipo, state) {
+  const modal = document.getElementById('prescription-print-modal');
+  const modalTitle = modal ? modal.querySelector('.modal-header h2') : null;
+  const previewContainer = document.getElementById('prescription-preview-content');
+  const printActionBtn = document.getElementById('btn-print-action');
+
+  if (!modal || !previewContainer || !printActionBtn) return;
+
+  if (modalTitle) {
+    modalTitle.textContent = "Comprobante / Vale de Anticipo de Sueldo";
+  }
+  printActionBtn.innerHTML = '<span>🖨️</span> Imprimir Comprobante';
+
+  const clinic = state.clinicInfo || {};
+  const logoUrl = 'assets/logo-Db6-vjaU.jpg';
+  const dateFormatted = anticipo.date ? new Date(anticipo.date).toLocaleDateString('es-GT', {
+    day: '2-digit', month: '2-digit', year: 'numeric'
+  }) : new Date().toLocaleDateString('es-GT');
+
+  const amountNum = parseFloat(anticipo.amount) || 0;
+
+  previewContainer.className = 'prescription-preview-box';
+  previewContainer.innerHTML = `
+    <div style="max-width: 680px; margin: 0 auto; background: #ffffff; color: #0f172a; padding: 24px; border: 2px dashed #334155; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      
+      <!-- Encabezado de la Clínica -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          ${clinic.logoData 
+            ? `<img src="${clinic.logoData}" style="max-height: 60px; max-width: 160px; object-fit: contain;">` 
+            : `<img src="${logoUrl}" style="max-height: 60px; max-width: 160px; object-fit: contain;">`}
+          <div>
+            <div style="font-weight: 800; font-size: 1.15rem; text-transform: uppercase; color: #0f172a; line-height: 1.1;">${clinic.name || 'LUGAMED 2.0'}</div>
+            <div style="font-size: 0.75rem; color: #475569; margin-top: 2px;">Atención Médica y Hospitalaria &bull; Recursos Humanos</div>
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <div style="background: #f1f5f9; border: 1.5px solid #0f172a; border-radius: 4px; padding: 4px 10px; font-family: monospace; font-weight: 800; font-size: 0.88rem; color: #0f172a; letter-spacing: 0.5px;">
+            VALE No. ${anticipo.id ? anticipo.id.replace('ANT-', '') : Date.now()}
+          </div>
+          <div style="font-size: 0.72rem; color: #64748b; margin-top: 4px;">Fecha: <strong>${dateFormatted}</strong></div>
+        </div>
+      </div>
+
+      <!-- Título del Documento -->
+      <div style="text-align: center; margin-bottom: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px;">
+        <h3 style="margin: 0; font-size: 1.05rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a;">
+          Vale de Anticipo de Sueldo
+        </h3>
+        <span style="font-size: 0.72rem; color: #64748b;">(Deducción directa en Nómina Mensual de ${anticipo.month})</span>
+      </div>
+
+      <!-- Datos del Colaborador -->
+      <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px; margin-bottom: 16px; font-size: 0.8rem; line-height: 1.45;">
+        <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 10px;">
+          <div>
+            <div><strong>Colaborador:</strong> <span style="font-weight: 700; color: #000;">${anticipo.employeeName}</span></div>
+            <div><strong>Puesto / Cargo:</strong> ${anticipo.employeePosition}</div>
+            <div><strong>Código de Empleado:</strong> <span style="font-family: monospace; font-weight: bold;">${anticipo.employeeCode || 'EMP-S/C'}</span></div>
+          </div>
+          <div>
+            <div><strong>Mes de Nómina a Descontar:</strong> <strong style="color: #0284c7;">${anticipo.month}</strong></div>
+            <div><strong>Forma de Entrega:</strong> ${anticipo.paymentMethod}</div>
+            ${anticipo.reference ? `<div><strong>No. Referencia / Cheque:</strong> <span style="font-family: monospace;">${anticipo.reference}</span></div>` : ''}
+          </div>
+        </div>
+      </div>
+
+      <!-- Recuadro del Monto del Anticipo -->
+      <div style="background: #fff7ed; border: 2px solid #ea580c; border-radius: 6px; padding: 14px; text-align: center; margin-bottom: 16px;">
+        <div style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: #9a3412; font-weight: 700;">
+          VALOR DEL ANTICIPO ENTREGADO
+        </div>
+        <div style="font-size: 1.75rem; font-weight: 900; color: #c2410c; font-family: monospace; margin: 4px 0;">
+          Q${amountNum.toFixed(2)}
+        </div>
+        <div style="font-size: 0.78rem; color: #475569; font-style: italic;">
+          Motivo / Concepto: ${anticipo.reason || 'Anticipo quincenal de sueldo'}
+        </div>
+      </div>
+
+      <!-- Declaración de Aceptación y Descuento -->
+      <div style="background: #f1f5f9; border-left: 4px solid #0f172a; padding: 10px 12px; font-size: 0.74rem; color: #334155; line-height: 1.4; text-align: justify; margin-bottom: 24px;">
+        Hago constar que recibí a mi entera satisfacción de la administración de <strong>${clinic.name || 'LUGAMED'}</strong> la cantidad líquida de <strong>Q${amountNum.toFixed(2)}</strong> en concepto de <strong>ANTICIPO A CUENTA DE MI SALARIO</strong>. Autorizo expresa e irrevocablemente a que dicha suma sea descontada en su totalidad del pago de la nómina de sueldos correspondiente al período de <strong>${anticipo.month}</strong>.
+      </div>
+
+      <!-- Firmas -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 30px;">
+        <div style="text-align: center;">
+          <div style="border-top: 1.5px solid #0f172a; width: 85%; margin: 0 auto 4px auto;"></div>
+          <strong style="font-size: 0.75rem; display: block; color: #0f172a; text-transform: uppercase;">Entregado / Autorizado por</strong>
+          <span style="font-size: 0.68rem; color: #64748b;">Dpto. Recursos Humanos / Caja</span>
+        </div>
+        <div style="text-align: center;">
+          <div style="border-top: 1.5px solid #0f172a; width: 85%; margin: 0 auto 4px auto;"></div>
+          <strong style="font-size: 0.75rem; display: block; color: #0f172a; text-transform: uppercase;">Recibí Conforme (Firma)</strong>
+          <span style="font-size: 0.68rem; color: #64748b;">${anticipo.employeeName}</span><br>
+          <span style="font-size: 0.65rem; color: #94a3b8;">DPI / Cód: ${anticipo.employeeCode || 'S/C'}</span>
+        </div>
+      </div>
+
+    </div>
+  `;
+
+  printActionBtn.onclick = () => {
+    window.print();
+  };
+
+  modal.style.display = "flex";
+}
+
 export function isDoctorOrPhysician(emp) {
   if (!emp) return false;
   if (emp.isDoctor === true || emp.role === 'doctor' || emp.role === 'medico') return true;
@@ -2593,7 +2728,12 @@ function renderRrhhNomina(container, state) {
   reconcileAndRecoverLiquidaciones(state);
   purgeAndSanitizePayrolls(state);
   state.administracion_liquidaciones = state.administracion_liquidaciones || [];
+  state.administracion_anticipos = state.administracion_anticipos || [];
 
+  if (activeNominaSubTab === 'anticipos') {
+    renderRrhhAnticipos(container, state);
+    return;
+  }
   if (activeNominaSubTab === 'liquidaciones') {
     renderRrhhLiquidaciones(container, state);
     return;
@@ -2651,6 +2791,17 @@ function renderRrhhNomina(container, state) {
     return baseSalary;
   };
 
+  // Helper para sumar anticipos de un colaborador para un mes específico
+  const getEmployeeAnticiposForMonth = (empId, targetMonth) => {
+    return (state.administracion_anticipos || [])
+      .filter(a => {
+        if (!a || a.status === 'Anulado') return false;
+        if (a.employeeId !== empId) return false;
+        return a.month && a.month.trim().toLowerCase() === targetMonth.trim().toLowerCase();
+      })
+      .reduce((sum, a) => sum + (parseFloat(a.amount) || 0), 0);
+  };
+
   // Ordenar nóminas en orden cronológico descendente (el mes más reciente al principio)
   const monthOrderMap = {
     enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
@@ -2688,16 +2839,20 @@ function renderRrhhNomina(container, state) {
   container.innerHTML = `
     <!-- Barra Superior de Sub-Pestañas de Nómina -->
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
-      <div style="display: flex; gap: 8px;">
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
         <button class="btn ${activeNominaSubTab === 'planilla' ? 'btn-primary' : 'btn-secondary'}" id="nomina-tab-btn-planilla" style="padding: 6px 14px; font-size: 0.85rem;">
           🏦 Planilla Mensual Ordinaria
+        </button>
+        <button class="btn ${activeNominaSubTab === 'anticipos' ? 'btn-primary' : 'btn-secondary'}" id="nomina-tab-btn-anticipos" style="padding: 6px 14px; font-size: 0.85rem;">
+          💵 Anticipos de Sueldo
         </button>
         <button class="btn ${activeNominaSubTab === 'liquidaciones' ? 'btn-primary' : 'btn-secondary'}" id="nomina-tab-btn-liquidaciones" style="padding: 6px 14px; font-size: 0.85rem;">
           📜 Liquidación / Finiquito (Días Trabajados)
         </button>
       </div>
-      <div style="font-size: 0.8rem; color: var(--text-muted);">
-        Total Liquidaciones Registradas: <strong style="color: var(--accent-secondary);">${(state.administracion_liquidaciones || []).length}</strong>
+      <div style="display: flex; gap: 12px; font-size: 0.8rem; color: var(--text-muted); align-items: center; flex-wrap: wrap;">
+        <span>Anticipos: <strong style="color: #f59e0b;">${(state.administracion_anticipos || []).length}</strong></span>
+        <span>Liquidaciones: <strong style="color: var(--accent-secondary);">${(state.administracion_liquidaciones || []).length}</strong></span>
       </div>
     </div>
 
@@ -2709,7 +2864,7 @@ function renderRrhhNomina(container, state) {
           <div>
             <h3 style="font-size: 1.05rem; color: var(--accent-primary); margin: 0; font-weight: 700;">Planilla de Sueldos Mensual</h3>
             <p style="margin: 2px 0 0 0; font-size: 0.75rem; color: var(--text-muted);">
-              ${existingPayroll ? `Nómina cerrada de <strong style="color: var(--accent-secondary);">${selectedPayrollMonth}</strong> (${existingPayroll.employees.length} colaboradores)` : `Cálculo y preparación para <strong style="color: var(--accent-secondary);">${selectedPayrollMonth}</strong>`}
+              ${existingPayroll ? `Nómina cerrada de <strong style="color: var(--accent-secondary);">${selectedPayrollMonth}</strong> (${existingPayroll.employees.length} colaboradores)` : `Cálculo y deducción de anticipos para <strong style="color: var(--accent-secondary);">${selectedPayrollMonth}</strong>`}
             </p>
           </div>
           <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
@@ -2727,6 +2882,9 @@ function renderRrhhNomina(container, state) {
               <option value="Noviembre 2026" ${selectedPayrollMonth === 'Noviembre 2026' ? 'selected' : ''}>Noviembre 2026</option>
               <option value="Diciembre 2026" ${selectedPayrollMonth === 'Diciembre 2026' ? 'selected' : ''}>Diciembre 2026</option>
             </select>
+            <button class="btn btn-secondary btn-small" id="btn-quick-anticipos" style="padding: 5px 10px; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 5px;" title="Ver y generar anticipos de sueldo">
+              <span>💵</span> <span>Anticipos</span>
+            </button>
             ${existingPayroll ? `
               <button class="btn btn-primary btn-small btn-open-payroll-modal" data-id="${existingPayroll.id}" style="padding: 6px 14px; font-size: 0.85rem; font-weight: 600; background: linear-gradient(135deg, #0284c7, #0369a1); border: 1px solid #38bdf8; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(2, 132, 199, 0.35);">
                 <span>👁️</span> <span>Ver e Imprimir Nómina</span>
@@ -2774,7 +2932,7 @@ function renderRrhhNomina(container, state) {
 
         <div style="background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 6px; padding: 8px 12px; margin-bottom: 1rem; font-size: 0.78rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px;">
           <span style="font-size: 1rem;">🩺</span>
-          <span><strong>Filtro de Nómina:</strong> Los médicos y especialistas están excluidos de esta planilla de sueldos fijos (se liquidan mediante honorarios profesionales por consulta/procedimiento).</span>
+          <span><strong>Filtro y Deducciones:</strong> Médicos excluidos (honorarios por procedimiento). Los <strong>anticipos otorgados</strong> para el mes se descuentan automáticamente antes del neto a pagar.</span>
         </div>
 
         <div style="overflow-x: auto;">
@@ -2784,26 +2942,47 @@ function renderRrhhNomina(container, state) {
                 <th style="padding: 6px;">Nombre</th>
                 <th style="padding: 6px;">Puesto</th>
                 <th style="padding: 6px; text-align: right;">Sueldo Base</th>
-                <th style="padding: 6px; text-align: right; width: 120px;">Descuentos</th>
+                <th style="padding: 6px; text-align: right; width: 105px;">(-) Anticipos</th>
+                <th style="padding: 6px; text-align: right; width: 105px;">(-) Otros Desc.</th>
+                <th style="padding: 6px; text-align: right; width: 100px;">Total Deducc.</th>
                 <th style="padding: 6px; text-align: right;">Neto a Pagar</th>
               </tr>
             </thead>
             <tbody>
               ${displayEmployees.length === 0 
-                ? `<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted); font-style: italic;">No hay colaboradores activos para liquidar nómina.</td></tr>`
+                ? `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-muted); font-style: italic;">No hay colaboradores activos para liquidar nómina.</td></tr>`
                 : displayEmployees.map(emp => {
                     const proratedSalary = emp.salary !== undefined ? parseFloat(emp.salary) : getProratedSalary(emp);
-                    const discount = emp.discount !== undefined ? parseFloat(emp.discount) : 0;
-                    const net = emp.netSalary !== undefined ? parseFloat(emp.netSalary) : Math.max(0, proratedSalary - discount);
+                    const empAnticipos = emp.anticipos !== undefined 
+                      ? parseFloat(emp.anticipos || 0) 
+                      : getEmployeeAnticiposForMonth(emp.id, selectedPayrollMonth);
+                    const otherDiscount = emp.discount !== undefined ? parseFloat(emp.discount || 0) : 0;
+                    const totalDisc = empAnticipos + otherDiscount;
+                    const net = emp.netSalary !== undefined ? parseFloat(emp.netSalary) : Math.max(0, proratedSalary - totalDisc);
+
                     return `
                       <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
-                        <td style="padding: 6px;"><strong>${emp.name}</strong></td>
+                        <td style="padding: 6px;">
+                          <strong>${emp.name}</strong>
+                          <div style="font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono);">${emp.employee_code || ''}</div>
+                        </td>
                         <td style="padding: 6px; color: var(--text-muted);">${emp.position}</td>
                         <td style="padding: 6px; text-align: right; font-family: var(--font-mono);">Q${proratedSalary.toFixed(2)}</td>
                         <td style="padding: 6px; text-align: right;">
-                          <input type="number" min="0" value="${discount.toFixed(2)}" step="any" class="payroll-discount-input" data-id="${emp.id}" style="width: 90px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: right;">
+                          ${empAnticipos > 0 
+                            ? `<span class="badge" title="Anticipo quincenal registrado para descontar este mes" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid #f59e0b; font-family: var(--font-mono); font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 0.78rem;">Q${empAnticipos.toFixed(2)}</span>`
+                            : `<span style="color: var(--text-muted); font-family: var(--font-mono); font-size: 0.78rem;">Q0.00</span>`
+                          }
                         </td>
-                        <td style="padding: 6px; text-align: right; font-family: var(--font-mono); font-weight: bold; color: var(--accent-secondary);" class="row-net-pay" data-id="${emp.id}">Q${net.toFixed(2)}</td>
+                        <td style="padding: 6px; text-align: right;">
+                          <input type="number" min="0" value="${otherDiscount.toFixed(2)}" step="any" class="payroll-discount-input" data-id="${emp.id}" style="width: 85px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: right;">
+                        </td>
+                        <td style="padding: 6px; text-align: right; font-family: var(--font-mono); color: #ef4444;" class="row-total-disc" data-id="${emp.id}">
+                          Q${totalDisc.toFixed(2)}
+                        </td>
+                        <td style="padding: 6px; text-align: right; font-family: var(--font-mono); font-weight: bold; color: var(--accent-secondary);" class="row-net-pay" data-id="${emp.id}">
+                          Q${net.toFixed(2)}
+                        </td>
                       </tr>
                     `;
                   }).join('')
@@ -2867,9 +3046,20 @@ function renderRrhhNomina(container, state) {
 
   // Bind Subtab Navigation
   const btnTabPlanilla = document.getElementById('nomina-tab-btn-planilla');
+  const btnTabAnticipos = document.getElementById('nomina-tab-btn-anticipos');
   const btnTabLiquidaciones = document.getElementById('nomina-tab-btn-liquidaciones');
   if (btnTabPlanilla) btnTabPlanilla.addEventListener('click', () => { activeNominaSubTab = 'planilla'; renderRrhhNomina(container, state); });
+  if (btnTabAnticipos) btnTabAnticipos.addEventListener('click', () => { activeNominaSubTab = 'anticipos'; renderRrhhNomina(container, state); });
   if (btnTabLiquidaciones) btnTabLiquidaciones.addEventListener('click', () => { activeNominaSubTab = 'liquidaciones'; renderRrhhNomina(container, state); });
+
+  // Botón directo a anticipos
+  const btnQuickAnticipos = document.getElementById('btn-quick-anticipos');
+  if (btnQuickAnticipos) {
+    btnQuickAnticipos.addEventListener('click', () => {
+      activeNominaSubTab = 'anticipos';
+      renderRrhhNomina(container, state);
+    });
+  }
 
   // Listener para cambio de mes seleccionado
   const monthSelect = document.getElementById('payroll-month');
@@ -2904,12 +3094,18 @@ function renderRrhhNomina(container, state) {
       const emp = displayEmployees.find(e => e.id === empId) || employees.find(e => e.id === empId);
       if (emp) {
         const proratedSalary = emp.salary !== undefined ? parseFloat(emp.salary) : getProratedSalary(emp);
-        const val = parseFloat(input.value) || 0;
-        const net = Math.max(0, proratedSalary - val);
+        const empAnticipos = emp.anticipos !== undefined 
+          ? parseFloat(emp.anticipos || 0) 
+          : getEmployeeAnticiposForMonth(emp.id, selectedPayrollMonth);
+        const otherVal = parseFloat(input.value) || 0;
+        const totalDisc = empAnticipos + otherVal;
+        const net = Math.max(0, proratedSalary - totalDisc);
+
+        const discCell = container.querySelector(`.row-total-disc[data-id="${empId}"]`);
+        if (discCell) discCell.textContent = `Q${totalDisc.toFixed(2)}`;
+
         const netCell = container.querySelector(`.row-net-pay[data-id="${empId}"]`);
-        if (netCell) {
-          netCell.textContent = `Q${net.toFixed(2)}`;
-        }
+        if (netCell) netCell.textContent = `Q${net.toFixed(2)}`;
       }
     });
   });
@@ -2953,15 +3149,23 @@ function renderRrhhNomina(container, state) {
       }
 
       let totalGross = 0;
-      let totalNet = 0;
+      let totalAnticipos = 0;
+      let totalOtherDiscounts = 0;
       let totalDiscounts = 0;
+      let totalNet = 0;
+
       const payrollEmployees = eligibleEmployees.map(emp => {
         const proratedSalary = getProratedSalary(emp);
+        const empAnticipos = getEmployeeAnticiposForMonth(emp.id, selectedPayrollMonth);
         const inputDisc = container.querySelector(`.payroll-discount-input[data-id="${emp.id}"]`);
-        const discount = inputDisc ? (parseFloat(inputDisc.value) || 0) : 0;
-        const net = Math.max(0, proratedSalary - discount);
+        const otherDiscount = inputDisc ? (parseFloat(inputDisc.value) || 0) : 0;
+        const totalDisc = empAnticipos + otherDiscount;
+        const net = Math.max(0, proratedSalary - totalDisc);
+
         totalGross += proratedSalary;
-        totalDiscounts += discount;
+        totalAnticipos += empAnticipos;
+        totalOtherDiscounts += otherDiscount;
+        totalDiscounts += totalDisc;
         totalNet += net;
 
         return {
@@ -2972,7 +3176,9 @@ function renderRrhhNomina(container, state) {
           salary: proratedSalary,
           bonus: 0,
           igssLaboral: 0,
-          discount: discount,
+          anticipos: empAnticipos,
+          discount: otherDiscount,
+          totalDiscounts: totalDisc,
           netSalary: net
         };
       });
@@ -2983,6 +3189,8 @@ function renderRrhhNomina(container, state) {
         month: selectedPayrollMonth + ' (Borrador)',
         employees: payrollEmployees,
         totalGross: totalGross,
+        totalAnticipos: totalAnticipos,
+        totalOtherDiscounts: totalOtherDiscounts,
         totalDiscounts: totalDiscounts,
         totalNet: totalNet
       };
@@ -2995,7 +3203,7 @@ function renderRrhhNomina(container, state) {
   const btnReprocess = document.getElementById('btn-reprocess-payroll');
   if (btnReprocess) {
     btnReprocess.addEventListener('click', async () => {
-      if (!confirm(`¿Desea recalcular y actualizar la nómina archivada de ${selectedPayrollMonth} con los colaboradores y descuentos actuales? Se actualizará el registro y los comprobantes de pago.`)) {
+      if (!confirm(`¿Desea recalcular y actualizar la nómina archivada de ${selectedPayrollMonth} con los colaboradores, anticipos y descuentos actuales? Se actualizará el registro y los comprobantes de pago.`)) {
         return;
       }
 
@@ -3023,15 +3231,23 @@ function renderRrhhNomina(container, state) {
       }
 
       let totalGross = 0;
-      let totalNet = 0;
+      let totalAnticipos = 0;
+      let totalOtherDiscounts = 0;
       let totalDiscounts = 0;
+      let totalNet = 0;
+
       const payrollEmployees = eligibleEmployees.map(emp => {
         const proratedSalary = getProratedSalary(emp);
+        const empAnticipos = getEmployeeAnticiposForMonth(emp.id, selectedPayrollMonth);
         const inputDisc = container.querySelector(`.payroll-discount-input[data-id="${emp.id}"]`);
-        const discount = inputDisc ? (parseFloat(inputDisc.value) || 0) : 0;
-        const net = Math.max(0, proratedSalary - discount);
+        const otherDiscount = inputDisc ? (parseFloat(inputDisc.value) || 0) : 0;
+        const totalDisc = empAnticipos + otherDiscount;
+        const net = Math.max(0, proratedSalary - totalDisc);
+
         totalGross += proratedSalary;
-        totalDiscounts += discount;
+        totalAnticipos += empAnticipos;
+        totalOtherDiscounts += otherDiscount;
+        totalDiscounts += totalDisc;
         totalNet += net;
 
         return {
@@ -3042,7 +3258,9 @@ function renderRrhhNomina(container, state) {
           salary: proratedSalary,
           bonus: 0,
           igssLaboral: 0,
-          discount: discount,
+          anticipos: empAnticipos,
+          discount: otherDiscount,
+          totalDiscounts: totalDisc,
           netSalary: net
         };
       });
@@ -3053,11 +3271,23 @@ function renderRrhhNomina(container, state) {
         month: selectedPayrollMonth,
         employees: payrollEmployees,
         totalGross: totalGross,
+        totalAnticipos: totalAnticipos,
+        totalOtherDiscounts: totalOtherDiscounts,
         totalDiscounts: totalDiscounts,
         totalNet: totalNet
       };
 
       state.administracion_nominas.unshift(newPayroll);
+
+      // Actualizar estado de los anticipos de este mes a 'Descontado'
+      (state.administracion_anticipos || []).forEach(a => {
+        if (a && a.month && a.month.trim().toLowerCase() === selectedPayrollMonth.trim().toLowerCase() && a.status !== 'Anulado') {
+          a.status = 'Descontado';
+          a.payrollId = newPayroll.id;
+          a.discountedAt = new Date().toISOString();
+        }
+      });
+
       simulateOnPayrollGenerated(newPayroll, state);
       await saveAppState(state);
       renderRrhhNomina(container, state);
@@ -3078,6 +3308,14 @@ function renderRrhhNomina(container, state) {
           state.administracion_contabilidad = (state.administracion_contabilidad || []).filter(entry => 
             !(entry.concept && entry.concept.includes(`Periodo: ${payroll.month}`))
           );
+          // Revertir anticipos descontados para que queden pendientes nuevamente
+          (state.administracion_anticipos || []).forEach(a => {
+            if (a && a.payrollId === payrollId) {
+              a.status = 'Pendiente';
+              a.payrollId = null;
+              delete a.discountedAt;
+            }
+          });
           await saveAppState(state);
           alert(`Nómina de ${payroll.month} eliminada correctamente.`);
           renderRrhhNomina(container, state);
@@ -3113,15 +3351,23 @@ function renderRrhhNomina(container, state) {
       }
 
       let totalGross = 0;
-      let totalNet = 0;
+      let totalAnticipos = 0;
+      let totalOtherDiscounts = 0;
       let totalDiscounts = 0;
+      let totalNet = 0;
+
       const payrollEmployees = eligibleEmployees.map(emp => {
         const proratedSalary = getProratedSalary(emp);
+        const empAnticipos = getEmployeeAnticiposForMonth(emp.id, month);
         const inputDisc = container.querySelector(`.payroll-discount-input[data-id="${emp.id}"]`);
-        const discount = inputDisc ? (parseFloat(inputDisc.value) || 0) : 0;
-        const net = Math.max(0, proratedSalary - discount);
+        const otherDiscount = inputDisc ? (parseFloat(inputDisc.value) || 0) : 0;
+        const totalDisc = empAnticipos + otherDiscount;
+        const net = Math.max(0, proratedSalary - totalDisc);
+
         totalGross += proratedSalary;
-        totalDiscounts += discount;
+        totalAnticipos += empAnticipos;
+        totalOtherDiscounts += otherDiscount;
+        totalDiscounts += totalDisc;
         totalNet += net;
 
         return {
@@ -3132,7 +3378,9 @@ function renderRrhhNomina(container, state) {
           salary: proratedSalary,
           bonus: 0,
           igssLaboral: 0,
-          discount: discount,
+          anticipos: empAnticipos,
+          discount: otherDiscount,
+          totalDiscounts: totalDisc,
           netSalary: net
         };
       });
@@ -3143,11 +3391,22 @@ function renderRrhhNomina(container, state) {
         month: month,
         employees: payrollEmployees,
         totalGross: totalGross,
+        totalAnticipos: totalAnticipos,
+        totalOtherDiscounts: totalOtherDiscounts,
         totalDiscounts: totalDiscounts,
         totalNet: totalNet
       };
 
       state.administracion_nominas.unshift(newPayroll);
+
+      // Actualizar estado de los anticipos de este mes a 'Descontado'
+      (state.administracion_anticipos || []).forEach(a => {
+        if (a && a.month && a.month.trim().toLowerCase() === month.trim().toLowerCase() && a.status !== 'Anulado') {
+          a.status = 'Descontado';
+          a.payrollId = newPayroll.id;
+          a.discountedAt = new Date().toISOString();
+        }
+      });
 
       // Ejecutar provisión en segundo plano
       simulateOnPayrollGenerated(newPayroll, state);
@@ -3160,6 +3419,484 @@ function renderRrhhNomina(container, state) {
       showPayrollPrintPreview(newPayroll, state, 'all');
     });
   }
+}
+
+// ==========================================
+// 💵 SUB-SECCIÓN: ANTICIPOS DE SUELDO / ADELANTOS QUINCENALES
+// ==========================================
+function renderRrhhAnticipos(container, state) {
+  state.administracion_anticipos = state.administracion_anticipos || [];
+  state.administracion_employees = state.administracion_employees || [];
+
+  const candidateEmployees = state.administracion_employees.filter(e => {
+    if (!e || e.status !== 'Activo') return false;
+    const nameLower = String(e.name || '').toLowerCase();
+    const idLower = String(e.id || '').toLowerCase();
+    if (nameLower.includes('antigravity') || nameLower === 'administrador maestro' || idLower === 'admin' || idLower === 'u-admin') {
+      return false;
+    }
+    if (isDoctorOrPhysician(e)) {
+      return false;
+    }
+    return true;
+  });
+
+  // Filtrado de anticipos
+  const filteredAnticipos = (state.administracion_anticipos || []).filter(a => {
+    if (!a) return false;
+    if (anticipoFilterMonth && anticipoFilterMonth !== 'todos') {
+      return a.month && a.month.trim().toLowerCase() === anticipoFilterMonth.trim().toLowerCase();
+    }
+    return true;
+  });
+
+  // Calcular estadísticas de anticipos
+  let totalAnticiposAmt = 0;
+  let totalPendientesAmt = 0;
+  let countPendientes = 0;
+  let totalDescontadosAmt = 0;
+  let countDescontados = 0;
+
+  filteredAnticipos.forEach(a => {
+    const amt = parseFloat(a.amount) || 0;
+    totalAnticiposAmt += amt;
+    if (a.status === 'Descontado') {
+      totalDescontadosAmt += amt;
+      countDescontados++;
+    } else {
+      totalPendientesAmt += amt;
+      countPendientes++;
+    }
+  });
+
+  container.innerHTML = `
+    <!-- Barra Superior de Sub-Pestañas de Nómina -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button class="btn ${activeNominaSubTab === 'planilla' ? 'btn-primary' : 'btn-secondary'}" id="nomina-tab-btn-planilla" style="padding: 6px 14px; font-size: 0.85rem;">
+          🏦 Planilla Mensual Ordinaria
+        </button>
+        <button class="btn ${activeNominaSubTab === 'anticipos' ? 'btn-primary' : 'btn-secondary'}" id="nomina-tab-btn-anticipos" style="padding: 6px 14px; font-size: 0.85rem;">
+          💵 Anticipos de Sueldo
+        </button>
+        <button class="btn ${activeNominaSubTab === 'liquidaciones' ? 'btn-primary' : 'btn-secondary'}" id="nomina-tab-btn-liquidaciones" style="padding: 6px 14px; font-size: 0.85rem;">
+          📜 Liquidación / Finiquito (Días Trabajados)
+        </button>
+      </div>
+      <div style="display: flex; gap: 12px; font-size: 0.8rem; color: var(--text-muted); align-items: center; flex-wrap: wrap;">
+        <span>Anticipos Registrados: <strong style="color: #f59e0b;">${state.administracion_anticipos.length}</strong></span>
+        <span>Liquidaciones: <strong style="color: var(--accent-secondary);">${(state.administracion_liquidaciones || []).length}</strong></span>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 20px; align-items: start;">
+      
+      <!-- Formulario para Registrar Anticipo -->
+      <div class="glass-card" style="padding: 1.25rem;">
+        <div style="margin-bottom: 1rem;">
+          <h3 style="font-size: 1.05rem; color: var(--accent-primary); margin: 0; font-weight: 700;">
+            💵 Registrar Anticipo de Sueldo
+          </h3>
+          <p style="margin: 3px 0 0 0; color: var(--text-muted); font-size: 0.78rem;">
+            Emite un adelanto de salario. El monto se restará automáticamente en la nómina mensual del período seleccionado y registrará el egreso correspondiente en caja y contabilidad.
+          </p>
+        </div>
+
+        <form id="form-create-anticipo" style="display: flex; flex-direction: column; gap: 12px;">
+          
+          <!-- Seleccionar Colaborador -->
+          <div class="form-group">
+            <label style="font-weight: 600; font-size: 0.82rem; color: var(--text-primary); margin-bottom: 4px; display: block;">
+              Colaborador *
+            </label>
+            <select id="anticipo-emp-select" class="form-control" required style="width: 100%; padding: 8px; font-size: 0.85rem; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+              <option value="">-- Seleccionar colaborador activo --</option>
+              ${candidateEmployees.map(e => `
+                <option value="${e.id}" data-salary="${e.salary || 0}" data-code="${e.employee_code || ''}" data-name="${e.name}" data-pos="${e.position}">
+                  ${e.name} (${e.employee_code || 'EMP-S/C'}) - ${e.position} [Sueldo: Q${parseFloat(e.salary || 0).toFixed(2)}]
+                </option>
+              `).join('')}
+            </select>
+          </div>
+
+          <!-- Tarjeta informativa del colaborador seleccionado -->
+          <div id="anticipo-emp-info-card" style="display: none; background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 6px; padding: 10px 14px; font-size: 0.8rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+              <div>
+                <div style="color: var(--text-muted); font-size: 0.72rem;">Sueldo Base Mensual:</div>
+                <strong style="font-family: var(--font-mono); color: var(--text-primary); font-size: 0.95rem;" id="card-emp-salary">Q0.00</strong>
+              </div>
+              <div>
+                <div style="color: var(--text-muted); font-size: 0.72rem;">Anticipos este mes:</div>
+                <strong style="font-family: var(--font-mono); color: #f59e0b; font-size: 0.95rem;" id="card-emp-anticipos-month">Q0.00</strong>
+              </div>
+              <div>
+                <div style="color: var(--text-muted); font-size: 0.72rem;">Disponible de Sueldo:</div>
+                <strong style="font-family: var(--font-mono); color: var(--accent-secondary); font-size: 0.95rem;" id="card-emp-available">Q0.00</strong>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <!-- Mes de Nómina a Descontar -->
+            <div class="form-group">
+              <label style="font-weight: 600; font-size: 0.82rem; color: var(--text-primary); margin-bottom: 4px; display: block;">
+                Mes de Nómina a Descontar *
+              </label>
+              <select id="anticipo-month-select" class="form-control" required style="width: 100%; padding: 8px; font-size: 0.85rem; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+                <option value="Enero 2026" ${selectedPayrollMonth === 'Enero 2026' ? 'selected' : ''}>Enero 2026</option>
+                <option value="Febrero 2026" ${selectedPayrollMonth === 'Febrero 2026' ? 'selected' : ''}>Febrero 2026</option>
+                <option value="Marzo 2026" ${selectedPayrollMonth === 'Marzo 2026' ? 'selected' : ''}>Marzo 2026</option>
+                <option value="Abril 2026" ${selectedPayrollMonth === 'Abril 2026' ? 'selected' : ''}>Abril 2026</option>
+                <option value="Mayo 2026" ${selectedPayrollMonth === 'Mayo 2026' ? 'selected' : ''}>Mayo 2026</option>
+                <option value="Junio 2026" ${selectedPayrollMonth === 'Junio 2026' ? 'selected' : ''}>Junio 2026</option>
+                <option value="Julio 2026" ${selectedPayrollMonth === 'Julio 2026' ? 'selected' : ''}>Julio 2026</option>
+                <option value="Agosto 2026" ${selectedPayrollMonth === 'Agosto 2026' ? 'selected' : ''}>Agosto 2026</option>
+                <option value="Septiembre 2026" ${selectedPayrollMonth === 'Septiembre 2026' ? 'selected' : ''}>Septiembre 2026</option>
+                <option value="Octubre 2026" ${selectedPayrollMonth === 'Octubre 2026' ? 'selected' : ''}>Octubre 2026</option>
+                <option value="Noviembre 2026" ${selectedPayrollMonth === 'Noviembre 2026' ? 'selected' : ''}>Noviembre 2026</option>
+                <option value="Diciembre 2026" ${selectedPayrollMonth === 'Diciembre 2026' ? 'selected' : ''}>Diciembre 2026</option>
+              </select>
+            </div>
+
+            <!-- Fecha de Entrega -->
+            <div class="form-group">
+              <label style="font-weight: 600; font-size: 0.82rem; color: var(--text-primary); margin-bottom: 4px; display: block;">
+                Fecha de Entrega *
+              </label>
+              <input type="date" id="anticipo-date" class="form-control" required value="${new Date().toISOString().substring(0, 10)}" style="width: 100%; padding: 8px; font-size: 0.85rem; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+            </div>
+          </div>
+
+          <!-- Monto del Anticipo -->
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <label style="font-weight: 600; font-size: 0.82rem; color: var(--text-primary); margin: 0;">
+                Monto del Anticipo (Q) *
+              </label>
+              <div style="display: flex; gap: 4px;">
+                <button type="button" class="btn btn-secondary btn-small btn-preset-amt" data-amt="500" style="padding: 2px 8px; font-size: 0.72rem;">Q500</button>
+                <button type="button" class="btn btn-secondary btn-small btn-preset-amt" data-amt="1000" style="padding: 2px 8px; font-size: 0.72rem;">Q1,000</button>
+                <button type="button" class="btn btn-secondary btn-small btn-preset-amt" data-amt="50%" style="padding: 2px 8px; font-size: 0.72rem;" title="50% del sueldo del colaborador">50% Sueldo</button>
+              </div>
+            </div>
+            <input type="number" id="anticipo-amount" min="1" step="any" placeholder="0.00" required class="form-control" style="width: 100%; padding: 8px; font-size: 1.05rem; font-family: var(--font-mono); font-weight: bold; color: #f59e0b; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 4px;">
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <!-- Forma de Entrega -->
+            <div class="form-group">
+              <label style="font-weight: 600; font-size: 0.82rem; color: var(--text-primary); margin-bottom: 4px; display: block;">
+                Forma de Entrega / Pago *
+              </label>
+              <select id="anticipo-payment-method" class="form-control" required style="width: 100%; padding: 8px; font-size: 0.85rem; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+                <option value="Efectivo" selected>💵 Efectivo (Caja Chica)</option>
+                <option value="Transferencia Bancaria">🏦 Transferencia Bancaria</option>
+                <option value="Cheque">📜 Cheque</option>
+              </select>
+            </div>
+
+            <!-- No. Referencia -->
+            <div class="form-group">
+              <label style="font-weight: 600; font-size: 0.82rem; color: var(--text-primary); margin-bottom: 4px; display: block;">
+                No. Referencia / Cheque / Boleta
+              </label>
+              <input type="text" id="anticipo-reference" class="form-control" placeholder="Ej. CH-1029, Transf #8410" style="width: 100%; padding: 8px; font-size: 0.85rem; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+            </div>
+          </div>
+
+          <!-- Motivo / Observación -->
+          <div class="form-group">
+            <label style="font-weight: 600; font-size: 0.82rem; color: var(--text-primary); margin-bottom: 4px; display: block;">
+              Motivo / Observación
+            </label>
+            <input type="text" id="anticipo-reason" class="form-control" value="Anticipo quincenal de sueldo" placeholder="Concepto o motivo del anticipo" style="width: 100%; padding: 8px; font-size: 0.85rem; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+          </div>
+
+          <button type="submit" class="btn btn-primary" style="padding: 10px; font-weight: 700; font-size: 0.92rem; margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 8px; background: linear-gradient(135deg, #0284c7, #0369a1); border: 1px solid #38bdf8;">
+            <span>💵</span> Registrar Anticipo y Emitir Vale
+          </button>
+        </form>
+      </div>
+
+      <!-- Historial de Anticipos Registrados -->
+      <div class="glass-card" style="padding: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <h3 style="font-size: 1rem; color: var(--accent-primary); margin: 0; font-weight: 700;">Historial de Anticipos</h3>
+            <span style="font-size: 0.72rem; color: var(--text-muted);">${filteredAnticipos.length} registrados (${countPendientes} pendientes)</span>
+          </div>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <select id="filter-anticipos-month" class="form-control" style="padding: 3px 8px; font-size: 0.78rem;">
+              <option value="todos" ${anticipoFilterMonth === 'todos' ? 'selected' : ''}>Todos los meses</option>
+              <option value="Enero 2026" ${anticipoFilterMonth === 'Enero 2026' ? 'selected' : ''}>Enero 2026</option>
+              <option value="Febrero 2026" ${anticipoFilterMonth === 'Febrero 2026' ? 'selected' : ''}>Febrero 2026</option>
+              <option value="Marzo 2026" ${anticipoFilterMonth === 'Marzo 2026' ? 'selected' : ''}>Marzo 2026</option>
+              <option value="Abril 2026" ${anticipoFilterMonth === 'Abril 2026' ? 'selected' : ''}>Abril 2026</option>
+              <option value="Mayo 2026" ${anticipoFilterMonth === 'Mayo 2026' ? 'selected' : ''}>Mayo 2026</option>
+              <option value="Junio 2026" ${anticipoFilterMonth === 'Junio 2026' ? 'selected' : ''}>Junio 2026</option>
+              <option value="Julio 2026" ${anticipoFilterMonth === 'Julio 2026' ? 'selected' : ''}>Julio 2026</option>
+              <option value="Agosto 2026" ${anticipoFilterMonth === 'Agosto 2026' ? 'selected' : ''}>Agosto 2026</option>
+              <option value="Septiembre 2026" ${anticipoFilterMonth === 'Septiembre 2026' ? 'selected' : ''}>Septiembre 2026</option>
+              <option value="Octubre 2026" ${anticipoFilterMonth === 'Octubre 2026' ? 'selected' : ''}>Octubre 2026</option>
+              <option value="Noviembre 2026" ${anticipoFilterMonth === 'Noviembre 2026' ? 'selected' : ''}>Noviembre 2026</option>
+              <option value="Diciembre 2026" ${anticipoFilterMonth === 'Diciembre 2026' ? 'selected' : ''}>Diciembre 2026</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Resumen Rápido de Montos -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+          <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 6px; padding: 8px 10px; text-align: center;">
+            <div style="font-size: 0.7rem; color: #f59e0b; font-weight: 600;">🟡 PENDIENTES DE DESCUENTO</div>
+            <div style="font-size: 1.05rem; font-weight: 800; font-family: var(--font-mono); color: #f59e0b; margin-top: 2px;">Q${totalPendientesAmt.toFixed(2)}</div>
+            <div style="font-size: 0.68rem; color: var(--text-muted);">${countPendientes} anticipos</div>
+          </div>
+          <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 6px; padding: 8px 10px; text-align: center;">
+            <div style="font-size: 0.7rem; color: #10b981; font-weight: 600;">✅ DESCONTADOS EN NÓMINA</div>
+            <div style="font-size: 1.05rem; font-weight: 800; font-family: var(--font-mono); color: #10b981; margin-top: 2px;">Q${totalDescontadosAmt.toFixed(2)}</div>
+            <div style="font-size: 0.68rem; color: var(--text-muted);">${countDescontados} anticipos</div>
+          </div>
+        </div>
+
+        <!-- Lista de Tarjetas de Anticipos -->
+        <div style="max-height: 440px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 2px;">
+          ${filteredAnticipos.length === 0
+            ? `<div style="text-align: center; color: var(--text-muted); font-style: italic; padding: 25px 0; font-size: 0.85rem;">No se registran anticipos para el filtro seleccionado.</div>`
+            : filteredAnticipos.map(a => `
+                <div style="border: 1px solid var(--border-color); border-radius: 8px; background: rgba(255,255,255,0.01); padding: 10px 12px; font-size: 0.82rem;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; margin-bottom: 6px; font-size: 0.72rem; color: var(--text-muted);">
+                    <div>
+                      <span style="font-family: monospace; font-weight: bold; color: var(--text-primary);">${a.id}</span>
+                      &bull; <span>📅 ${new Date(a.date).toLocaleDateString('es-GT', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+                    </div>
+                    <div>
+                      ${a.status === 'Descontado' 
+                        ? `<span style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; padding: 1px 6px; border-radius: 3px; font-weight: bold; font-size: 0.68rem;">✅ DESCONTADO EN NÓMINA</span>`
+                        : `<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid #f59e0b; padding: 1px 6px; border-radius: 3px; font-weight: bold; font-size: 0.68rem;">🟡 PENDIENTE</span>`
+                      }
+                    </div>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                    <div>
+                      <span style="font-weight: 700; font-size: 0.92rem; color: var(--text-primary);">${a.employeeName}</span><br>
+                      <span style="font-size: 0.75rem; color: var(--text-muted);">${a.employeePosition} &bull; Cód: ${a.employeeCode || 'S/C'}</span>
+                      <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">
+                        A descontar en Nómina: <strong style="color: #0284c7;">${a.month}</strong> &bull; Vía: <strong>${a.paymentMethod}</strong>
+                        ${a.reference ? ` &bull; Ref: <span style="font-family: monospace;">${a.reference}</span>` : ''}
+                      </div>
+                      ${a.reason ? `<div style="font-size: 0.72rem; color: #94a3b8; font-style: italic; margin-top: 2px;">Motivo: ${a.reason}</div>` : ''}
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                      <strong style="color: #f59e0b; font-size: 1.15rem; font-family: var(--font-mono); margin-right: 6px;">Q${parseFloat(a.amount).toFixed(2)}</strong>
+                      <button class="btn btn-secondary btn-small btn-print-anticipo-voucher" data-id="${a.id}" style="padding: 4px 10px; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 4px;" title="Imprimir Vale de Anticipo">
+                        <span>🖨️</span> <span>Vale</span>
+                      </button>
+                      ${a.status !== 'Descontado' ? `
+                        <button class="btn btn-danger btn-small btn-delete-anticipo" data-id="${a.id}" style="padding: 4px 8px; font-size: 0.75rem;" title="Eliminar / Anular Anticipo">
+                          <span>🗑️</span>
+                        </button>
+                      ` : ''}
+                    </div>
+                  </div>
+                </div>
+              `).join('')
+          }
+        </div>
+      </div>
+
+    </div>
+  `;
+
+  // Bind Subtab Navigation
+  const btnTabPlanilla = document.getElementById('nomina-tab-btn-planilla');
+  const btnTabAnticipos = document.getElementById('nomina-tab-btn-anticipos');
+  const btnTabLiquidaciones = document.getElementById('nomina-tab-btn-liquidaciones');
+  if (btnTabPlanilla) btnTabPlanilla.addEventListener('click', () => { activeNominaSubTab = 'planilla'; renderRrhhNomina(container, state); });
+  if (btnTabAnticipos) btnTabAnticipos.addEventListener('click', () => { activeNominaSubTab = 'anticipos'; renderRrhhNomina(container, state); });
+  if (btnTabLiquidaciones) btnTabLiquidaciones.addEventListener('click', () => { activeNominaSubTab = 'liquidaciones'; renderRrhhNomina(container, state); });
+
+  // Filter change
+  const filterMonthSelect = document.getElementById('filter-anticipos-month');
+  if (filterMonthSelect) {
+    filterMonthSelect.addEventListener('change', () => {
+      anticipoFilterMonth = filterMonthSelect.value;
+      renderRrhhAnticipos(container, state);
+    });
+  }
+
+  // Preset Amount Buttons
+  const presetBtns = container.querySelectorAll('.btn-preset-amt');
+  presetBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const val = btn.dataset.amt;
+      const amtInput = document.getElementById('anticipo-amount');
+      const empSelect = document.getElementById('anticipo-emp-select');
+      const selectedOption = empSelect ? empSelect.options[empSelect.selectedIndex] : null;
+      const empSalary = selectedOption ? (parseFloat(selectedOption.dataset.salary) || 0) : 0;
+
+      if (val === '50%') {
+        if (empSalary > 0) {
+          amtInput.value = (empSalary / 2).toFixed(2);
+        } else {
+          amtInput.value = '1000.00';
+        }
+      } else {
+        amtInput.value = parseFloat(val).toFixed(2);
+      }
+    });
+  });
+
+  // Dynamic Employee Card Info
+  const empSelect = document.getElementById('anticipo-emp-select');
+  const monthSelect = document.getElementById('anticipo-month-select');
+  const updateEmpCard = () => {
+    const card = document.getElementById('anticipo-emp-info-card');
+    if (!card || !empSelect) return;
+    const selectedOption = empSelect.options[empSelect.selectedIndex];
+    if (!selectedOption || !empSelect.value) {
+      card.style.display = 'none';
+      return;
+    }
+    const empId = empSelect.value;
+    const salary = parseFloat(selectedOption.dataset.salary) || 0;
+    const month = monthSelect ? monthSelect.value : selectedPayrollMonth;
+    const existingAnticipos = (state.administracion_anticipos || [])
+      .filter(a => a.employeeId === empId && a.month && a.month.trim().toLowerCase() === month.trim().toLowerCase() && a.status !== 'Anulado')
+      .reduce((sum, a) => sum + (parseFloat(a.amount) || 0), 0);
+    const available = Math.max(0, salary - existingAnticipos);
+
+    document.getElementById('card-emp-salary').textContent = `Q${salary.toFixed(2)}`;
+    document.getElementById('card-emp-anticipos-month').textContent = `Q${existingAnticipos.toFixed(2)}`;
+    document.getElementById('card-emp-available').textContent = `Q${available.toFixed(2)}`;
+    card.style.display = 'block';
+  };
+  if (empSelect) empSelect.addEventListener('change', updateEmpCard);
+  if (monthSelect) monthSelect.addEventListener('change', updateEmpCard);
+
+  // Form submit
+  const formCreate = document.getElementById('form-create-anticipo');
+  if (formCreate) {
+    formCreate.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const empId = empSelect.value;
+      if (!empId) {
+        alert("Por favor seleccione un colaborador.");
+        return;
+      }
+      const selectedOption = empSelect.options[empSelect.selectedIndex];
+      const empSalary = parseFloat(selectedOption.dataset.salary) || 0;
+      const empName = selectedOption.dataset.name;
+      const empPos = selectedOption.dataset.pos;
+      const empCode = selectedOption.dataset.code;
+
+      const month = document.getElementById('anticipo-month-select').value;
+      const date = document.getElementById('anticipo-date').value;
+      const amount = parseFloat(document.getElementById('anticipo-amount').value) || 0;
+      const paymentMethod = document.getElementById('anticipo-payment-method').value;
+      const reference = document.getElementById('anticipo-reference').value.trim();
+      const reason = document.getElementById('anticipo-reason').value.trim() || 'Anticipo quincenal de sueldo';
+
+      if (amount <= 0) {
+        alert("El monto del anticipo debe ser mayor a Q0.00.");
+        return;
+      }
+
+      // Advertencia si el anticipo supera el sueldo base mensual
+      if (empSalary > 0 && amount > empSalary) {
+        if (!confirm(`⚠️ Atención: El monto solicitado (Q${amount.toFixed(2)}) supera el sueldo base mensual del colaborador (Q${empSalary.toFixed(2)}). ¿Desea proceder de todos modos?`)) {
+          return;
+        }
+      }
+
+      const newAnticipo = {
+        id: 'ANT-' + Date.now(),
+        date: date,
+        employeeId: empId,
+        employeeCode: empCode || 'EMP-S/C',
+        employeeName: empName,
+        employeePosition: empPos,
+        salary: empSalary,
+        month: month,
+        amount: amount,
+        paymentMethod: paymentMethod,
+        reference: reference,
+        reason: reason,
+        status: 'Pendiente',
+        payrollId: null,
+        createdAt: new Date().toISOString()
+      };
+
+      state.administracion_anticipos = state.administracion_anticipos || [];
+      state.administracion_anticipos.unshift(newAnticipo);
+
+      // Registrar egreso en Caja
+      state.administracion_caja = state.administracion_caja || [];
+      state.administracion_caja.unshift({
+        id: 'CAJA-' + Date.now(),
+        date: date,
+        type: 'egreso',
+        category: 'Sueldos y Salarios',
+        concept: `Anticipo de Sueldo - ${empName} (Nómina: ${month}) - Ref: ${reference || 'S/N'}`,
+        amount: amount,
+        paymentMethod: paymentMethod,
+        refId: newAnticipo.id
+      });
+
+      // Registrar asiento en Contabilidad
+      state.administracion_contabilidad = state.administracion_contabilidad || [];
+      state.administracion_contabilidad.unshift({
+        id: 'ACC-' + Date.now(),
+        date: date,
+        type: 'egreso',
+        concept: `Anticipo de Sueldo - ${empName} (Período: ${month})`,
+        amount: amount,
+        account: '1105 - Anticipos a Personal',
+        paymentMethod: paymentMethod,
+        refId: newAnticipo.id
+      });
+
+      await saveAppState(state);
+      renderRrhhAnticipos(container, state);
+
+      // Abrir vale de anticipo para imprimir
+      showAnticipoPrintVoucher(newAnticipo, state);
+    });
+  }
+
+  // Print voucher button
+  container.querySelectorAll('.btn-print-anticipo-voucher').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const antId = btn.dataset.id;
+      const ant = (state.administracion_anticipos || []).find(a => a.id === antId);
+      if (ant) {
+        showAnticipoPrintVoucher(ant, state);
+      }
+    });
+  });
+
+  // Delete anticipo button
+  container.querySelectorAll('.btn-delete-anticipo').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const antId = btn.dataset.id;
+      const ant = (state.administracion_anticipos || []).find(a => a.id === antId);
+      if (!ant) return;
+
+      if (ant.status === 'Descontado') {
+        alert("Este anticipo ya fue descontado en una nómina cerrada. Para modificarlo o eliminarlo, primero recalcule o elimine la nómina correspondiente.");
+        return;
+      }
+
+      if (confirm(`¿Confirma anular y eliminar el anticipo de Q${parseFloat(ant.amount).toFixed(2)} de ${ant.employeeName}? Se anulará también el egreso en caja y contabilidad.`)) {
+        state.administracion_anticipos = (state.administracion_anticipos || []).filter(a => a.id !== antId);
+        state.administracion_caja = (state.administracion_caja || []).filter(c => c.refId !== antId);
+        state.administracion_contabilidad = (state.administracion_contabilidad || []).filter(entry => entry.refId !== antId);
+        await saveAppState(state);
+        alert("Anticipo anulado correctamente.");
+        renderRrhhAnticipos(container, state);
+      }
+    });
+  });
 }
 
 // ==========================================
@@ -3199,9 +3936,12 @@ function renderRrhhLiquidaciones(container, state) {
   container.innerHTML = `
     <!-- Barra Superior de Sub-Pestañas de Nómina -->
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
-      <div style="display: flex; gap: 8px;">
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
         <button class="btn ${activeNominaSubTab === 'planilla' ? 'btn-primary' : 'btn-secondary'}" id="nomina-tab-btn-planilla" style="padding: 6px 14px; font-size: 0.85rem;">
           🏦 Planilla Mensual Ordinaria
+        </button>
+        <button class="btn ${activeNominaSubTab === 'anticipos' ? 'btn-primary' : 'btn-secondary'}" id="nomina-tab-btn-anticipos" style="padding: 6px 14px; font-size: 0.85rem;">
+          💵 Anticipos de Sueldo
         </button>
         <button class="btn ${activeNominaSubTab === 'liquidaciones' ? 'btn-primary' : 'btn-secondary'}" id="nomina-tab-btn-liquidaciones" style="padding: 6px 14px; font-size: 0.85rem;">
           📜 Liquidación / Finiquito (Días Trabajados)
@@ -3457,8 +4197,10 @@ function renderRrhhLiquidaciones(container, state) {
 
   // Bind Subtab Navigation
   const btnTabPlanilla = document.getElementById('nomina-tab-btn-planilla');
+  const btnTabAnticipos = document.getElementById('nomina-tab-btn-anticipos');
   const btnTabLiquidaciones = document.getElementById('nomina-tab-btn-liquidaciones');
   if (btnTabPlanilla) btnTabPlanilla.addEventListener('click', () => { activeNominaSubTab = 'planilla'; renderRrhhNomina(container, state); });
+  if (btnTabAnticipos) btnTabAnticipos.addEventListener('click', () => { activeNominaSubTab = 'anticipos'; renderRrhhNomina(container, state); });
   if (btnTabLiquidaciones) btnTabLiquidaciones.addEventListener('click', () => { activeNominaSubTab = 'liquidaciones'; renderRrhhNomina(container, state); });
 
   // Elementos del formulario interactivo

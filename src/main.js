@@ -245,6 +245,7 @@ export function getAppState() {
     administracion_employees: [],
     administracion_nominas: [],
     administracion_liquidaciones: [],
+    administracion_anticipos: [],
     administracion_bancos: [],
     administracion_activos_fijos: [],
     administracion_asistencias: [],
@@ -353,6 +354,7 @@ export async function saveAppState(state) {
   if (state.administracion_employees) firestoreState.administracion_employees = state.administracion_employees;
   if (state.administracion_nominas) firestoreState.administracion_nominas = state.administracion_nominas;
   if (state.administracion_liquidaciones) firestoreState.administracion_liquidaciones = state.administracion_liquidaciones;
+  if (state.administracion_anticipos) firestoreState.administracion_anticipos = state.administracion_anticipos;
   if (state.administracion_bancos) firestoreState.administracion_bancos = state.administracion_bancos;
   if (state.administracion_activos_fijos) firestoreState.administracion_activos_fijos = state.administracion_activos_fijos;
   if (state.administracion_asistencias) firestoreState.administracion_asistencias = state.administracion_asistencias;
@@ -432,6 +434,7 @@ async function executeSaveAppStateBatch(state) {
     syncCatalog('administracion_employees', state.administracion_employees);
     syncCatalog('administracion_nominas', state.administracion_nominas);
     syncCatalog('administracion_liquidaciones', state.administracion_liquidaciones);
+    syncCatalog('administracion_anticipos', state.administracion_anticipos);
     syncCatalog('administracion_bancos', state.administracion_bancos);
     syncCatalog('administracion_activos_fijos', state.administracion_activos_fijos);
     syncCatalog('administracion_asistencias', state.administracion_asistencias);
