@@ -299,6 +299,43 @@ export function saveStateToLocalCache() {
 // Cargar estado inicial desde caché local por prevención
 loadStateFromLocalCache();
 
+// Helper para obtener marca temporal precisa de un paciente
+export function getPatientTimestamp(p) {
+  if (!p) return 0;
+  if (p.createdAt) {
+    const t = new Date(p.createdAt).getTime();
+    if (!isNaN(t) && t > 0) return t;
+  }
+  if (p.updatedAt) {
+    const t = new Date(p.updatedAt).getTime();
+    if (!isNaN(t) && t > 0) return t;
+  }
+  if (p.id && typeof p.id === 'string') {
+    if (p.id.startsWith('p-')) {
+      const parts = p.id.split('-');
+      const num = parseInt(parts[1], 10);
+      if (!isNaN(num) && num > 1000000000) return num;
+    }
+    if (p.id.startsWith('PAC-')) {
+      const parts = p.id.split('-');
+      const num = parseInt(parts[1], 10);
+      if (!isNaN(num)) return num;
+    }
+  }
+  return 0;
+}
+
+// Ordena los pacientes de manera que los más recientes (recién creados/atendidos) figuren de primero
+export function sortPatientsByNewestFirst(patients) {
+  if (!Array.isArray(patients)) return patients;
+  return patients.sort((a, b) => {
+    const tA = getPatientTimestamp(a);
+    const tB = getPatientTimestamp(b);
+    if (tA !== tB) return tB - tA;
+    return String(b.name || '').localeCompare(String(a.name || ''));
+  });
+}
+
 // Callbacks para notificar cambios a la interfaz cuando la base remota cambie
 const updateSubscribers = [];
 
@@ -324,6 +361,7 @@ try {
         } else {
           firestoreState.patients.unshift(payload.patient);
         }
+        sortPatientsByNewestFirst(firestoreState.patients);
         notifySubscribers();
       } else if (payload.type === 'patient_deleted' && payload.patientId) {
         if (firestoreState.patients) {
@@ -349,28 +387,62 @@ function broadcastCrossTab(type, data) {
 export async function savePatientToFirestore(patient) {
   if (!patient || !patient.id) return false;
 
-  // 1. Actualizar inmediatamente estado local para disponibilidad instantánea
-  if (!firestoreState.patients) firestoreState.patients = [];
-  const idx = firestoreState.patients.findIndex(p => p.id === patient.id);
-  if (idx >= 0) {
-    firestoreState.patients[idx] = { ...firestoreState.patients[idx], ...patient };
-  } else {
-    firestoreState.patients.unshift(patient);
+  // 1. Sanitizar objeto para evitar undefined que cause rechazo en Firestore setDoc
+  const cleanPatient = JSON.parse(JSON.stringify(patient));
+  const nowIso = new Date().toISOString();
+  if (!cleanPatient.createdAt) {
+    cleanPatient.createdAt = nowIso;
   }
+  cleanPatient.updatedAt = nowIso;
+
+  // 2. Actualizar inmediatamente estado local para disponibilidad instantánea
+  if (!firestoreState.patients) firestoreState.patients = [];
+  const idx = firestoreState.patients.findIndex(p => p.id === cleanPatient.id);
+  if (idx >= 0) {
+    firestoreState.patients[idx] = { ...firestoreState.patients[idx], ...cleanPatient };
+  } else {
+    firestoreState.patients.unshift(cleanPatient);
+  }
+
+  // Ordenar para que los más nuevos siempre figuren arriba
+  sortPatientsByNewestFirst(firestoreState.patients);
 
   // Notificar inmediatamente en esta ventana
   notifySubscribers();
 
   // Transmitir a todas las demás pestañas/ventanas abiertas
-  broadcastCrossTab('patient_saved', { patient });
+  broadcastCrossTab('patient_saved', { patient: cleanPatient });
 
-  // 2. Persistir de forma directa en Firestore con timeout de seguridad para nunca bloquear la UI
+  // 3. Persistir de forma directa en Firestore con timeout de seguridad para nunca bloquear la UI
   try {
-    const docRef = doc(db, 'multimedica_pacientes', patient.id);
-    const writeOp = setDoc(docRef, patient, { merge: true });
-    const timeoutOp = new Promise((resolve) => setTimeout(() => resolve('timeout'), 2000));
-    await Promise.race([writeOp, timeoutOp]);
-    console.log(`[Firestore] Paciente "${patient.name}" (${patient.id}) sincronizado.`);
+    const docRef = doc(db, 'multimedica_pacientes', cleanPatient.id);
+    const writeOp = setDoc(docRef, cleanPatient, { merge: true });
+
+    // También actualizar catálogo de pacientes recientes para redundancia de sincronización instantánea
+    let recentOp = Promise.resolve();
+    try {
+      const recentList = firestoreState.patients.slice(0, 50).map(p => ({
+        id: p.id,
+        name: p.name,
+        dpi: p.dpi,
+        telephone: p.telephone,
+        gender: p.gender,
+        birthdate: p.birthdate,
+        address: p.address,
+        assignedDoctorId: p.assignedDoctorId,
+        assignedDoctorName: p.assignedDoctorName,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+        currentReason: p.currentReason || p.reasonForConsultation,
+        vitalSigns: Array.isArray(p.vitalSigns) ? p.vitalSigns.slice(0, 2) : []
+      }));
+      const recentDocRef = doc(db, 'multimedica', 'catalog_recent_patients');
+      recentOp = setDoc(recentDocRef, { _collectionType: 'catalog_recent_patients', items: recentList }, { merge: true });
+    } catch (e) {}
+
+    const timeoutOp = new Promise((resolve) => setTimeout(() => resolve('timeout'), 2500));
+    await Promise.race([Promise.all([writeOp, recentOp]), timeoutOp]);
+    console.log(`[Firestore] Paciente "${cleanPatient.name}" (${cleanPatient.id}) sincronizado.`);
     return true;
   } catch (err) {
     console.warn("[Firestore] Advertencia al guardar paciente directo en la nube:", err);
@@ -491,7 +563,9 @@ export function initRealtimeFirestore(onFirstLoad) {
           }
         }
       } else {
-        firestoreState.patients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const loadedPatients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        sortPatientsByNewestFirst(loadedPatients);
+        firestoreState.patients = loadedPatients;
       }
       notifySubscribers();
       checkFirstLoad();
@@ -500,7 +574,9 @@ export function initRealtimeFirestore(onFirstLoad) {
       try {
         const cacheSnap = await getDocsFromCache(collection(db, 'multimedica_pacientes'));
         if (!cacheSnap.empty) {
-          firestoreState.patients = cacheSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          const loadedPatients = cacheSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          sortPatientsByNewestFirst(loadedPatients);
+          firestoreState.patients = loadedPatients;
           console.log(`Recuperados ${cacheSnap.size} pacientes desde caché nativo.`);
           notifySubscribers();
         }
@@ -683,6 +759,20 @@ export function initRealtimeFirestore(onFirstLoad) {
         }
         if (dId === 'catalog_accounts_payable') {
           payables.push(...(dData.items || []));
+          return;
+        }
+        if (dId === 'catalog_recent_patients' && Array.isArray(dData.items)) {
+          if (!firestoreState.patients) firestoreState.patients = [];
+          dData.items.forEach(recentP => {
+            if (!recentP || !recentP.id) return;
+            const existing = firestoreState.patients.find(p => p.id === recentP.id);
+            if (!existing) {
+              firestoreState.patients.unshift(recentP);
+            } else {
+              Object.assign(existing, recentP);
+            }
+          });
+          sortPatientsByNewestFirst(firestoreState.patients);
           return;
         }
         if (dId === 'catalog_pharmacySales') {
@@ -1125,6 +1215,20 @@ export function initRealtimeFirestore(onFirstLoad) {
               payables.push(...(dData.items || []));
               return;
             }
+            if (dId === 'catalog_recent_patients' && Array.isArray(dData.items)) {
+              if (!firestoreState.patients) firestoreState.patients = [];
+              dData.items.forEach(recentP => {
+                if (!recentP || !recentP.id) return;
+                const existing = firestoreState.patients.find(p => p.id === recentP.id);
+                if (!existing) {
+                  firestoreState.patients.unshift(recentP);
+                } else {
+                  Object.assign(existing, recentP);
+                }
+              });
+              sortPatientsByNewestFirst(firestoreState.patients);
+              return;
+            }
             if (dId === 'catalog_pharmacySales') {
               sales.push(...(dData.items || []));
               return;
@@ -1347,9 +1451,21 @@ export async function saveDocument(collectionName, docId, data) {
 
 export async function saveDocumentsBatch(collectionName, items) {
   try {
-    const isCatalog = ['medications', 'laboratoryTests', 'imagingStudies', 'consultationTypes'].includes(collectionName);
+    const isCatalog = [
+      'medications', 'laboratoryTests', 'imagingStudies', 'consultationTypes',
+      'pharmacySales', 'roomRates', 'encamamiento', 'emergencias', 'bajasInventario',
+      'almacenKardexPEPS', 'recepcionesTecnicas', 'requisicionesHospitalarias',
+      'bajasDisposicion', 'bitacoraTemperatura', 'unidosis24h', 'liquidacionesUnidosis',
+      'auditoriasInventario', 'autorizacionesEspeciales', 'administracion_compras',
+      'administracion_contabilidad', 'administracion_caja', 'administracion_employees',
+      'administracion_nominas', 'administracion_liquidaciones', 'administracion_anticipos',
+      'administracion_bancos', 'administracion_activos_fijos', 'administracion_asistencias',
+      'administracion_asistencias_audit', 'administracion_enfermeria_roles',
+      'administracion_enfermeria_cambios', 'administracion_enfermeria_permisos',
+      'external_doctors', 'accounts_payable'
+    ].includes(collectionName) || String(collectionName).startsWith('administracion_');
     if (isCatalog) {
-      return true; // No-op: handled atomically in saveAppState
+      return true; // No-op: manejado de forma consolidada y atómica en saveAppState para evitar consumo de cuota
     }
 
     if (!Array.isArray(items) || items.length === 0) return true;

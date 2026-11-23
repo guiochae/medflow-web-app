@@ -1,6 +1,6 @@
 // src/modules/consulta.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
-import { savePatientToFirestore } from '../firebase.js';
+import { savePatientToFirestore, sortPatientsByNewestFirst } from '../firebase.js';
 import { searchDiagnosticSuggestions } from '../data/cie10.js';
 import { openDocumentViewerModal } from './laboratorio.js';
 import logoUrl from '../assets/logo.jpg';
@@ -498,6 +498,7 @@ function renderPatientList(query = '') {
   
   const currentUser = state.currentUser;
   let basePatients = state.patients || [];
+  sortPatientsByNewestFirst(basePatients);
 
   // Si el usuario es médico y no hay búsqueda activa, filtrar según asignación, interconsulta o pool común
   const roleNorm = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -2798,6 +2799,8 @@ function renderConsultationForm(patient, doctors) {
             }
           }
 
+          patientObj.updatedAt = new Date().toISOString();
+          savePatientToFirestore(patientObj).catch(err => console.warn("Error guardando paciente en consulta:", err));
           await saveAppState(stateObj);
           alert("✅ Consulta médica actualizada exitosamente.");
 
@@ -2942,6 +2945,8 @@ function renderConsultationForm(patient, doctors) {
           patientObj.prescriptions.unshift(newRecipe);
         }
 
+        patientObj.updatedAt = new Date().toISOString();
+        savePatientToFirestore(patientObj).catch(err => console.warn("Error guardando paciente en consulta:", err));
         await saveAppState(stateObj);
 
         alert("✅ Consulta registrada exitosamente. Se ha guardado en el expediente clínico y se ha generado el comprobante de cobro en Facturación de Preconsulta.");

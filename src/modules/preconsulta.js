@@ -1,5 +1,5 @@
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId } from '../main.js';
-import { savePatientToFirestore, deletePatientFromFirestore } from '../firebase.js';
+import { savePatientToFirestore, deletePatientFromFirestore, sortPatientsByNewestFirst } from '../firebase.js';
 import { showLocalLabReportPrintWindow, openDocumentViewerModal } from './laboratorio.js';
 import { initPartogramaChart } from './partogramaChart.js';
 import { 
@@ -140,6 +140,7 @@ function renderPatientList(query = '') {
   
   const currentUser = state.currentUser;
   let basePatients = state.patients || [];
+  sortPatientsByNewestFirst(basePatients);
 
   // Si el usuario es médico y no hay búsqueda activa, filtrar según asignación, interconsulta o pool común
   const roleNorm = String(currentUser && currentUser.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -378,8 +379,12 @@ function showNewPatientForm() {
     const consultReason = (document.getElementById('p-reason')?.value || '').trim();
     
     const newId = 'p-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+    const nowIso = new Date().toISOString();
     const newPatient = {
       id: newId,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      createdBy: currentUser ? currentUser.name : 'Recepción',
       name: document.getElementById('p-name').value.trim(),
       birthdate: bdate,
       gender: document.getElementById('p-gender').value,
@@ -402,6 +407,7 @@ function showNewPatientForm() {
     // 1. Incorporar de inmediato el nuevo paciente al estado local y memoria
     if (!stateObj.patients) stateObj.patients = [];
     stateObj.patients.unshift(newPatient);
+    sortPatientsByNewestFirst(stateObj.patients);
 
     // 2. Transición instantánea de la interfaz (0 segundos de espera, sin congelamiento)
     setActivePatientId(newId);
@@ -610,6 +616,9 @@ function showEditPatientForm(patient) {
       patient.currentReason = epVal;
       patient.reasonForConsultation = epVal;
     }
+
+    pObj.updatedAt = new Date().toISOString();
+    sortPatientsByNewestFirst(stateObj.patients);
 
     // 1. Transición instantánea de la interfaz (0 segundos)
     renderPatientList();
@@ -3433,18 +3442,13 @@ export function syncPatientBilling(patientObj, stateObj) {
     });
   });
 
-  // Si hay detalles y la factura pendiente no estaba en billingHistory, agregarla al inicio
+  // Si hay detalles y la factura pendiente no estaba en billingHistory, agregarla al inicio en memoria
   if (pendingBill.details.length > 0) {
     pendingBill.total = pendingBill.details.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
     const existingIndex = patientObj.billingHistory.findIndex(b => b.id === pendingBill.id);
     if (existingIndex === -1) {
       patientObj.billingHistory.unshift(pendingBill);
-      stateModified = true;
     }
-  }
-
-  if (stateModified && stateObj) {
-    saveAppState(stateObj);
   }
 
   return pendingBill;

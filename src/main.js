@@ -23,6 +23,8 @@ import {
   subscribeToStateUpdates,
   saveDocument,
   saveDocumentsBatch,
+  savePatientToFirestore,
+  sortPatientsByNewestFirst,
   removeDocument,
   purgeAllFirestoreData,
   purgeCollectionFromFirestore,
@@ -381,7 +383,7 @@ export async function saveAppState(state) {
       } finally {
         resolve(true);
       }
-    }, 600);
+    }, 1200);
   });
 }
 
@@ -468,6 +470,24 @@ async function executeSaveAppStateBatch(state) {
         const docRef = doc(db, 'multimedica', 'clinicInfo');
         batch.set(docRef, { ...state.clinicInfo, _collectionType: 'clinicInfo' }, { merge: true });
         hasWrites = true;
+      }
+    }
+
+    // 5. Detectar y sincronizar pacientes nuevos o modificados en la nube
+    if (state.patients && Array.isArray(state.patients)) {
+      const prevPatientsMap = new Map();
+      if (lastSyncedState && Array.isArray(lastSyncedState.patients)) {
+        lastSyncedState.patients.forEach(p => { if (p && p.id) prevPatientsMap.set(p.id, p); });
+      }
+
+      for (const p of state.patients) {
+        if (!p || !p.id) continue;
+        const prevP = prevPatientsMap.get(p.id);
+        if (!prevP) {
+          savePatientToFirestore(p).catch(err => console.warn("Sync diferido nuevo paciente:", err));
+        } else if (p.updatedAt !== prevP.updatedAt || JSON.stringify(p) !== JSON.stringify(prevP)) {
+          savePatientToFirestore(p).catch(err => console.warn("Sync diferido paciente modificado:", err));
+        }
       }
     }
 
@@ -1305,15 +1325,12 @@ export function backfillEmployeeCodes(state) {
     }
   });
 
-  // 4. Si hubo modificaciones, sincronizar Firestore de forma directa e inmediata
+  // 4. Si hubo modificaciones, actualizar en memoria y caché local (sin emitir escritura recursiva directa para proteger cuota)
   if (modified) {
     if (firestoreState) {
       firestoreState.administracion_employees = state.administracion_employees;
     }
     saveStateToLocalCache();
-    saveDocumentsBatch('administracion_employees', state.administracion_employees).catch(err => {
-      console.warn("Error guardando backfill en Firestore:", err);
-    });
   }
 
   return modified;
@@ -1621,9 +1638,6 @@ export function purgeAndSanitizePayrolls(state) {
       firestoreState.administracion_contabilidad = state.administracion_contabilidad;
     }
     saveStateToLocalCache();
-    saveDocumentsBatch('administracion_nominas', state.administracion_nominas).catch(err => {
-      console.warn("Error guardando depuración de nóminas en Firestore:", err);
-    });
   }
 
   return { modified, purgedCount: totalPurgedEmployees };

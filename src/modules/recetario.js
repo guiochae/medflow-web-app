@@ -1,6 +1,6 @@
 // src/modules/recetario.js
 import { getAppState, saveAppState, getActivePatientId, setActivePatientId, isAdminUser } from '../main.js';
-import { savePatientToFirestore } from '../firebase.js';
+import { savePatientToFirestore, sortPatientsByNewestFirst } from '../firebase.js';
 import { medicationsDatabase } from '../data/medicamentos.js';
 import { showPastConsultationDetail } from './consulta.js';
 import { syncPatientBilling } from './preconsulta.js';
@@ -383,6 +383,7 @@ function renderPatientList(query = '') {
   
   const currentUser = state.currentUser;
   let basePatients = state.patients || [];
+  sortPatientsByNewestFirst(basePatients);
 
   const filtered = basePatients.filter(p => {
     const nameVal = p.name ? String(p.name).toLowerCase() : '';
@@ -661,7 +662,9 @@ function renderRecipeHistory(patient) {
             // Eliminar cobro asociado de farmacia (si existe en el historial de facturación)
             pObj.billingHistory = (pObj.billingHistory || []).filter(item => item.recipeId !== r.id);
             
-            await saveAppState(stateObj);
+            patientObj.updatedAt = new Date().toISOString();
+          savePatientToFirestore(patientObj).catch(err => console.warn("Error guardando paciente en recetario:", err));
+          await saveAppState(stateObj);
             alert("🗑️ Receta y cobro asociados eliminados correctamente.");
             patient.prescriptions = pObj.prescriptions;
             patient.billingHistory = pObj.billingHistory;
@@ -1481,6 +1484,8 @@ function renderRecipeBuilder(patient, doctors) {
             }
           });
 
+          patientObj.updatedAt = new Date().toISOString();
+          savePatientToFirestore(patientObj).catch(err => console.warn("Error guardando paciente en recetario:", err));
           await saveAppState(stateObj);
 
           // Salir del modo edición
@@ -1584,6 +1589,8 @@ function renderRecipeBuilder(patient, doctors) {
         }
       });
 
+      patientObj.updatedAt = new Date().toISOString();
+      savePatientToFirestore(patientObj).catch(err => console.warn("Error guardando paciente en recetario:", err));
       await saveAppState(stateObj);
 
       showPrescriptionPreviewModal(patientObj, newRecipe);
