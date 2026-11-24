@@ -1,5 +1,6 @@
 import QRCode from 'qrcode';
 import { getAppState, saveAppState } from '../main.js';
+import { savePatientToFirestore } from '../firebase.js';
 
 let bridgeStatusCache = {
   online: false,
@@ -913,15 +914,23 @@ export function initWhatsAppReceptionistBridge(currentUser) {
     updateWhatsAppPillUI(status);
   }, 15000);
 
-  // 7. Comprobación y envío automático de recordatorios de citas de 48 horas
+  // 7. Sincronizar citas previamente notificadas para evitar cualquier envío duplicado
+  try {
+    const appSt = getAppState();
+    if (appSt && appSt.patients) {
+      syncSentRemindersFromLog(appSt.patients);
+    }
+  } catch (e) {}
+
+  // 8. Comprobación controlada y envío de recordatorios de citas de 48 horas (1 sola vez por cita)
   setTimeout(() => {
     checkAndSend48hAppointmentReminders().catch(() => {});
-  }, 3500);
+  }, 6000);
 
   if (window._waRemindersInterval) clearInterval(window._waRemindersInterval);
   window._waRemindersInterval = setInterval(() => {
     checkAndSend48hAppointmentReminders().catch(() => {});
-  }, 15 * 60 * 1000); // Revisar automáticamente cada 15 minutos
+  }, 60 * 60 * 1000); // Comprobación espaciada cada 60 minutos (cada cita se envía estrictamente una sola vez)
 }
 
 /**
@@ -1168,6 +1177,173 @@ export async function sendWhatsAppMessageToPatient(phoneNumber, message) {
 }
 
 /**
+ * Genera una clave única determinista para una cita y evitar cualquier envío duplicado.
+ */
+export function getAppointmentReminderKey(patient, app) {
+  if (!patient || !app) return '';
+  const pId = String(patient.id || patient.dpi || patient.telephone || patient.name || '').trim().replace(/\s+/g, '_');
+  const dStr = String(app.date || '').trim();
+  const tStr = String(app.time || '').trim();
+  const appId = app.id ? String(app.id).trim() : '';
+  return `wa_rem_${pId}_${appId || (dStr + '_' + tStr)}`;
+}
+
+/**
+ * Comprueba de manera exhaustiva y multi-nivel si un recordatorio ya fue enviado previamente.
+ * Revisa: objeto de cita, historial de mensajes del paciente, localStorage y caché en memoria.
+ */
+export function isAppointmentReminderAlreadySent(patient, app) {
+  if (!patient || !app) return true;
+
+  // 1. Marca explícita en el objeto de la cita
+  if (app.reminder48hSent === true || app.reminderSent === true) {
+    return true;
+  }
+
+  // 2. Comprobar historial de mensajes enviados al paciente (patient.whatsappMessagesLog)
+  if (Array.isArray(patient.whatsappMessagesLog)) {
+    const foundInLog = patient.whatsappMessagesLog.some(log => {
+      if (!log) return false;
+      if (log.type !== 'RECORDATORIO_CITA_48H') return false;
+      if (app.id && log.appointmentId && log.appointmentId === app.id) return true;
+      if (log.appointmentDate === app.date) {
+        if (!app.time || !log.appointmentTime || log.appointmentTime === app.time) return true;
+      }
+      return false;
+    });
+    if (foundInLog) {
+      app.reminder48hSent = true;
+      return true;
+    }
+  }
+
+  // 3. Comprobar registro persistente en localStorage
+  const key = getAppointmentReminderKey(patient, app);
+  try {
+    const raw = localStorage.getItem('lugamed_sent_appointment_reminders');
+    if (raw) {
+      const registry = JSON.parse(raw);
+      if (registry && registry[key]) {
+        app.reminder48hSent = true;
+        return true;
+      }
+    }
+  } catch (e) {}
+
+  // 4. Comprobar registro en memoria de sesión actual
+  if (window._sentAppointmentRemindersCache && window._sentAppointmentRemindersCache.has(key)) {
+    app.reminder48hSent = true;
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Registra de forma definitiva e imborrable un recordatorio como enviado en todos los niveles.
+ */
+export function markAppointmentReminderAsSent(patient, app, sentAt = new Date().toISOString(), phone = '', text = '') {
+  if (!patient || !app) return;
+
+  app.reminder48hSent = true;
+  app.reminder48hSentAt = sentAt;
+  patient.updatedAt = sentAt;
+
+  const key = getAppointmentReminderKey(patient, app);
+
+  // 1. Registro en memoria
+  if (!window._sentAppointmentRemindersCache) {
+    window._sentAppointmentRemindersCache = new Set();
+  }
+  window._sentAppointmentRemindersCache.add(key);
+
+  // 2. Registro persistente en localStorage
+  try {
+    const raw = localStorage.getItem('lugamed_sent_appointment_reminders');
+    const registry = raw ? JSON.parse(raw) : {};
+    registry[key] = {
+      sentAt,
+      patientId: patient.id,
+      patientName: patient.name,
+      appointmentDate: app.date,
+      appointmentTime: app.time,
+      phone
+    };
+    localStorage.setItem('lugamed_sent_appointment_reminders', JSON.stringify(registry));
+  } catch (e) {}
+
+  // 3. Registro en log de mensajes del paciente
+  if (!Array.isArray(patient.whatsappMessagesLog)) {
+    patient.whatsappMessagesLog = [];
+  }
+  const alreadyInLog = patient.whatsappMessagesLog.some(l => 
+    l.type === 'RECORDATORIO_CITA_48H' && 
+    l.appointmentDate === app.date && 
+    (l.appointmentTime === app.time || !app.time)
+  );
+  if (!alreadyInLog) {
+    patient.whatsappMessagesLog.unshift({
+      id: `wamsg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      type: 'RECORDATORIO_CITA_48H',
+      reminderKey: key,
+      sentAt,
+      recipientName: patient.name,
+      recipientPhone: phone,
+      appointmentDate: app.date,
+      appointmentTime: app.time,
+      appointmentId: app.id || '',
+      doctorName: app.doctorName || patient.assignedDoctorName || 'Médico Tratante',
+      message: text,
+      status: 'ENVIADO'
+    });
+  }
+}
+
+/**
+ * Saneamiento proactivo: sincroniza citas previamente enviadas desde logs o localStorage
+ */
+export function syncSentRemindersFromLog(patients) {
+  if (!Array.isArray(patients)) return;
+  try {
+    const raw = localStorage.getItem('lugamed_sent_appointment_reminders');
+    const registry = raw ? JSON.parse(raw) : {};
+    let modified = false;
+
+    patients.forEach(patient => {
+      if (!patient || !Array.isArray(patient.appointments)) return;
+      patient.appointments.forEach(app => {
+        if (!app) return;
+        const key = getAppointmentReminderKey(patient, app);
+        if (registry[key] && !app.reminder48hSent) {
+          app.reminder48hSent = true;
+          app.reminder48hSentAt = registry[key].sentAt || new Date().toISOString();
+          modified = true;
+        }
+        if (Array.isArray(patient.whatsappMessagesLog)) {
+          const matchingLog = patient.whatsappMessagesLog.find(l => 
+            l && l.type === 'RECORDATORIO_CITA_48H' && 
+            l.appointmentDate === app.date && 
+            (l.appointmentTime === app.time || !app.time)
+          );
+          if (matchingLog) {
+            app.reminder48hSent = true;
+            app.reminder48hSentAt = matchingLog.sentAt || app.reminder48hSentAt || new Date().toISOString();
+            if (!registry[key]) {
+              registry[key] = { sentAt: app.reminder48hSentAt, patientId: patient.id, patientName: patient.name };
+              modified = true;
+            }
+          }
+        }
+      });
+    });
+
+    if (modified) {
+      localStorage.setItem('lugamed_sent_appointment_reminders', JSON.stringify(registry));
+    }
+  } catch (e) {}
+}
+
+/**
  * Envía el recordatorio oficial de una cita específica de un paciente y guarda el registro en su historial.
  * @param {string} patientId - ID del paciente
  * @param {number} appointmentIndex - Índice de la cita en patient.appointments
@@ -1186,6 +1362,12 @@ export async function sendSingleAppointmentReminder(patientId, appointmentIndex)
     throw new Error(`El paciente ${patient.name} no tiene número de teléfono registrado.`);
   }
 
+  // Comprobar estrictamente si ya fue enviado
+  if (isAppointmentReminderAlreadySent(patient, app)) {
+    alert("ℹ️ Esta cita ya tiene su recordatorio de WhatsApp enviado previamente.");
+    return { success: true, message: "El recordatorio ya había sido enviado.", logEntry: null };
+  }
+
   const doctorName = app.doctorName || patient.assignedDoctorName || 'Dr. Carlos Mendoza';
   const reminderMessage = formatAppointmentReminderMessage(patient.name, app.date, app.time, doctorName);
 
@@ -1195,101 +1377,91 @@ export async function sendSingleAppointmentReminder(patientId, appointmentIndex)
   }
 
   const sentAt = new Date().toISOString();
-  app.reminder48hSent = true;
-  app.reminder48hSentAt = sentAt;
+  markAppointmentReminderAsSent(patient, app, sentAt, patientPhone, reminderMessage);
 
-  if (!Array.isArray(patient.whatsappMessagesLog)) {
-    patient.whatsappMessagesLog = [];
-  }
+  // Persistir inmediatamente en Firestore y en el estado global
+  savePatientToFirestore(patient).catch(err => console.warn("Error guardando paciente tras enviar recordatorio:", err));
+  saveAppState(state).catch(err => console.warn("Error guardando estado tras enviar recordatorio:", err));
 
-  const logEntry = {
-    id: `wamsg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-    type: 'RECORDATORIO_CITA_48H',
-    sentAt: sentAt,
-    recipientName: patient.name,
-    recipientPhone: patientPhone,
-    appointmentDate: app.date,
-    appointmentTime: app.time,
-    doctorName: doctorName,
-    message: reminderMessage,
-    status: 'ENVIADO'
-  };
-
-  patient.whatsappMessagesLog.unshift(logEntry);
-  saveAppState(state);
-
+  const logEntry = (patient.whatsappMessagesLog || [])[0] || null;
   return { success: true, message: reminderMessage, logEntry };
 }
 
+let _isCheckingReminders = false;
+
 /**
  * Revisa todas las citas de todos los pacientes en la ventana de 48 horas previas y envía recordatorios automáticos.
- * Lleva un registro en patient.whatsappMessagesLog y marca app.reminder48hSent.
+ * Con blindaje total contra repetición: cada cita se envía UNA SOLA VEZ.
  * @returns {Promise<{sent: number, checked: number}>}
  */
 export async function checkAndSend48hAppointmentReminders() {
-  const state = getAppState();
-  if (!state || !Array.isArray(state.patients)) return { sent: 0, checked: 0 };
+  if (_isCheckingReminders) return { sent: 0, checked: 0 };
+  _isCheckingReminders = true;
 
-  let sentCount = 0;
-  let checkedCount = 0;
-  let modified = false;
+  try {
+    // 1. Verificar si el puente de WhatsApp está realmente online y listo antes de intentar envíos
+    const bridgeStatus = await checkWhatsAppBridgeStatus();
+    if (!bridgeStatus.online || !bridgeStatus.isReady) {
+      return { sent: 0, checked: 0 };
+    }
 
-  for (const patient of state.patients) {
-    if (!Array.isArray(patient.appointments)) continue;
+    const state = getAppState();
+    if (!state || !Array.isArray(state.patients)) return { sent: 0, checked: 0 };
 
-    for (const app of patient.appointments) {
-      checkedCount++;
-      if (app.reminder48hSent) continue;
+    // Sincronizar estado previo de envíos para no repetir citas ya notificadas
+    syncSentRemindersFromLog(state.patients);
 
-      const diffHours = getAppointmentTimeDiffHours(app.date, app.time);
-      // Ventana de 48 horas (entre 0 y 48 horas hacia el futuro)
-      if (diffHours !== null && diffHours > 0 && diffHours <= 48) {
-        const patientPhone = patient.telephone || patient.phone || patient.whatsapp_number;
-        if (!patientPhone) continue;
+    let sentCount = 0;
+    let checkedCount = 0;
 
-        const doctorName = app.doctorName || patient.assignedDoctorName || 'Dr. Carlos Mendoza';
-        const reminderText = formatAppointmentReminderMessage(patient.name, app.date, app.time, doctorName);
+    for (const patient of state.patients) {
+      if (!patient || !Array.isArray(patient.appointments)) continue;
 
-        try {
-          const success = await sendWhatsAppMessageToPatient(patientPhone, reminderText);
-          if (success) {
-            const sentAt = new Date().toISOString();
-            app.reminder48hSent = true;
-            app.reminder48hSentAt = sentAt;
+      for (const app of patient.appointments) {
+        if (!app || !app.date) continue;
+        checkedCount++;
 
-            if (!Array.isArray(patient.whatsappMessagesLog)) {
-              patient.whatsappMessagesLog = [];
+        // VERIFICACIÓN ESTRICTA ANTI-REPETICIÓN: Si ya fue enviado, saltar SIEMPRE
+        if (isAppointmentReminderAlreadySent(patient, app)) {
+          continue;
+        }
+
+        const diffHours = getAppointmentTimeDiffHours(app.date, app.time);
+        // Ventana de 48 horas (entre 0 y 48 horas hacia el futuro)
+        if (diffHours !== null && diffHours > 0 && diffHours <= 48) {
+          const patientPhone = patient.telephone || patient.phone || patient.whatsapp_number;
+          if (!patientPhone) continue;
+
+          const doctorName = app.doctorName || patient.assignedDoctorName || 'Dr. Carlos Mendoza';
+          const reminderText = formatAppointmentReminderMessage(patient.name, app.date, app.time, doctorName);
+
+          try {
+            const success = await sendWhatsAppMessageToPatient(patientPhone, reminderText);
+            if (success) {
+              const sentAt = new Date().toISOString();
+              markAppointmentReminderAsSent(patient, app, sentAt, patientPhone, reminderText);
+
+              // Persistir inmediatamente en Firestore en el documento directo del paciente
+              savePatientToFirestore(patient).catch(e => console.warn("Error sincronizando recordatorio en nube:", e));
+
+              sentCount++;
+              console.log(`✅ [Recordatorio Único 48h] Enviado a ${patient.name} (${patientPhone}) para cita del ${app.date} ${app.time}`);
             }
-
-            patient.whatsappMessagesLog.unshift({
-              id: `wamsg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-              type: 'RECORDATORIO_CITA_48H',
-              sentAt: sentAt,
-              recipientName: patient.name,
-              recipientPhone: patientPhone,
-              appointmentDate: app.date,
-              appointmentTime: app.time,
-              doctorName: doctorName,
-              message: reminderText,
-              status: 'ENVIADO'
-            });
-
-            sentCount++;
-            modified = true;
-            console.log(`✅ [Recordatorio 48h] Enviado a ${patient.name} (${patientPhone}) para cita del ${app.date} ${app.time}`);
+          } catch (err) {
+            console.warn(`Error al enviar recordatorio a ${patient.name}:`, err.message);
           }
-        } catch (err) {
-          console.warn(`Error al enviar recordatorio a ${patient.name}:`, err.message);
         }
       }
     }
-  }
 
-  if (modified) {
-    saveAppState(state);
-  }
+    if (sentCount > 0) {
+      saveAppState(state).catch(() => {});
+    }
 
-  return { sent: sentCount, checked: checkedCount };
+    return { sent: sentCount, checked: checkedCount };
+  } finally {
+    _isCheckingReminders = false;
+  }
 }
 
 /**

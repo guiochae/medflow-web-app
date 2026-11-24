@@ -8,7 +8,8 @@ import {
   formatAppointmentReminderMessage, 
   getAppointmentTimeDiffHours, 
   sendSingleAppointmentReminder, 
-  checkAndSend48hAppointmentReminders 
+  checkAndSend48hAppointmentReminders,
+  isAppointmentReminderAlreadySent
 } from '../utils/whatsapp.js';
 import { findExistingPatientByDpi, showDuplicatePatientModal } from '../utils/patientDpiValidator.js';
 import { isPatientAccessibleByDoctor } from './consulta.js';
@@ -1713,7 +1714,8 @@ function renderAppointments(patient) {
     const diffHours = getAppointmentTimeDiffHours(app.date, app.time);
 
     let reminderColHtml = '';
-    if (app.reminder48hSent) {
+    const alreadySent = app.reminder48hSent || isAppointmentReminderAlreadySent(patient, app);
+    if (alreadySent) {
       const sentTimeStr = app.reminder48hSentAt 
         ? new Date(app.reminder48hSentAt).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' })
         : 'Enviado';
