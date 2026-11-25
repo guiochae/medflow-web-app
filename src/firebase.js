@@ -194,6 +194,17 @@ function loadStateFromLocalCache() {
         if (Array.isArray(parsed.administracion_nominas)) firestoreState.administracion_nominas = parsed.administracion_nominas;
         if (Array.isArray(parsed.administracion_liquidaciones)) firestoreState.administracion_liquidaciones = parsed.administracion_liquidaciones;
         if (Array.isArray(parsed.administracion_anticipos)) firestoreState.administracion_anticipos = parsed.administracion_anticipos;
+        if (!firestoreState.administracion_anticipos || firestoreState.administracion_anticipos.length === 0) {
+          try {
+            const rawAnt = localStorage.getItem('medflow_anticipos');
+            if (rawAnt) {
+              const parsedAnt = JSON.parse(rawAnt);
+              if (Array.isArray(parsedAnt) && parsedAnt.length > 0) {
+                firestoreState.administracion_anticipos = parsedAnt;
+              }
+            }
+          } catch (e) {}
+        }
         if (!firestoreState.administracion_liquidaciones || firestoreState.administracion_liquidaciones.length === 0) {
           try {
             const rawLiq = localStorage.getItem('medflow_liquidaciones');
@@ -240,9 +251,8 @@ function loadStateFromLocalCache() {
 }
 
 let _saveCacheTimer = null;
-export function saveStateToLocalCache() {
-  if (_saveCacheTimer) clearTimeout(_saveCacheTimer);
-  _saveCacheTimer = setTimeout(() => {
+export function saveStateToLocalCache(immediate = false) {
+  const doSave = () => {
     try {
       // Guardar catálogos y configuraciones. Omitimos 'patients' de localStorage porque
       // Firestore ya persiste pacientes en IndexedDB nativo y guardar cientos de pacientes
@@ -290,10 +300,22 @@ export function saveStateToLocalCache() {
       if (Array.isArray(firestoreState.administracion_liquidaciones) && firestoreState.administracion_liquidaciones.length > 0) {
         localStorage.setItem('medflow_liquidaciones', JSON.stringify(firestoreState.administracion_liquidaciones));
       }
+      if (Array.isArray(firestoreState.administracion_anticipos) && firestoreState.administracion_anticipos.length > 0) {
+        localStorage.setItem('medflow_anticipos', JSON.stringify(firestoreState.administracion_anticipos));
+      }
     } catch (e) {
       console.warn("No se pudo guardar en localStorage:", e);
     }
-  }, 300);
+  };
+
+  if (immediate) {
+    if (_saveCacheTimer) clearTimeout(_saveCacheTimer);
+    doSave();
+    return;
+  }
+
+  if (_saveCacheTimer) clearTimeout(_saveCacheTimer);
+  _saveCacheTimer = setTimeout(doSave, 300);
 }
 
 // Cargar estado inicial desde caché local por prevención
@@ -630,7 +652,21 @@ export function initRealtimeFirestore(onFirstLoad) {
       const payables = [];
       let clinic = null;
 
-      snapshot.docs.forEach(docSnap => {
+      // Procesar primero los documentos consolidados 'catalog_*' para asegurar autoridad absoluta
+      const sortedDocs = [...snapshot.docs].sort((a, b) => {
+        const aCat = a.id.startsWith('catalog_');
+        const bCat = b.id.startsWith('catalog_');
+        if (aCat && !bCat) return -1;
+        if (!aCat && bCat) return 1;
+        return 0;
+      });
+
+      let hasCatalogEmployees = false;
+      let hasCatalogNominas = false;
+      let hasCatalogAnticipos = false;
+      let hasCatalogLiquidaciones = false;
+
+      sortedDocs.forEach(docSnap => {
         const dId = docSnap.id;
         const dData = docSnap.data();
         if (dId === 'state' || !dData._collectionType) return; // Ignorar el estado de Multimedica original
@@ -698,18 +734,22 @@ export function initRealtimeFirestore(onFirstLoad) {
           return;
         }
         if (dId === 'catalog_administracion_employees') {
+          hasCatalogEmployees = true;
           employees.push(...(dData.items || []));
           return;
         }
         if (dId === 'catalog_administracion_nominas') {
+          hasCatalogNominas = true;
           nominas.push(...(dData.items || []));
           return;
         }
         if (dId === 'catalog_administracion_liquidaciones') {
+          hasCatalogLiquidaciones = true;
           administracionLiquidaciones.push(...(dData.items || []));
           return;
         }
         if (dId === 'catalog_administracion_anticipos') {
+          hasCatalogAnticipos = true;
           administracionAnticipos.push(...(dData.items || []));
           return;
         }
@@ -812,10 +852,34 @@ export function initRealtimeFirestore(onFirstLoad) {
         else if (type === 'administracion_compras') compras.push(cleanDoc);
         else if (type === 'administracion_contabilidad') contabilidad.push(cleanDoc);
         else if (type === 'administracion_caja') caja.push(cleanDoc);
-        else if (type === 'administracion_employees') employees.push(cleanDoc);
-        else if (type === 'administracion_nominas') nominas.push(cleanDoc);
-        else if (type === 'administracion_liquidaciones') administracionLiquidaciones.push(cleanDoc);
-        else if (type === 'administracion_anticipos') administracionAnticipos.push(cleanDoc);
+        else if (type === 'administracion_employees') {
+          if (hasCatalogEmployees) {
+            deleteDoc(docSnap.ref).catch(() => {});
+          } else {
+            employees.push(cleanDoc);
+          }
+        }
+        else if (type === 'administracion_nominas') {
+          if (hasCatalogNominas) {
+            deleteDoc(docSnap.ref).catch(() => {});
+          } else {
+            nominas.push(cleanDoc);
+          }
+        }
+        else if (type === 'administracion_liquidaciones') {
+          if (hasCatalogLiquidaciones) {
+            deleteDoc(docSnap.ref).catch(() => {});
+          } else {
+            administracionLiquidaciones.push(cleanDoc);
+          }
+        }
+        else if (type === 'administracion_anticipos') {
+          if (hasCatalogAnticipos) {
+            deleteDoc(docSnap.ref).catch(() => {});
+          } else {
+            administracionAnticipos.push(cleanDoc);
+          }
+        }
         else if (type === 'administracion_bancos') bancos.push(cleanDoc);
         else if (type === 'administracion_activos_fijos') activosFijos.push(cleanDoc);
         else if (type === 'administracion_asistencias') asistencias.push(cleanDoc);
@@ -870,6 +934,27 @@ export function initRealtimeFirestore(onFirstLoad) {
         }
       });
 
+      // Respaldo de seguridad: si Firestore no entregó empleados, recuperar del caché local
+      if (uniqueEmployees.length === 0) {
+        try {
+          const cached = JSON.parse(localStorage.getItem('medflow_firestore_cache') || '{}');
+          const localEmps = (Array.isArray(cached.administracion_employees) && cached.administracion_employees.length > 0)
+            ? cached.administracion_employees
+            : (firestoreState.administracion_employees || []);
+          if (localEmps.length > 0) {
+            localEmps.forEach(e => {
+              if (e && e.id && !seenEmpIds.has(e.id)) {
+                seenEmpIds.add(e.id);
+                uniqueEmployees.push(e);
+              }
+            });
+            saveDocument('catalog_administracion_employees', 'catalog_administracion_employees', {
+              items: uniqueEmployees
+            }).catch(() => {});
+          }
+        } catch (e) {}
+      }
+
       // Auto-asignación de seguridad para garantizar códigos EMP-xxx inmediatos
       let maxEmpSeq = 0;
       uniqueEmployees.forEach(emp => {
@@ -892,7 +977,19 @@ export function initRealtimeFirestore(onFirstLoad) {
       });
 
       firestoreState.administracion_employees = uniqueEmployees;
-      firestoreState.administracion_nominas = nominas;
+
+      // Deduplicar nóminas por id o mes para evitar duplicados y respetar eliminaciones
+      const uniqueNominas = [];
+      const seenNominaKeys = new Set();
+      nominas.forEach(n => {
+        if (!n) return;
+        const key = n.id || (n.month ? n.month.trim().toLowerCase() : '');
+        if (key && !seenNominaKeys.has(key)) {
+          seenNominaKeys.add(key);
+          uniqueNominas.push(n);
+        }
+      });
+      firestoreState.administracion_nominas = uniqueNominas;
       firestoreState.administracion_bancos = bancos;
       firestoreState.administracion_activos_fijos = activosFijos;
 
@@ -1032,11 +1129,46 @@ export function initRealtimeFirestore(onFirstLoad) {
         } catch (e) {}
       }
 
+      // Deduplicar y proteger Anticipos de Sueldo
+      const uniqueAnticipos = [];
+      const seenAnticipoKeys = new Set();
+      administracionAnticipos.forEach(a => {
+        if (!a) return;
+        const key = a.id || '';
+        if (key && !seenAnticipoKeys.has(key)) {
+          seenAnticipoKeys.add(key);
+          uniqueAnticipos.push(a);
+        }
+      });
+
+      // Blindaje de recuperación: si Firestore remoto no tiene registros pero el caché local o memoria sí tiene
+      if (uniqueAnticipos.length === 0) {
+        try {
+          const cached = JSON.parse(localStorage.getItem('medflow_firestore_cache') || '{}');
+          let directAnt = [];
+          try { directAnt = JSON.parse(localStorage.getItem('medflow_anticipos') || '[]'); } catch(e){}
+          const localAnt = (Array.isArray(cached.administracion_anticipos) && cached.administracion_anticipos.length > 0)
+            ? cached.administracion_anticipos
+            : (Array.isArray(directAnt) && directAnt.length > 0 ? directAnt : (firestoreState.administracion_anticipos || []));
+          if (localAnt.length > 0) {
+            localAnt.forEach(a => {
+              if (a && a.id && !seenAnticipoKeys.has(a.id)) {
+                seenAnticipoKeys.add(a.id);
+                uniqueAnticipos.push(a);
+              }
+            });
+            saveDocument('catalog_administracion_anticipos', 'catalog_administracion_anticipos', {
+              items: uniqueAnticipos
+            }).catch(() => {});
+          }
+        } catch (e) {}
+      }
+
       firestoreState.administracion_enfermeria_roles = uniqueRoles;
       firestoreState.administracion_enfermeria_cambios = uniqueCambios;
       firestoreState.administracion_enfermeria_permisos = uniquePermisos;
       firestoreState.administracion_liquidaciones = uniqueLiquidaciones;
-      firestoreState.administracion_anticipos = administracionAnticipos;
+      firestoreState.administracion_anticipos = uniqueAnticipos;
       firestoreState.external_doctors = doctors;
       firestoreState.accounts_payable = payables;
       if (clinic) firestoreState.clinicInfo = clinic;
@@ -1084,7 +1216,20 @@ export function initRealtimeFirestore(onFirstLoad) {
           const payables = [];
           let clinic = null;
 
-          cacheSnap.docs.forEach(docSnap => {
+          const sortedCacheDocs = [...cacheSnap.docs].sort((a, b) => {
+            const aCat = a.id.startsWith('catalog_');
+            const bCat = b.id.startsWith('catalog_');
+            if (aCat && !bCat) return -1;
+            if (!aCat && bCat) return 1;
+            return 0;
+          });
+
+          let hasCatalogEmployeesFb = false;
+          let hasCatalogNominasFb = false;
+          let hasCatalogAnticiposFb = false;
+          let hasCatalogLiquidacionesFb = false;
+
+          sortedCacheDocs.forEach(docSnap => {
             const dId = docSnap.id;
             const dData = docSnap.data();
             if (dId === 'state' || !dData._collectionType) return;
@@ -1152,18 +1297,22 @@ export function initRealtimeFirestore(onFirstLoad) {
               return;
             }
             if (dId === 'catalog_administracion_employees') {
+              hasCatalogEmployeesFb = true;
               employees.push(...(dData.items || []));
               return;
             }
             if (dId === 'catalog_administracion_nominas') {
+              hasCatalogNominasFb = true;
               nominas.push(...(dData.items || []));
               return;
             }
             if (dId === 'catalog_administracion_liquidaciones') {
+              hasCatalogLiquidacionesFb = true;
               administracionLiquidaciones.push(...(dData.items || []));
               return;
             }
             if (dId === 'catalog_administracion_anticipos') {
+              hasCatalogAnticiposFb = true;
               administracionAnticipos.push(...(dData.items || []));
               return;
             }
@@ -1266,10 +1415,18 @@ export function initRealtimeFirestore(onFirstLoad) {
             else if (type === 'administracion_compras') compras.push(cleanDoc);
             else if (type === 'administracion_contabilidad') contabilidad.push(cleanDoc);
             else if (type === 'administracion_caja') caja.push(cleanDoc);
-            else if (type === 'administracion_employees') employees.push(cleanDoc);
-            else if (type === 'administracion_nominas') nominas.push(cleanDoc);
-            else if (type === 'administracion_liquidaciones') administracionLiquidaciones.push(cleanDoc);
-        else if (type === 'administracion_anticipos') administracionAnticipos.push(cleanDoc);
+            else if (type === 'administracion_employees') {
+              if (!hasCatalogEmployeesFb) employees.push(cleanDoc);
+            }
+            else if (type === 'administracion_nominas') {
+              if (!hasCatalogNominasFb) nominas.push(cleanDoc);
+            }
+            else if (type === 'administracion_liquidaciones') {
+              if (!hasCatalogLiquidacionesFb) administracionLiquidaciones.push(cleanDoc);
+            }
+            else if (type === 'administracion_anticipos') {
+              if (!hasCatalogAnticiposFb) administracionAnticipos.push(cleanDoc);
+            }
             else if (type === 'administracion_bancos') bancos.push(cleanDoc);
             else if (type === 'administracion_activos_fijos') activosFijos.push(cleanDoc);
             else if (type === 'administracion_asistencias') asistencias.push(cleanDoc);
@@ -1346,7 +1503,18 @@ export function initRealtimeFirestore(onFirstLoad) {
           });
 
           firestoreState.administracion_employees = uniqueEmployeesFallback;
-          firestoreState.administracion_nominas = nominas;
+
+          const uniqueNominasFb = [];
+          const seenNominaKeysFb = new Set();
+          nominas.forEach(n => {
+            if (!n) return;
+            const key = n.id || (n.month ? n.month.trim().toLowerCase() : '');
+            if (key && !seenNominaKeysFb.has(key)) {
+              seenNominaKeysFb.add(key);
+              uniqueNominasFb.push(n);
+            }
+          });
+          firestoreState.administracion_nominas = uniqueNominasFb;
           firestoreState.administracion_bancos = bancos;
           firestoreState.administracion_activos_fijos = activosFijos;
 
@@ -1401,11 +1569,40 @@ export function initRealtimeFirestore(onFirstLoad) {
             }
           });
 
+          const uniqueAnticiposFb = [];
+          const seenAnticipoKeysFb = new Set();
+          administracionAnticipos.forEach(a => {
+            if (!a) return;
+            const key = a.id || '';
+            if (key && !seenAnticipoKeysFb.has(key)) {
+              seenAnticipoKeysFb.add(key);
+              uniqueAnticiposFb.push(a);
+            }
+          });
+          if (uniqueAnticiposFb.length === 0) {
+            try {
+              const cached = JSON.parse(localStorage.getItem('medflow_firestore_cache') || '{}');
+              let directAnt = [];
+              try { directAnt = JSON.parse(localStorage.getItem('medflow_anticipos') || '[]'); } catch(e){}
+              const localAnt = (Array.isArray(cached.administracion_anticipos) && cached.administracion_anticipos.length > 0)
+                ? cached.administracion_anticipos
+                : (Array.isArray(directAnt) && directAnt.length > 0 ? directAnt : (firestoreState.administracion_anticipos || []));
+              if (localAnt.length > 0) {
+                localAnt.forEach(a => {
+                  if (a && a.id && !seenAnticipoKeysFb.has(a.id)) {
+                    seenAnticipoKeysFb.add(a.id);
+                    uniqueAnticiposFb.push(a);
+                  }
+                });
+              }
+            } catch (e) {}
+          }
+
           firestoreState.administracion_enfermeria_roles = uniqueRolesFb;
           firestoreState.administracion_enfermeria_cambios = uniqueCambiosFb;
           firestoreState.administracion_enfermeria_permisos = uniquePermisosFb;
           firestoreState.administracion_liquidaciones = uniqueLiqFb;
-          firestoreState.administracion_anticipos = administracionAnticipos;
+          firestoreState.administracion_anticipos = uniqueAnticiposFb;
           firestoreState.external_doctors = doctors;
           firestoreState.accounts_payable = payables;
           if (clinic) firestoreState.clinicInfo = clinic;

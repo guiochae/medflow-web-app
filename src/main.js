@@ -319,7 +319,7 @@ export async function resetToOfficialDatabase() {
 }
 
 // Guardar cambios directamente en Firestore y sincronizar estado
-export async function saveAppState(state) {
+export async function saveAppState(state, options = {}) {
   migrateLaboratoryTestsCategories(state);
   backfillEmployeeCodes(state);
   reconcileAndRecoverLiquidaciones(state);
@@ -368,8 +368,18 @@ export async function saveAppState(state) {
   if (state.accounts_payable) firestoreState.accounts_payable = state.accounts_payable;
   if (state.clinicInfo) firestoreState.clinicInfo = state.clinicInfo;
 
-  // Persistir cambios en caché local inmediatamente por si Firestore falla (ej. cuota excedida)
-  saveStateToLocalCache();
+  // Persistir cambios en caché local inmediatamente de forma sincrónica
+  saveStateToLocalCache(true);
+
+  if (options && options.immediate) {
+    if (_saveAppStateTimeout) clearTimeout(_saveAppStateTimeout);
+    try {
+      await executeSaveAppStateBatch(state);
+    } catch (err) {
+      console.warn("Aviso en guardado inmediato a Firestore:", err);
+    }
+    return true;
+  }
 
   // Debounce de sincronización en la nube: agrupar múltiples cambios continuos en 1 sola escritura consolidada
   if (_saveAppStateTimeout) clearTimeout(_saveAppStateTimeout);
@@ -391,7 +401,7 @@ export async function saveAppState(state) {
 async function executeSaveAppStateBatch(state) {
   try {
     if (!lastSyncedState) {
-      lastSyncedState = JSON.parse(JSON.stringify(state));
+      lastSyncedState = {};
     }
 
     const batch = writeBatch(db);
