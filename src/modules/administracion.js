@@ -1,4 +1,4 @@
-import { getAppState, saveAppState, saveToFirestore, backfillEmployeeCodes, removeFromFirestore, purgeAndSanitizePayrolls, reconcileAndRecoverLiquidaciones, isEmployeeResignedOrLiquidated, parsePayrollMonth, isPermanentlyExcludedEmployeeCode } from '../main.js';
+import { getAppState, saveAppState, saveToFirestore, saveCatalogDirectly, backfillEmployeeCodes, removeFromFirestore, purgeAndSanitizePayrolls, reconcileAndRecoverLiquidaciones, isEmployeeResignedOrLiquidated, parsePayrollMonth, isPermanentlyExcludedEmployeeCode } from '../main.js';
 import { simulateOnPurchaseCreated, simulateOnPayrollGenerated } from '../utils/cloud_functions.js';
 import { notifyEmployeeWelcome } from '../utils/whatsapp.js';
 import { renderRrhhAsistencia } from './attendanceManager.js';
@@ -1904,7 +1904,9 @@ function renderRrhhEmpleados(container, state) {
           if (emp.employee_code) deleteDoc(doc(db, 'multimedica', emp.employee_code)).catch(() => {});
         } catch (_) {}
 
+        await saveCatalogDirectly('administracion_employees', state.administracion_employees);
         await saveAppState(state, { immediate: true });
+        renderRrhhEmpleados(container, state);
         alert(`✅ Colaborador ${name} actualizado exitosamente.`);
       }
       editingEmployeeId = null;
@@ -1938,11 +1940,13 @@ function renderRrhhEmpleados(container, state) {
       };
 
       state.administracion_employees.push(newEmp);
+      await saveCatalogDirectly('administracion_employees', state.administracion_employees);
       await saveAppState(state, { immediate: true });
 
       // Disparar notificación vía WhatsApp Bridge de forma asíncrona
       notifyEmployeeWelcome(newEmp);
 
+      renderRrhhEmpleados(container, state);
       alert(`✅ Colaborador ${name} contratado exitosamente.\n\n📌 Código Asignado: ${employeeCode}\n📲 Notificación formal enviada a: ${cleanPhone}`);
     }
 
@@ -2044,9 +2048,10 @@ function renderRrhhEmpleados(container, state) {
           if (emp.employee_code) deleteDoc(doc(db, 'multimedica', emp.employee_code)).catch(() => {});
         } catch (_) {}
         await removeFromFirestore('administracion_employees', id);
+        await saveCatalogDirectly('administracion_employees', state.administracion_employees);
         await saveAppState(state, { immediate: true });
-        alert(`Empleado ${emp.name} ha sido dado de baja.`);
         renderRrhhEmpleados(container, state);
+        alert(`Empleado ${emp.name} ha sido dado de baja.`);
       }
     });
   });
@@ -3220,21 +3225,17 @@ function renderRrhhNomina(container, state) {
       }
 
       // Eliminar nómina anterior y sus asientos
-      const existingIdx = state.administracion_nominas.findIndex(n => 
-        n.month && n.month.trim().toLowerCase() === selectedPayrollMonth.trim().toLowerCase()
+      const targetMonth = selectedPayrollMonth.trim().toLowerCase();
+      state.administracion_nominas = (state.administracion_nominas || []).filter(n => {
+        if (n.month && n.month.trim().toLowerCase() === targetMonth) return false;
+        return true;
+      });
+      state.administracion_caja = (state.administracion_caja || []).filter(c => {
+        return !(c.type === 'nomina' && c.concept && c.concept.toLowerCase().includes(targetMonth));
+      });
+      state.administracion_contabilidad = (state.administracion_contabilidad || []).filter(entry => 
+        !(entry.concept && entry.concept.toLowerCase().includes(targetMonth))
       );
-      if (existingIdx !== -1) {
-        const oldPayroll = state.administracion_nominas[existingIdx];
-        state.administracion_caja = (state.administracion_caja || []).filter(c => c.refId !== oldPayroll.id);
-        state.administracion_contabilidad = (state.administracion_contabilidad || []).filter(entry => 
-          !(entry.concept && entry.concept.includes(`Periodo: ${oldPayroll.month}`))
-        );
-        try {
-          if (oldPayroll.id) deleteDoc(doc(db, 'multimedica', oldPayroll.id)).catch(() => {});
-        } catch (_) {}
-        await removeFromFirestore('administracion_nominas', oldPayroll.id);
-        state.administracion_nominas.splice(existingIdx, 1);
-      }
 
       const eligibleEmployees = employees.filter(emp => 
         !isPermanentlyExcludedEmployeeCode(emp.employee_code) &&
@@ -3305,6 +3306,7 @@ function renderRrhhNomina(container, state) {
       });
 
       simulateOnPayrollGenerated(newPayroll, state);
+      await saveCatalogDirectly('administracion_nominas', state.administracion_nominas);
       await saveAppState(state, { immediate: true });
       renderRrhhNomina(container, state);
       showPayrollPrintPreview(newPayroll, state, 'all');
@@ -3319,7 +3321,12 @@ function renderRrhhNomina(container, state) {
       const payroll = state.administracion_nominas.find(n => n.id === payrollId);
       if (payroll) {
         if (confirm(`¿Confirma eliminar permanentemente la nómina de ${payroll.month}? Esta acción también anulará los pagos de caja y asientos contables asociados.`)) {
-          state.administracion_nominas = state.administracion_nominas.filter(n => n.id !== payrollId);
+          const targetMonth = String(payroll.month || '').trim().toLowerCase();
+          state.administracion_nominas = (state.administracion_nominas || []).filter(n => {
+            if (n.id === payrollId) return false;
+            if (targetMonth && n.month && n.month.trim().toLowerCase() === targetMonth) return false;
+            return true;
+          });
           state.administracion_caja = (state.administracion_caja || []).filter(c => c.refId !== payrollId);
           state.administracion_contabilidad = (state.administracion_contabilidad || []).filter(entry => 
             !(entry.concept && entry.concept.includes(`Periodo: ${payroll.month}`))
@@ -3336,9 +3343,10 @@ function renderRrhhNomina(container, state) {
             if (payrollId) deleteDoc(doc(db, 'multimedica', payrollId)).catch(() => {});
           } catch (_) {}
           await removeFromFirestore('administracion_nominas', payrollId);
+          await saveCatalogDirectly('administracion_nominas', state.administracion_nominas);
           await saveAppState(state, { immediate: true });
-          alert(`Nómina de ${payroll.month} eliminada correctamente.`);
           renderRrhhNomina(container, state);
+          alert(`Nómina de ${payroll.month} eliminada correctamente.`);
         }
       }
     });
@@ -3431,6 +3439,7 @@ function renderRrhhNomina(container, state) {
       // Ejecutar provisión en segundo plano
       simulateOnPayrollGenerated(newPayroll, state);
 
+      await saveCatalogDirectly('administracion_nominas', state.administracion_nominas);
       await saveAppState(state, { immediate: true });
 
       renderRrhhNomina(container, state);
@@ -3876,6 +3885,7 @@ function renderRrhhAnticipos(container, state) {
         refId: newAnticipo.id
       });
 
+      await saveCatalogDirectly('administracion_anticipos', state.administracion_anticipos);
       await saveAppState(state, { immediate: true });
       renderRrhhAnticipos(container, state);
 
@@ -3915,9 +3925,10 @@ function renderRrhhAnticipos(container, state) {
           if (antId) deleteDoc(doc(db, 'multimedica', antId)).catch(() => {});
         } catch (_) {}
         await removeFromFirestore('administracion_anticipos', antId);
+        await saveCatalogDirectly('administracion_anticipos', state.administracion_anticipos);
         await saveAppState(state, { immediate: true });
-        alert("Anticipo anulado correctamente.");
         renderRrhhAnticipos(container, state);
+        alert("Anticipo anulado correctamente.");
       }
     });
   });

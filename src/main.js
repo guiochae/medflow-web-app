@@ -504,7 +504,7 @@ async function executeSaveAppStateBatch(state) {
     // Ejecutar escrituras atómicamente si existen cambios reales
     if (hasWrites) {
       const commitTimeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Firestore batch.commit timeout")), 3000)
+        setTimeout(() => reject(new Error("Firestore batch.commit timeout")), 15000)
       );
       await Promise.race([batch.commit(), commitTimeout]);
       console.log("[Firestore] Lote consolidado guardado en la nube con éxito.");
@@ -513,6 +513,20 @@ async function executeSaveAppStateBatch(state) {
     lastSyncedState = JSON.parse(JSON.stringify(state));
   } catch (err) {
     console.warn("Aviso sincronizando cambios a Firestore via Batch:", err);
+  }
+}
+
+// Guardado directo de un catálogo específico a Cloud Firestore (inmediato, sin debounce ni colisiones de batch)
+export async function saveCatalogDirectly(catalogName, items) {
+  try {
+    if (!catalogName || !items || !Array.isArray(items)) return false;
+    const docRef = doc(db, 'multimedica', `catalog_${catalogName}`);
+    await setDoc(docRef, { _collectionType: `catalog_${catalogName}`, items: items });
+    console.log(`[Firestore] Catálogo catalog_${catalogName} guardado directamente con éxito.`);
+    return true;
+  } catch (err) {
+    console.error(`Error guardando directamente catálogo catalog_${catalogName}:`, err);
+    return false;
   }
 }
 
