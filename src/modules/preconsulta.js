@@ -3361,7 +3361,7 @@ export function syncPatientBilling(patientObj, stateObj) {
     return existsInPaid;
   };
 
-  // 1. Sincronizar Recetas Emitidas (Medicamentos registrados sin precio)
+  // 1. Sincronizar Recetas Emitidas (Medicamentos vinculados para facturación y descuento)
   const prescriptions = patientObj.prescriptions || [];
   prescriptions.forEach(recipe => {
     recipe.billId = pendingBill.id;
@@ -3369,9 +3369,19 @@ export function syncPatientBilling(patientObj, stateObj) {
       if (!m || !m.name) return;
       const medName = m.name.trim();
       if (!isItemAlreadyRecorded(medName)) {
+        const factor = m.presentationFactor || 1;
+        const qty = m.rawQuantity || parseFloat(m.quantity) || 1;
+        const units = m.unitsRequired || (m.qty || (qty * factor));
+        const cost = m.costo_calculado || (m.price ? m.price * qty : 0);
+
         pendingBill.details.push({
           description: `Medicamento Recetado: ${medName} (${m.presentation || 'Tabletas'})`,
-          amount: 0, // Se registra sin precio para asignarlo en facturación
+          amount: cost,
+          medicationId: m.medicationId || null,
+          presentation: m.presentation || 'Tableta',
+          presentationFactor: factor,
+          quantity: qty,
+          unitsToDeduct: units,
           serviceType: 'farmacia'
         });
         stateModified = true;

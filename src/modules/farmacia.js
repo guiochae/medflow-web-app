@@ -2,7 +2,9 @@
 // Hospital Privado Multimédica Sayaxché / Sistema LUGAMED
 // Norma y Procedimientos de Almacén y Farmacia: HMM-MAN-ALM-05 (Versión 5.0)
 
-import { getAppState, saveAppState, hashPassword, isAdminUser } from '../main.js';
+import { getAppState, saveAppState, saveCatalogDirectly, hashPassword, isAdminUser } from '../main.js';
+import { getMedicationSalesPresentations, formatHierarchicalStock } from './configuracion.js';
+export { getMedicationSalesPresentations, formatHierarchicalStock };
 import logoUrl from '../assets/logo.jpg';
 
 // ==========================================
@@ -55,28 +57,14 @@ export function enrichMedication(m) {
   };
 }
 
-export function formatStockFriendly(stock, factor, presentacion = 'Caja', unidadDispensable = 'Tableta') {
-  const stockVal = parseInt(stock) || 0;
-  const factorVal = Math.max(1, parseInt(factor) || 1);
-  const pres = presentacion || 'Caja';
-  const unit = unidadDispensable || 'Tableta';
-
-  if (factorVal <= 1) {
-    return `${stockVal} ${unit}(s)`;
-  }
-
-  const completePacks = Math.floor(stockVal / factorVal);
-  const remainingUnits = stockVal % factorVal;
-
-  let text = `${stockVal} ${unit}(s)`;
-  if (completePacks > 0 && remainingUnits > 0) {
-    text += ` (${completePacks} ${pres}(s) y ${remainingUnits} ${unit}(s))`;
-  } else if (completePacks > 0 && remainingUnits === 0) {
-    text += ` (${completePacks} ${pres}(s) completa(s))`;
-  } else {
-    text += ` (0 ${pres}(s) completa(s))`;
-  }
-  return text;
+export function formatStockFriendly(stock, factor, presentacion = 'Caja', unidadDispensable = 'Tableta', med = null) {
+  if (med) return formatHierarchicalStock(stock, med);
+  const dummyMed = {
+    presentation: presentacion,
+    unidad_dispensable: unidadDispensable,
+    unidades_por_presentacion: factor
+  };
+  return formatHierarchicalStock(stock, dummyMed);
 }
 
 export function isThermosensitive(med) {
@@ -1191,20 +1179,42 @@ function setupPharmacyAutocomplete(container) {
       `;
 
       item.addEventListener('click', () => {
-        selectedMedicineForSale = enrichedMatch;
+        selectedMedicineForSale = match;
+        const salesPres = getMedicationSalesPresentations(match);
+        const hierarchicalStock = formatHierarchicalStock(match.stock, match);
+
         document.getElementById('prev-med-name').textContent = match.name;
         document.getElementById('prev-med-generic').textContent = match.generic || 'N/D';
         document.getElementById('prev-med-presentation').textContent = match.presentation || 'N/D';
-        document.getElementById('prev-med-stock').textContent = friendlyStock;
+        document.getElementById('prev-med-stock').textContent = hierarchicalStock;
 
         const saleTypeSelect = document.getElementById('pharmacy-sale-type');
-        if (saleTypeSelect) saleTypeSelect.value = 'presentacion';
-        const qtyLabel = document.getElementById('lbl-pharmacy-med-qty');
-        if (qtyLabel) qtyLabel.textContent = `Cantidad (${match.presentation || 'Caja'}(s))`;
-        const priceTitle = document.getElementById('lbl-prev-price-title');
-        if (priceTitle) priceTitle.textContent = "Precio Presentación";
-        
-        document.getElementById('prev-med-price').textContent = `Q${parseFloat(match.price).toFixed(2)}`;
+        if (saleTypeSelect) {
+          saleTypeSelect.innerHTML = salesPres.map(p => `
+            <option value="${p.presentation}" data-factor="${p.factor}" data-price="${p.price}">
+              ${p.presentation} (${p.factor} ${match.unidad_dispensable || 'uds'}) - Q${parseFloat(p.price).toFixed(2)}
+            </option>
+          `).join('');
+        }
+
+        const updateExternalSalePreview = () => {
+          const selectedOption = saleTypeSelect ? saleTypeSelect.options[saleTypeSelect.selectedIndex] : null;
+          const price = selectedOption ? (parseFloat(selectedOption.getAttribute('data-price')) || 0) : 0;
+          const qtyLabel = document.getElementById('lbl-pharmacy-med-qty');
+          const priceDisplay = document.getElementById('prev-med-price');
+          if (qtyLabel && selectedOption) {
+            qtyLabel.textContent = `Cantidad (${selectedOption.value}(s))`;
+          }
+          if (priceDisplay) {
+            priceDisplay.textContent = `Q${price.toFixed(2)}`;
+          }
+        };
+
+        if (saleTypeSelect) {
+          saleTypeSelect.onchange = updateExternalSalePreview;
+          updateExternalSalePreview();
+        }
+
         document.getElementById('pharmacy-selection-preview').style.display = 'block';
         medSearchInput.value = '';
         autocompleteList.style.display = 'none';
@@ -1414,31 +1424,35 @@ function dispenseRecipe(patientId, recipeId) {
     return;
   }
 
-  // 2. Validar existencias PEPS
+  // 2. Validar existencias PEPS y estado de cobro
+  const associatedBill = (patientObj.billingHistory || []).find(b => b.id === recipeObj.billId);
+  const alreadyDeductedAtBilling = recipeObj.inventoryDeducted || (associatedBill && associatedBill.status === 'Pagado');
+
   let insufficient = [];
   const itemsToConsume = [];
 
   for (const m of recipeObj.medicines || []) {
-    const catalogItem = state.medications?.find(med => med.name === m.name);
+    const catalogItem = state.medications?.find(med => med.name === m.name || med.id === m.medicationId);
     if (catalogItem) {
       const enriched = enrichMedication(catalogItem);
-      let requestedUnits = parseInt(m.qty);
+      let requestedUnits = parseInt(m.unitsRequired || m.qty);
       if (isNaN(requestedUnits) || requestedUnits <= 0) {
-        const qtyParsed = parseInt(m.quantity) || 1;
-        requestedUnits = String(m.quantity || '').toLowerCase().includes('caja')
-          ? qtyParsed * enriched.unidades_por_presentacion
-          : qtyParsed;
+        const qtyParsed = parseInt(m.rawQuantity || m.quantity) || 1;
+        const factor = m.presentationFactor || enriched.unidades_por_presentacion || 1;
+        requestedUnits = qtyParsed * factor;
       }
 
-      const available = getAvailableStockPEPS(state, catalogItem.id);
-      if (available < requestedUnits) {
-        insufficient.push(`${m.name} (Disponible: ${available} unds, Solicitado: ${requestedUnits} unds)`);
-      } else {
-        itemsToConsume.push({
-          medicationId: catalogItem.id,
-          requestedUnits,
-          medicationName: m.name
-        });
+      if (!alreadyDeductedAtBilling) {
+        const available = getAvailableStockPEPS(state, catalogItem.id);
+        if (available < requestedUnits) {
+          insufficient.push(`${m.name} (Disponible: ${available} unds, Solicitado: ${requestedUnits} unds)`);
+        } else {
+          itemsToConsume.push({
+            medicationId: catalogItem.id,
+            requestedUnits,
+            medicationName: m.name
+          });
+        }
       }
     }
   }
@@ -1448,17 +1462,21 @@ function dispenseRecipe(patientId, recipeId) {
     return;
   }
 
-  // 3. Ejecutar descarga estricta PEPS
+  // 3. Ejecutar descarga estricta PEPS (si no fue descontada previamente al facturar en caja)
   const batchRecords = [];
-  for (const item of itemsToConsume) {
-    const res = consumeStockPEPS(state, item.medicationId, item.requestedUnits, 'Despacho Receta Médica', recipeId);
-    if (res.success) {
-      batchRecords.push(...res.consumed);
+  if (!alreadyDeductedAtBilling) {
+    for (const item of itemsToConsume) {
+      const res = consumeStockPEPS(state, item.medicationId, item.requestedUnits, 'Despacho Receta Médica', recipeId);
+      if (res.success) {
+        batchRecords.push(...res.consumed);
+      }
     }
+    saveCatalogDirectly('medications', state.medications);
   }
 
   recipeObj.dispenseStatus = 'Despachado';
   recipeObj.dispenseDate = new Date().toISOString();
+  recipeObj.inventoryDeducted = true;
   recipeObj.kardexDeductions = batchRecords;
 
   saveAppState(state);
@@ -2801,43 +2819,43 @@ function addToCart() {
     return;
   }
 
-  const saleType = document.getElementById('pharmacy-sale-type')?.value || 'presentacion';
-  const m = enrichMedication(selectedMedicineForSale);
+  const saleTypeSelect = document.getElementById('pharmacy-sale-type');
+  const selectedOption = saleTypeSelect ? saleTypeSelect.options[saleTypeSelect.selectedIndex] : null;
+  const presName = selectedOption ? selectedOption.value : (selectedMedicineForSale.presentation || 'Caja');
+  const factor = selectedOption ? (Math.max(1, parseInt(selectedOption.getAttribute('data-factor')) || 1)) : 1;
+  const itemPrice = selectedOption ? (parseFloat(selectedOption.getAttribute('data-price')) || 0) : (selectedMedicineForSale.price || 0);
+
   const state = getAppState();
-  const currentStock = getAvailableStockPEPS(state, m.id);
+  const currentStock = getAvailableStockPEPS(state, selectedMedicineForSale.id);
 
-  if (currentStock <= 0) {
-    alert(`❌ No hay existencias PEPS de "${m.name}".`);
-    return;
-  }
-
-  let totalUnitsToAdd = saleType === 'presentacion' ? qty * m.unidades_por_presentacion : qty;
+  const totalUnitsToAdd = qty * factor;
 
   const existingInCart = currentCart
-    .filter(item => item.id === m.id)
+    .filter(item => item.id === selectedMedicineForSale.id)
     .reduce((sum, item) => sum + (item.unidades_totales || item.quantity), 0);
 
   if (existingInCart + totalUnitsToAdd > currentStock) {
-    alert(`❌ Existencias PEPS insuficientes de "${m.name}". Disponibles: ${currentStock} unds.`);
+    alert(`❌ Existencias PEPS insuficientes de "${selectedMedicineForSale.name}". Disponibles: ${currentStock} unds, Solicitadas: ${existingInCart + totalUnitsToAdd} unds.`);
     return;
   }
 
-  const itemPrice = saleType === 'presentacion' ? m.precio_presentacion : m.precio_unitario;
-  const displayQty = saleType === 'presentacion' ? `${qty} ${m.presentation || 'caja'}(s)` : `${qty} ${m.unidad_dispensable || 'tableta'}(s)`;
+  const displayQty = `${qty} ${presName}(s) [${totalUnitsToAdd} ${selectedMedicineForSale.unidad_dispensable || 'uds'}]`;
 
-  const existingIdx = currentCart.findIndex(item => item.id === m.id && item.tipoVenta === saleType);
+  const existingIdx = currentCart.findIndex(item => item.id === selectedMedicineForSale.id && item.presentation === presName);
   if (existingIdx !== -1) {
     currentCart[existingIdx].quantity += qty;
     currentCart[existingIdx].unidades_totales += totalUnitsToAdd;
+    currentCart[existingIdx].displayQuantity = `${currentCart[existingIdx].quantity} ${presName}(s) [${currentCart[existingIdx].unidades_totales} ${selectedMedicineForSale.unidad_dispensable || 'uds'}]`;
   } else {
     currentCart.push({
-      id: m.id,
-      name: m.name,
-      generic: m.generic || '',
-      presentation: m.presentation || '',
+      id: selectedMedicineForSale.id,
+      name: selectedMedicineForSale.name,
+      generic: selectedMedicineForSale.generic || '',
+      presentation: presName,
+      presentationFactor: factor,
       price: itemPrice,
       quantity: qty,
-      tipoVenta: saleType,
+      tipoVenta: presName,
       unidades_totales: totalUnitsToAdd,
       displayQuantity: displayQty
     });
@@ -2883,6 +2901,7 @@ function finalizeExternalSale() {
   appState.externalSales = appState.externalSales || [];
   appState.externalSales.unshift(newSale);
   saveAppState(appState);
+  saveCatalogDirectly('medications', appState.medications);
 
   printSalesVoucher(newSale);
   currentCart = [];

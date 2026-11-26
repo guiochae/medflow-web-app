@@ -12,6 +12,7 @@ import * as XLSX from 'xlsx';
 import logoUrl from '../assets/logo.jpg';
 import { openDocumentViewerModal as openLabDocumentViewerModal } from './laboratorio.js';
 import { syncPatientBilling } from './preconsulta.js';
+import { ensureKardexPEPS, consumeStockPEPS } from './farmacia.js';
 
 let activeAdminTab = 'caja'; // 'caja', 'contabilidad', 'compras', 'rrhh'
 let activeCajaSubTab = 'cobros'; // 'cobros', 'cxp', 'nominas'
@@ -439,7 +440,13 @@ function loadPatientBillingDetails(patient, state) {
         description: typeof item === 'string' ? item : (item.description || item.name || 'Servicio Médico'),
         amount: amt,
         type: item.scenario ? (item.scenario === 1 ? 'interconsulta' : 'cuenta_ajena') : 'hospital',
-        doctorId: item.externalDoctorId || ''
+        doctorId: item.externalDoctorId || '',
+        medicationId: item.medicationId || null,
+        presentation: item.presentation || null,
+        presentationFactor: item.presentationFactor || null,
+        quantity: item.quantity || null,
+        unitsToDeduct: item.unitsToDeduct || null,
+        serviceType: item.serviceType || null
       });
     });
   });
@@ -768,7 +775,13 @@ function loadPatientBillingDetails(patient, state) {
       description: i.description,
       amount: i.amount,
       externalDoctorId: i.doctorId || null,
-      scenario: i.type === 'hospital' ? null : (i.type === 'interconsulta' ? 1 : 2)
+      scenario: i.type === 'hospital' ? null : (i.type === 'interconsulta' ? 1 : 2),
+      medicationId: i.medicationId || null,
+      presentation: i.presentation || null,
+      presentationFactor: i.presentationFactor || null,
+      quantity: i.quantity || null,
+      unitsToDeduct: i.unitsToDeduct || null,
+      serviceType: i.serviceType || (typeof i.description === 'string' && i.description.toLowerCase().includes('medicamento') ? 'farmacia' : null)
     }));
 
     let hospitalTotal = 0;
@@ -785,6 +798,44 @@ function loadPatientBillingDetails(patient, state) {
     primaryBill.nit = nit;
     primaryBill.invoiceName = billName;
     primaryBill.invoiceNumber = 'FACT-' + Math.floor(100000 + Math.random() * 900000);
+
+    // Descuento estricto de inventario en Farmacia al confirmar el cobro/facturación (Fórmula: Cantidad vendida × Equivalencia de la presentación)
+    let medsModified = false;
+    ensureKardexPEPS(state);
+    primaryBill.details.forEach(detail => {
+      const isFarmacia = detail.serviceType === 'farmacia' || 
+        (typeof detail.description === 'string' && (detail.description.toLowerCase().includes('medicamento') || detail.description.toLowerCase().includes('receta')));
+      
+      if (isFarmacia) {
+        let med = null;
+        if (detail.medicationId) {
+          med = (state.medications || []).find(m => m.id === detail.medicationId);
+        }
+        if (!med && detail.description) {
+          const descLower = detail.description.toLowerCase();
+          med = (state.medications || []).find(m => m.name && descLower.includes(m.name.toLowerCase()));
+        }
+
+        if (med) {
+          const factor = detail.presentationFactor || 1;
+          const qty = detail.quantity || 1;
+          const unitsToDeduct = detail.unitsToDeduct || (qty * factor);
+
+          med.stock = Math.max(0, (med.stock !== undefined ? parseInt(med.stock) : 0) - unitsToDeduct);
+          medsModified = true;
+
+          try {
+            consumeStockPEPS(state, med.id, unitsToDeduct, `Facturación Caja - ${patient.name}`, primaryBill.invoiceNumber);
+          } catch (e) {
+            console.warn("PEPS consumption on cashier payment:", e);
+          }
+        }
+      }
+    });
+
+    if (medsModified) {
+      saveCatalogDirectly('medications', state.medications);
+    }
 
     // 2. Marcar las otras facturas pendientes como 'Pagado' vacías para liquidarlas por completo
     pendingBills.forEach(b => {

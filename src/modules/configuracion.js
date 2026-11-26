@@ -1,5 +1,5 @@
 // src/modules/configuracion.js
-import { getAppState, saveAppState, removeFromFirestore, purgeAllDatabases, saveDocumentsBatch, purgeCollectionFromFirestore, resetToOfficialDatabase } from '../main.js';
+import { getAppState, saveAppState, saveCatalogDirectly, removeFromFirestore, purgeAllDatabases, saveDocumentsBatch, purgeCollectionFromFirestore, resetToOfficialDatabase } from '../main.js';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 import { findExistingPatientByDpi, isGenericDpi } from '../utils/patientDpiValidator.js';
@@ -381,12 +381,12 @@ export function renderConfiguracion(container) {
 
     <!-- CONFIG CATALOGS MODAL (ALOJADO LOCALMENTE EN LA CONFIGURACIÓN) -->
     <div id="config-catalog-modal" class="modal-overlay" style="display: none; z-index: 1100;">
-      <div class="modal-content" style="max-width: 800px; width: 90%;">
+      <div class="modal-content" style="max-width: 900px; width: 92%;">
         <div class="modal-header">
           <h2 id="config-catalog-title">Gestión de Catálogo</h2>
           <button class="modal-close" id="btn-close-config-catalog">&times;</button>
         </div>
-        <div class="modal-body" style="max-height: 500px; overflow-y: auto; padding: 1.5rem;">
+        <div class="modal-body" style="max-height: 520px; overflow-y: auto; padding: 1.5rem;">
           
           <!-- Formulario para agregar / editar item -->
           <div id="config-item-form-area" class="glass-card" style="margin-bottom: 1.5rem; padding: 1.25rem; border-top: 3px solid var(--accent-primary); background: rgba(255, 255, 255, 0.01);">
@@ -394,7 +394,7 @@ export function renderConfiguracion(container) {
             <form id="config-item-form" style="display: flex; flex-direction: column; gap: 12px;">
               <input type="hidden" id="config-item-id">
               
-              <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+              <div id="config-standard-top-row" style="display: flex; gap: 15px; flex-wrap: wrap;">
                 <div class="form-group" style="flex: 2; min-width: 200px; position: relative;">
                   <label for="config-item-name" id="lbl-item-name">Nombre</label>
                   <input type="text" id="config-item-name" required placeholder="Ej. Acetaminofén, Hemograma, Rx Tórax..." autocomplete="off">
@@ -763,11 +763,15 @@ export function renderConfiguracion(container) {
     const clearBtn = e.target.closest('#btn-clear-config-form');
     if (clearBtn) {
       e.preventDefault();
-      const configForm = document.getElementById('config-item-form');
-      if (configForm) {
-        configForm.reset();
-        document.getElementById('config-item-id').value = '';
-        document.getElementById('config-form-title').textContent = "Agregar Nuevo Item";
+      if (activeCatalogType === 'medications') {
+        resetPharmacyForm();
+      } else {
+        const configForm = document.getElementById('config-item-form');
+        if (configForm) {
+          configForm.reset();
+          document.getElementById('config-item-id').value = '';
+          document.getElementById('config-form-title').textContent = "Agregar Nuevo Item";
+        }
       }
       return;
     }
@@ -795,15 +799,7 @@ export function renderConfiguracion(container) {
         document.getElementById('config-form-title').textContent = "Modificar Item";
 
         if (activeCatalogType === 'medications') {
-          document.getElementById('c-spec-generic').value = itemObj.generic || '';
-          document.getElementById('c-spec-presentation').value = itemObj.presentation || '';
-          document.getElementById('c-spec-unidad-dispensable').value = itemObj.unidad_dispensable || 'Tableta';
-          document.getElementById('c-spec-unidades-por-presentacion').value = itemObj.unidades_por_presentacion || 30;
-          document.getElementById('c-spec-category').value = itemObj.category || '';
-          document.getElementById('c-spec-stock').value = itemObj.stock !== undefined ? itemObj.stock : 120;
-          document.getElementById('c-spec-lote').value = itemObj.lote || '';
-          document.getElementById('c-spec-vencimiento').value = itemObj.vencimiento || '';
-          setTimeout(updateConfigStockHelperText, 20);
+          loadMedicationIntoForm(itemObj);
         } else if (activeCatalogType === 'laboratoryTests') {
           document.getElementById('c-spec-category').value = itemObj.category || '';
           const unitEl = document.getElementById('c-spec-unit');
@@ -986,6 +982,87 @@ export function renderConfiguracion(container) {
       e.preventDefault();
       const appState = getAppState();
       const id = document.getElementById('config-item-id').value;
+
+      if (activeCatalogType === 'medications') {
+        const commercialName = document.getElementById('med-commercial-name')?.value.trim();
+        if (!commercialName) {
+          alert("Por favor ingrese el Nombre Comercial del medicamento.");
+          return;
+        }
+
+        let itemObj = {};
+        if (id) {
+          itemObj = appState.medications.find(x => x.id === id);
+          if (!itemObj) {
+            itemObj = { id: id };
+            appState.medications.unshift(itemObj);
+          }
+        } else {
+          itemObj.id = 'm-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
+          appState.medications.unshift(itemObj);
+        }
+
+        const genericName = document.getElementById('c-spec-generic')?.value.trim() || '';
+        const category = document.getElementById('c-spec-category')?.value.trim() || 'Farmacia';
+        const lote = document.getElementById('c-spec-lote')?.value.trim() || '';
+        const vencimiento = document.getElementById('c-spec-vencimiento')?.value || '';
+        const purchasePres = document.getElementById('c-purchase-presentation')?.value.trim() || 'Caja';
+        const purchaseQty = parseInt(document.getElementById('c-purchase-qty')?.value) || 1;
+        const purchasePrice = parseFloat(document.getElementById('c-purchase-price')?.value) || 0;
+        const baseUnit = document.getElementById('c-base-unit')?.value.trim() || 'Tableta';
+        const factorCompra = Math.max(1, parseInt(document.getElementById('c-factor-compra')?.value) || 1);
+        const stock = Math.max(0, parseInt(document.getElementById('c-spec-stock')?.value) || 0);
+
+        const salesPresentations = [];
+        document.querySelectorAll('#sales-presentations-tbody .sales-pres-row').forEach(row => {
+          const pName = row.querySelector('.sp-name')?.value.trim();
+          const pFactor = Math.max(1, parseInt(row.querySelector('.sp-factor')?.value) || 1);
+          const pPrice = parseFloat(row.querySelector('.sp-price')?.value) || 0;
+          if (pName) {
+            salesPresentations.push({
+              presentation: pName,
+              factor: pFactor,
+              price: pPrice
+            });
+          }
+        });
+
+        if (salesPresentations.length === 0) {
+          salesPresentations.push({
+            presentation: purchasePres,
+            factor: factorCompra,
+            price: purchasePrice
+          });
+        }
+
+        const topPres = salesPresentations.find(p => p.factor === factorCompra) || salesPresentations[0];
+        const unitPres = salesPresentations.find(p => p.factor === 1);
+        const calculatedUnitPrice = unitPres ? unitPres.price : parseFloat(((topPres ? topPres.price : 0) / factorCompra).toFixed(4));
+
+        itemObj.name = commercialName;
+        itemObj.generic = genericName;
+        itemObj.category = category;
+        itemObj.lote = lote;
+        itemObj.vencimiento = vencimiento;
+        itemObj.presentation = purchasePres;
+        itemObj.cantidad_comprada = purchaseQty;
+        itemObj.precio_compra = purchasePrice;
+        itemObj.unidad_dispensable = baseUnit;
+        itemObj.unidades_por_presentacion = factorCompra;
+        itemObj.stock = stock;
+        itemObj.salesPresentations = salesPresentations;
+        itemObj.price = topPres ? topPres.price : purchasePrice;
+        itemObj.precio_unitario = calculatedUnitPrice;
+
+        saveAppState(appState);
+        saveCatalogDirectly('medications', appState.medications);
+        renderCatalogTable();
+        resetPharmacyForm();
+        alert("Medicamento guardado exitosamente en el catálogo.");
+        return;
+      }
+
+      // Catálogos estándares (Laboratorio, Imagenología, Consultas, Habitaciones)
       const name = document.getElementById('config-item-name').value;
       const price = parseFloat(document.getElementById('config-item-price').value);
 
@@ -993,8 +1070,7 @@ export function renderConfiguracion(container) {
       if (id) {
         itemObj = appState[activeCatalogType].find(x => x.id === id);
       } else {
-        const prefix = activeCatalogType === 'medications' ? 'm-' :
-                       activeCatalogType === 'laboratoryTests' ? 'l-' :
+        const prefix = activeCatalogType === 'laboratoryTests' ? 'l-' :
                        activeCatalogType === 'imagingStudies' ? 'i-' :
                        activeCatalogType === 'roomRates' ? 'hr-' : 'c-';
         itemObj.id = prefix + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
@@ -1004,18 +1080,7 @@ export function renderConfiguracion(container) {
       itemObj.name = name;
       itemObj.price = price;
 
-      if (activeCatalogType === 'medications') {
-        itemObj.generic = document.getElementById('c-spec-generic').value.trim();
-        itemObj.presentation = document.getElementById('c-spec-presentation').value.trim() || 'Caja';
-        itemObj.unidad_dispensable = document.getElementById('c-spec-unidad-dispensable').value.trim() || 'Tableta';
-        const factor = Math.max(1, parseInt(document.getElementById('c-spec-unidades-por-presentacion').value) || 1);
-        itemObj.unidades_por_presentacion = factor;
-        itemObj.category = document.getElementById('c-spec-category').value.trim();
-        itemObj.stock = parseInt(document.getElementById('c-spec-stock').value) || 0;
-        itemObj.lote = document.getElementById('c-spec-lote').value.trim();
-        itemObj.vencimiento = document.getElementById('c-spec-vencimiento').value;
-        itemObj.precio_unitario = parseFloat((price / factor).toFixed(4));
-      } else if (activeCatalogType === 'laboratoryTests') {
+      if (activeCatalogType === 'laboratoryTests') {
         itemObj.category = document.getElementById('c-spec-category').value;
         const unitEl = document.getElementById('c-spec-unit');
         const refEl = document.getElementById('c-spec-reference');
@@ -1221,52 +1286,304 @@ function renderUsersList() {
   });
 }
 
-function updateConfigStockHelperText() {
-  const stockEl = document.getElementById('c-spec-stock');
-  const factorEl = document.getElementById('c-spec-unidades-por-presentacion');
-  const presEl = document.getElementById('c-spec-presentation');
-  const unitEl = document.getElementById('c-spec-unidad-dispensable');
-  const helperEl = document.getElementById('c-spec-stock-helper');
+export function getMedicationSalesPresentations(med) {
+  if (!med) return [];
+  if (Array.isArray(med.salesPresentations) && med.salesPresentations.length > 0) {
+    return med.salesPresentations.map(p => ({
+      presentation: p.presentation || 'Presentación',
+      factor: Math.max(1, parseInt(p.factor) || 1),
+      price: parseFloat(p.price) || 0
+    }));
+  }
+  // Retrocompatibilidad con esquemas anteriores
+  const factor = Math.max(1, parseInt(med.unidades_por_presentacion) || 30);
+  const pres = med.presentation || 'Caja';
+  const unit = med.unidad_dispensable || 'Tableta';
+  const fullPrice = parseFloat(med.price) || 50.00;
+  const unitPrice = parseFloat(med.precio_unitario) || (fullPrice / factor);
 
-  if (!stockEl || !factorEl || !helperEl) return;
+  const list = [
+    { presentation: pres, factor: factor, price: fullPrice }
+  ];
+  if (factor > 1 && pres.toLowerCase() !== unit.toLowerCase()) {
+    list.push({ presentation: unit, factor: 1, price: parseFloat(unitPrice.toFixed(2)) });
+  }
+  return list;
+}
 
-  const stock = parseInt(stockEl.value) || 0;
+export function formatHierarchicalStock(stock, med) {
+  const stockVal = Math.max(0, parseInt(stock) || 0);
+  const unit = (med && med.unidad_dispensable) ? med.unidad_dispensable : 'Tableta';
+  if (!med) return `${stockVal} ${unit}(s)`;
+
+  const salesPres = getMedicationSalesPresentations(med)
+    .filter(p => p.factor > 0)
+    .sort((a, b) => b.factor - a.factor);
+
+  const higherPresentations = salesPres.filter(p => p.factor > 1);
+  if (higherPresentations.length === 0) {
+    return `${stockVal} ${unit}(s)`;
+  }
+
+  let remaining = stockVal;
+  const parts = [];
+
+  for (const pres of higherPresentations) {
+    if (pres.factor <= 1) continue;
+    const count = Math.floor(remaining / pres.factor);
+    if (count > 0) {
+      parts.push(`${count} ${pres.presentation}(s)`);
+      remaining = remaining % pres.factor;
+    }
+  }
+
+  if (remaining > 0) {
+    parts.push(`${remaining} ${unit}(s)`);
+  }
+
+  if (parts.length === 0) {
+    return `0 ${unit}(s)`;
+  }
+
+  if (parts.length === 1 && remaining === stockVal) {
+    return `${stockVal} ${unit}(s)`;
+  }
+
+  let breakdown = '';
+  if (parts.length === 1) {
+    breakdown = parts[0];
+  } else if (parts.length === 2) {
+    breakdown = `${parts[0]} y ${parts[1]}`;
+  } else {
+    breakdown = parts.slice(0, -1).join(', ') + ' y ' + parts[parts.length - 1];
+  }
+
+  return `${stockVal} ${unit}(s) (${breakdown})`;
+}
+
+export function formatStockFriendly(stock, factor, presentacion = 'Caja', unidadDispensable = 'Tableta', med = null) {
+  if (med) return formatHierarchicalStock(stock, med);
+  const dummyMed = {
+    presentation: presentacion,
+    unidad_dispensable: unidadDispensable,
+    unidades_por_presentacion: factor
+  };
+  return formatHierarchicalStock(stock, dummyMed);
+}
+
+function addSalesPresentationRow(presName = '', factor = 1, price = 0, baseUnit = 'Tableta') {
+  const tbody = document.getElementById('sales-presentations-tbody');
+  if (!tbody) return;
+
+  const tr = document.createElement('tr');
+  tr.className = 'sales-pres-row';
+  tr.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+  tr.innerHTML = `
+    <td style="padding: 6px;">
+      <input type="text" class="sp-name" list="standard-sales-presentations" value="${presName}" placeholder="Ej. Caja, Blíster, Tableta..." required style="width: 100%; padding: 5px 8px; font-size: 0.85rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-card); color: var(--text-primary);">
+    </td>
+    <td style="padding: 6px;">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <input type="number" class="sp-factor" min="1" step="1" value="${factor}" required style="width: 85px; padding: 5px 8px; font-size: 0.85rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-card); color: var(--text-primary); text-align: center;">
+        <span class="sp-unit-label" style="font-size: 0.78rem; color: var(--text-muted);">${baseUnit}(s)</span>
+      </div>
+    </td>
+    <td style="padding: 6px; text-align: right;">
+      <div style="display: inline-flex; align-items: center; gap: 4px;">
+        <span style="color: var(--accent-success); font-weight: bold; font-size: 0.85rem;">Q</span>
+        <input type="number" class="sp-price" min="0" step="0.01" value="${parseFloat(price || 0).toFixed(2)}" required style="width: 90px; text-align: right; padding: 5px 8px; font-size: 0.85rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-card); color: var(--accent-success); font-weight: bold;">
+      </div>
+    </td>
+    <td style="padding: 6px; text-align: center;">
+      <button type="button" class="btn btn-danger btn-small btn-remove-sp-row" style="padding: 3px 8px; font-size: 0.85rem; line-height: 1;" title="Eliminar presentación">&times;</button>
+    </td>
+  `;
+  tbody.appendChild(tr);
+
+  tr.querySelector('.btn-remove-sp-row').addEventListener('click', () => {
+    const totalRows = tbody.querySelectorAll('.sales-pres-row').length;
+    if (totalRows <= 1) {
+      alert("Debe mantener al menos una presentación de venta.");
+      return;
+    }
+    tr.remove();
+  });
+}
+
+function renderSalesPresentationsRows(list, baseUnit = 'Tableta') {
+  const tbody = document.getElementById('sales-presentations-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  const rows = (Array.isArray(list) && list.length > 0) ? list : [
+    { presentation: 'Caja', factor: 100, price: 150.00 },
+    { presentation: 'Blíster', factor: 10, price: 18.00 },
+    { presentation: 'Tableta', factor: 1, price: 2.00 }
+  ];
+
+  rows.forEach(p => {
+    addSalesPresentationRow(p.presentation, p.factor, p.price, baseUnit);
+  });
+}
+
+function updateStockCalculationBadge() {
+  const qtyEl = document.getElementById('c-purchase-qty');
+  const factorEl = document.getElementById('c-factor-compra');
+  const presEl = document.getElementById('c-purchase-presentation');
+  const unitEl = document.getElementById('c-base-unit');
+  const badgeEl = document.getElementById('c-calc-stock-badge');
+  const detailEl = document.getElementById('c-calc-stock-detail');
+  const stockFinalEl = document.getElementById('c-spec-stock');
+
+  if (!qtyEl || !factorEl || !badgeEl) return;
+
+  const qty = parseInt(qtyEl.value) || 0;
   const factor = Math.max(1, parseInt(factorEl.value) || 1);
   const pres = (presEl ? presEl.value.trim() : '') || 'Caja';
   const unit = (unitEl ? unitEl.value.trim() : '') || 'Tableta';
 
-  const complete = Math.floor(stock / factor);
-  const remaining = stock % factor;
-
-  let text = `Equivale a: <strong>${complete}</strong> ${pres}(s)`;
-  if (remaining > 0) {
-    text += ` y <strong>${remaining}</strong> ${unit}(s) sueltas`;
+  const total = qty * factor;
+  badgeEl.textContent = `${total} ${unit}(s)`;
+  if (detailEl) {
+    detailEl.textContent = `Fórmula: ${qty} ${pres}(s) × ${factor} ${unit}(s) = ${total} ${unit}(s) en inventario`;
   }
-  helperEl.innerHTML = text;
+
+  const currentId = document.getElementById('config-item-id')?.value;
+  if (!currentId && stockFinalEl) {
+    stockFinalEl.value = total;
+  }
+
+  document.querySelectorAll('.sp-unit-label').forEach(el => {
+    el.textContent = `${unit}(s)`;
+  });
 }
 
-function formatStockFriendly(stock, factor, presentacion = 'Caja', unidadDispensable = 'Tableta') {
-  const stockVal = parseInt(stock) || 0;
-  const factorVal = Math.max(1, parseInt(factor) || 1);
-  const pres = presentacion || 'Caja';
-  const unit = unidadDispensable || 'Tableta';
+function loadMedicationIntoForm(itemObj) {
+  if (!itemObj) return;
+  const idEl = document.getElementById('config-item-id');
+  const titleEl = document.getElementById('config-form-title');
+  if (idEl) idEl.value = itemObj.id;
+  if (titleEl) titleEl.textContent = `Modificar Medicamento (${itemObj.name})`;
 
-  if (factorVal <= 1) {
-    return `${stockVal} ${unit}(s)`;
+  // Grupo 1: Datos Generales
+  const nameEl = document.getElementById('med-commercial-name');
+  const genericEl = document.getElementById('c-spec-generic');
+  const catEl = document.getElementById('c-spec-category');
+  const loteEl = document.getElementById('c-spec-lote');
+  const vencEl = document.getElementById('c-spec-vencimiento');
+
+  if (nameEl) nameEl.value = itemObj.name || '';
+  if (genericEl) genericEl.value = itemObj.generic || '';
+  if (catEl) catEl.value = itemObj.category || '';
+  if (loteEl) loteEl.value = itemObj.lote || '';
+  if (vencEl) vencEl.value = itemObj.vencimiento || '';
+
+  // Grupo 2: Datos de Compra e Ingreso
+  const presEl = document.getElementById('c-purchase-presentation');
+  const qtyEl = document.getElementById('c-purchase-qty');
+  const priceEl = document.getElementById('c-purchase-price');
+  const unitEl = document.getElementById('c-base-unit');
+  const factorEl = document.getElementById('c-factor-compra');
+  const stockEl = document.getElementById('c-spec-stock');
+
+  if (presEl) presEl.value = itemObj.presentation || 'Caja';
+  if (qtyEl) qtyEl.value = itemObj.cantidad_comprada || 1;
+  if (priceEl) priceEl.value = itemObj.precio_compra || (itemObj.price || 0);
+  if (unitEl) unitEl.value = itemObj.unidad_dispensable || 'Tableta';
+  if (factorEl) factorEl.value = itemObj.unidades_por_presentacion || 30;
+  if (stockEl) stockEl.value = itemObj.stock !== undefined ? itemObj.stock : 0;
+
+  updateStockCalculationBadge();
+
+  // Grupo 3: Presentaciones de Venta
+  const salesPres = getMedicationSalesPresentations(itemObj);
+  renderSalesPresentationsRows(salesPres, itemObj.unidad_dispensable || 'Tableta');
+}
+
+function resetPharmacyForm() {
+  const form = document.getElementById('config-item-form');
+  if (form) form.reset();
+  const idEl = document.getElementById('config-item-id');
+  const titleEl = document.getElementById('config-form-title');
+  if (idEl) idEl.value = '';
+  if (titleEl) titleEl.textContent = "Agregar Nuevo Item";
+
+  const presEl = document.getElementById('c-purchase-presentation');
+  const qtyEl = document.getElementById('c-purchase-qty');
+  const priceEl = document.getElementById('c-purchase-price');
+  const unitEl = document.getElementById('c-base-unit');
+  const factorEl = document.getElementById('c-factor-compra');
+  const stockEl = document.getElementById('c-spec-stock');
+
+  if (presEl) presEl.value = 'Caja';
+  if (qtyEl) qtyEl.value = '5';
+  if (priceEl) priceEl.value = '120.00';
+  if (unitEl) unitEl.value = 'Tableta';
+  if (factorEl) factorEl.value = '100';
+  if (stockEl) stockEl.value = '500';
+
+  updateStockCalculationBadge();
+  renderSalesPresentationsRows([
+    { presentation: 'Caja', factor: 100, price: 150.00 },
+    { presentation: 'Blíster', factor: 10, price: 18.00 },
+    { presentation: 'Tableta', factor: 1, price: 2.00 }
+  ], 'Tableta');
+
+  const autoList = document.getElementById('med-catalog-autocomplete-list');
+  if (autoList) autoList.style.display = 'none';
+}
+
+function handleMedCommercialNameInput(inputEl) {
+  const query = inputEl.value.trim().toLowerCase();
+  const listEl = document.getElementById('med-catalog-autocomplete-list');
+  if (!listEl) return;
+
+  if (!query) {
+    listEl.style.display = 'none';
+    return;
   }
 
-  const completePacks = Math.floor(stockVal / factorVal);
-  const remainingUnits = stockVal % factorVal;
+  const stateObj = getAppState();
+  const items = stateObj.medications || [];
 
-  let text = `${stockVal} ${unit}(s)`;
-  if (completePacks > 0 && remainingUnits > 0) {
-    text += ` (${completePacks} ${pres}(s) y ${remainingUnits} ${unit}(s))`;
-  } else if (completePacks > 0 && remainingUnits === 0) {
-    text += ` (${completePacks} ${pres}(s) completa(s))`;
-  } else {
-    text += ` (0 ${pres}(s) completa(s))`;
+  const filtered = items.filter(item => {
+    const nameMatch = (item.name || '').toLowerCase().includes(query);
+    const genericMatch = (item.generic || '').toLowerCase().includes(query);
+    return nameMatch || genericMatch;
+  });
+
+  if (filtered.length === 0) {
+    listEl.style.display = 'none';
+    return;
   }
-  return text;
+
+  listEl.innerHTML = filtered.map(item => {
+    const extraLabel = item.generic ? ` <span style="color: var(--text-muted); font-size: 0.75rem;">(Genérico: ${item.generic})</span>` : '';
+    const stockHier = formatHierarchicalStock(item.stock, item);
+    return `
+      <div class="med-autocomplete-item" data-id="${item.id}" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.06); transition: background 0.2s;">
+        <div style="font-weight: 600; color: #00f2fe; font-size: 0.88rem;">${item.name}${extraLabel}</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between; margin-top: 2px;">
+          <span>Categoría: ${item.category || 'Farmacia'}</span>
+          <span style="color: ${(item.stock || 0) > 0 ? '#10b981' : '#ef4444'}; font-weight: bold;">Stock: ${stockHier}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  listEl.style.display = 'block';
+
+  listEl.querySelectorAll('.med-autocomplete-item').forEach(itemBtn => {
+    itemBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = itemBtn.getAttribute('data-id');
+      const selectedItem = items.find(x => x.id === id);
+      if (selectedItem) {
+        loadMedicationIntoForm(selectedItem);
+      }
+      listEl.style.display = 'none';
+    });
+  });
 }
 
 function openCatalogConfig(type) {
@@ -1276,6 +1593,9 @@ function openCatalogConfig(type) {
   const configModal = document.getElementById('config-catalog-modal');
   const configTitle = document.getElementById('config-catalog-title');
   const configForm = document.getElementById('config-item-form');
+  const configStandardTopRow = document.getElementById('config-standard-top-row');
+  const configNameInput = document.getElementById('config-item-name');
+  const configPriceInput = document.getElementById('config-item-price');
   const configSpecificFields = document.getElementById('config-specific-fields');
   const thExtraCol = document.getElementById('th-extra-col');
   
@@ -1311,99 +1631,258 @@ function openCatalogConfig(type) {
   // Ajustar campos específicos
   if (type === 'medications') {
     configTitle.textContent = "💊 Gestión de Catálogo de Farmacia";
-    if (thExtraCol) thExtraCol.textContent = "Presentación / Categoría";
+    if (thExtraCol) thExtraCol.textContent = "Presentaciones de Venta";
+
+    if (configStandardTopRow) configStandardTopRow.style.display = 'none';
+    if (configNameInput) configNameInput.removeAttribute('required');
+    if (configPriceInput) configPriceInput.removeAttribute('required');
+
     configSpecificFields.innerHTML = `
-      <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom:0;">
-        <label for="c-spec-generic">Nombre Genérico</label>
-        <input type="text" id="c-spec-generic" required placeholder="Ej. Paracetamol">
+      <!-- GRUPO 1: DATOS GENERALES -->
+      <div class="pharmacy-form-group-card" style="background: rgba(0, 242, 254, 0.02); border: 1px solid rgba(0, 242, 254, 0.25); border-left: 4px solid #00f2fe; border-radius: 6px; padding: 14px; margin-bottom: 12px; width: 100%;">
+        <h5 style="margin: 0 0 12px 0; color: #00f2fe; font-size: 0.92rem; display: flex; align-items: center; gap: 6px;">
+          <span>📋</span> GRUPO 1: DATOS GENERALES
+        </h5>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+          <div class="form-group" style="position: relative; margin: 0; grid-column: span 2;">
+            <label for="med-commercial-name" style="font-weight: 600; font-size: 0.82rem;">
+              Nombre Comercial <small style="color: var(--accent-primary); font-weight: normal;">(Búsqueda en vivo / Autocompletado - seleccione para editar)</small>
+            </label>
+            <input type="text" id="med-commercial-name" required placeholder="Escriba el nombre comercial (ej. Amoxicilina 500mg, Panadol Ultra)..." autocomplete="off" style="width: 100%; border: 1px solid rgba(0, 242, 254, 0.4);">
+            <div id="med-catalog-autocomplete-list" style="position: absolute; top: 100%; left: 0; right: 0; z-index: 1200; background: #13151f; border: 1px solid rgba(0,242,254,0.3); border-radius: 4px; max-height: 220px; overflow-y: auto; display: none; box-shadow: var(--shadow-lg); margin-top: 4px;"></div>
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label for="c-spec-generic" style="font-size: 0.82rem;">Nombre Genérico</label>
+            <input type="text" id="c-spec-generic" required placeholder="Ej. Amoxicilina, Paracetamol">
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label for="c-spec-category" style="font-size: 0.82rem;">Categoría Farmacéutica</label>
+            <input type="text" id="c-spec-category" list="pharmacy-categories-datalist" required placeholder="Ej. Analgésicos, Antibióticos">
+            <datalist id="pharmacy-categories-datalist">
+              <option value="Analgésicos y Antipiréticos">
+              <option value="Antibióticos y Antimicrobianos">
+              <option value="Antiinflamatorios">
+              <option value="Antihistamínicos">
+              <option value="Gastrointestinales">
+              <option value="Cardiovasculares y Antihipertensivos">
+              <option value="Respiratorios y Antitusivos">
+              <option value="Vitaminas y Suplementos">
+              <option value="Dermatológicos">
+              <option value="Inyectables y Soluciones">
+            </datalist>
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label for="c-spec-lote" style="font-size: 0.82rem;">Número de Lote</label>
+            <input type="text" id="c-spec-lote" required placeholder="Ej. LT-8902">
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label for="c-spec-vencimiento" style="font-size: 0.82rem;">Fecha de Vencimiento</label>
+            <input type="date" id="c-spec-vencimiento" required>
+          </div>
+        </div>
       </div>
-      <div class="form-group" style="flex: 1; min-width: 130px; margin-bottom:0;">
-        <label for="c-spec-presentation">Presentación (Caja, Frasco)</label>
-        <input type="text" id="c-spec-presentation" required placeholder="Ej. Caja, Frasco, Blíster...">
+
+      <!-- GRUPO 2: DATOS DE COMPRA E INGRESO A INVENTARIO -->
+      <div class="pharmacy-form-group-card" style="background: rgba(16, 185, 129, 0.02); border: 1px solid rgba(16, 185, 129, 0.25); border-left: 4px solid #10b981; border-radius: 6px; padding: 14px; margin-bottom: 12px; width: 100%;">
+        <h5 style="margin: 0 0 12px 0; color: #10b981; font-size: 0.92rem; display: flex; align-items: center; gap: 6px;">
+          <span>📦</span> GRUPO 2: DATOS DE COMPRA E INGRESO A INVENTARIO
+        </h5>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; align-items: flex-start;">
+          <div class="form-group" style="margin: 0;">
+            <label for="c-purchase-presentation" style="font-size: 0.82rem;">Presentación de Compra</label>
+            <input type="text" id="c-purchase-presentation" list="purchase-pres-datalist" required placeholder="Ej. Caja, Frasco, Galón, Paquete" value="Caja">
+            <datalist id="purchase-pres-datalist">
+              <option value="Caja">
+              <option value="Frasco">
+              <option value="Galón">
+              <option value="Paquete">
+              <option value="Bulto">
+              <option value="Lata">
+              <option value="Ampolla">
+              <option value="Tubo">
+            </datalist>
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label for="c-purchase-qty" style="font-size: 0.82rem;">Cantidad Comprada</label>
+            <input type="number" id="c-purchase-qty" min="1" step="1" required value="5" placeholder="Ej. 5">
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label for="c-purchase-price" style="font-size: 0.82rem;">Precio de Compra (Q)</label>
+            <input type="number" id="c-purchase-price" min="0" step="0.01" required value="120.00" placeholder="0.00">
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label for="c-base-unit" style="font-size: 0.82rem;">Unidad Base (Mínima dispensable)</label>
+            <input type="text" id="c-base-unit" list="base-unit-datalist" required placeholder="Ej. Tableta, Cápsula, ml, Ampolla" value="Tableta">
+            <datalist id="base-unit-datalist">
+              <option value="Tableta">
+              <option value="Cápsula">
+              <option value="ml">
+              <option value="Ampolla">
+              <option value="Gramos">
+              <option value="Óvulo">
+              <option value="Dosis">
+            </datalist>
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label for="c-factor-compra" style="font-size: 0.82rem;">Unidades Base por Pres. Compra</label>
+            <input type="number" id="c-factor-compra" min="1" step="1" required value="100" placeholder="Ej. 100">
+          </div>
+        </div>
+
+        <!-- Cálculo automático de stock base -->
+        <div style="margin-top: 12px; padding: 10px 14px; background: rgba(16, 185, 129, 0.06); border: 1px dashed rgba(16, 185, 129, 0.35); border-radius: 6px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <span style="font-size: 0.82rem; color: var(--text-muted); font-weight: 500;">Cálculo Automático de Stock Base:</span>
+            <div id="c-calc-stock-badge" style="font-size: 1.2rem; font-weight: bold; color: #10b981; margin: 2px 0;">
+              500 Tabletas
+            </div>
+            <small id="c-calc-stock-detail" style="font-size: 0.76rem; color: var(--text-muted);">
+              Fórmula: 5 Cajas × 100 Tabletas = 500 Tabletas en inventario
+            </small>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label for="c-spec-stock" style="font-size: 0.82rem; margin: 0; color: #10b981; font-weight: 600;">Stock Base Almacenado:</label>
+            <input type="number" id="c-spec-stock" min="0" value="500" required style="width: 110px; padding: 6px 10px; font-weight: bold; font-size: 1rem; text-align: center; color: #10b981; border: 1px solid rgba(16, 185, 129, 0.5); border-radius: 4px; background: rgba(0,0,0,0.3);">
+          </div>
+        </div>
       </div>
-      <div class="form-group" style="flex: 1; min-width: 130px; margin-bottom:0;">
-        <label for="c-spec-unidad-dispensable">Unidad Dispensable</label>
-        <input type="text" id="c-spec-unidad-dispensable" required placeholder="Ej. Tableta, ml, Cápsula...">
-      </div>
-      <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom:0;">
-        <label for="c-spec-unidades-por-presentacion">Unidades por Caja/Frasco</label>
-        <input type="number" id="c-spec-unidades-por-presentacion" required min="1" value="30">
-      </div>
-      <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom:0;">
-        <label for="c-spec-category">Categoría</label>
-        <input type="text" id="c-spec-category" required placeholder="Ej. Analgésicos, Antibióticos...">
-      </div>
-      <div class="form-group" style="flex: 1; min-width: 140px; margin-bottom:0;">
-        <label for="c-spec-stock">Stock (Total Tabletas / ml)</label>
-        <input type="number" id="c-spec-stock" required min="0" value="150" placeholder="Ej. 150">
-        <small id="c-spec-stock-helper" style="display:block; color:var(--accent-secondary); font-size:0.75rem; margin-top:4px; font-weight: 500;">Equivale a: 5 Caja(s)</small>
-      </div>
-      <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom:0;">
-        <label for="c-spec-lote">Número de Lote</label>
-        <input type="text" id="c-spec-lote" required placeholder="Ej. LT-8902">
-      </div>
-      <div class="form-group" style="flex: 1; min-width: 130px; margin-bottom:0;">
-        <label for="c-spec-vencimiento">Fecha de Vencimiento</label>
-        <input type="date" id="c-spec-vencimiento" required>
+
+      <!-- GRUPO 3: PRESENTACIONES DE VENTA (LISTA DINÁMICA) -->
+      <div class="pharmacy-form-group-card" style="background: rgba(245, 158, 11, 0.02); border: 1px solid rgba(245, 158, 11, 0.25); border-left: 4px solid #f59e0b; border-radius: 6px; padding: 14px; margin-bottom: 8px; width: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <h5 style="margin: 0; color: #f59e0b; font-size: 0.92rem; display: flex; align-items: center; gap: 6px;">
+              <span>🏷️</span> GRUPO 3: PRESENTACIONES DE VENTA (LISTA DINÁMICA)
+            </h5>
+            <p style="margin: 2px 0 0 0; font-size: 0.76rem; color: var(--text-muted);">
+              Configure las formas en que este medicamento se puede recetar y vender (cada una descuenta de acuerdo a su equivalencia de unidades base).
+            </p>
+          </div>
+          <button type="button" class="btn btn-secondary btn-small" id="btn-add-sales-presentation-row" style="padding: 5px 12px; font-size: 0.82rem; border-color: #f59e0b; color: #f59e0b; font-weight: 600;">
+            <span>➕</span> Agregar Presentación de Venta
+          </button>
+        </div>
+
+        <datalist id="standard-sales-presentations">
+          <option value="Caja">
+          <option value="Blíster">
+          <option value="Tableta">
+          <option value="Cápsula">
+          <option value="Frasco">
+          <option value="Ampolla">
+          <option value="ml">
+          <option value="Sobre">
+          <option value="Tubo">
+          <option value="Gotero">
+          <option value="Inhalador">
+          <option value="Parche">
+        </datalist>
+
+        <div style="overflow-x: auto;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;" id="sales-presentations-table">
+            <thead>
+              <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted); text-align: left;">
+                <th style="padding: 8px 6px;">Presentación de Venta</th>
+                <th style="padding: 8px 6px;">Equivalencia (Uds Base)</th>
+                <th style="padding: 8px 6px; text-align: right;">Precio de Venta al Público (Q)</th>
+                <th style="padding: 8px 6px; text-align: center; width: 60px;">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="sales-presentations-tbody">
+              <!-- Filas dinámicas -->
+            </tbody>
+          </table>
+        </div>
       </div>
     `;
 
     setTimeout(() => {
-      const stockEl = document.getElementById('c-spec-stock');
-      const factorEl = document.getElementById('c-spec-unidades-por-presentacion');
-      const presEl = document.getElementById('c-spec-presentation');
-      const unitEl = document.getElementById('c-spec-unidad-dispensable');
+      // Wire input listeners Grupo 2
+      const qtyEl = document.getElementById('c-purchase-qty');
+      const factorEl = document.getElementById('c-factor-compra');
+      const presEl = document.getElementById('c-purchase-presentation');
+      const unitEl = document.getElementById('c-base-unit');
 
-      if (stockEl) stockEl.addEventListener('input', updateConfigStockHelperText);
-      if (factorEl) factorEl.addEventListener('input', updateConfigStockHelperText);
-      if (presEl) presEl.addEventListener('input', updateConfigStockHelperText);
-      if (unitEl) unitEl.addEventListener('input', updateConfigStockHelperText);
-      updateConfigStockHelperText();
-    }, 50);
-  } else if (type === 'laboratoryTests') {
-    configTitle.textContent = "🔬 Catálogo de Laboratorio y Precios";
-    if (thExtraCol) thExtraCol.textContent = "Categoría del Examen";
-    configSpecificFields.innerHTML = `
-      <div class="form-group" style="flex: 1; min-width: 160px; margin-bottom:0;">
-        <label for="c-spec-category">Categoría del Examen</label>
-        <input type="text" id="c-spec-category" required placeholder="Ej. Perfil Lipídico, Hematología...">
-      </div>
-      <div class="form-group" style="flex: 1; min-width: 140px; margin-bottom:0;">
-        <label for="c-spec-unit">Unidades</label>
-        <input type="text" id="c-spec-unit" placeholder="Ej. mg/dL, UI/mL, %, g/dL...">
-      </div>
-      <div class="form-group" style="flex: 1.5; min-width: 200px; margin-bottom:0;">
-        <label for="c-spec-reference">Intervalo de Referencia</label>
-        <input type="text" id="c-spec-reference" placeholder="Ej. 70 - 100 mg/dL, < 150, Negativo...">
-      </div>
-    `;
-  } else if (type === 'imagingStudies') {
-    configTitle.textContent = "🖼️ Catálogo de Imagenología y Precios";
-    if (thExtraCol) thExtraCol.textContent = "Categoría del Estudio";
-    configSpecificFields.innerHTML = `
-      <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom:0;">
-        <label for="c-spec-category">Categoría (Rayos X, USG, TC, RMN...)</label>
-        <input type="text" id="c-spec-category" required placeholder="Ej. Ultrasonografía, Radiología...">
-      </div>
-    `;
-  } else if (type === 'consultationTypes') {
-    configTitle.textContent = "🩺 Tarifario de Consultas Médicas";
-    if (thExtraCol) thExtraCol.textContent = "Especialidad / Detalle";
-    configSpecificFields.innerHTML = `
-      <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom:0;">
-        <label for="c-spec-specialty">Especialidad</label>
-        <input type="text" id="c-spec-specialty" required placeholder="Ej. Medicina General, Pediatría, Cardiología...">
-      </div>
-    `;
-  } else if (type === 'roomRates') {
-    configTitle.textContent = "🛌 Catálogo de Habitaciones y Tarifas";
-    if (thExtraCol) thExtraCol.textContent = "Descripción / Tipo";
-    configSpecificFields.innerHTML = `
-      <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom:0;">
-        <label for="c-spec-description">Descripción de Habitación</label>
-        <input type="text" id="c-spec-description" required placeholder="Ej. Habitación Privada, Cama 1, Intensivo...">
-      </div>
-    `;
+      if (qtyEl) qtyEl.addEventListener('input', updateStockCalculationBadge);
+      if (factorEl) factorEl.addEventListener('input', updateStockCalculationBadge);
+      if (presEl) presEl.addEventListener('input', updateStockCalculationBadge);
+      if (unitEl) unitEl.addEventListener('input', updateStockCalculationBadge);
+
+      // Wire button "+ Agregar Presentación de Venta"
+      const addRowBtn = document.getElementById('btn-add-sales-presentation-row');
+      if (addRowBtn) {
+        addRowBtn.addEventListener('click', () => {
+          const baseUnit = document.getElementById('c-base-unit')?.value.trim() || 'Tableta';
+          addSalesPresentationRow('', 1, 0, baseUnit);
+        });
+      }
+
+      // Wire live search Grupo 1
+      const commNameInput = document.getElementById('med-commercial-name');
+      if (commNameInput) {
+        commNameInput.addEventListener('input', () => handleMedCommercialNameInput(commNameInput));
+      }
+
+      // Initial defaults for dynamic sales presentations
+      renderSalesPresentationsRows([
+        { presentation: 'Caja', factor: 100, price: 150.00 },
+        { presentation: 'Blíster', factor: 10, price: 18.00 },
+        { presentation: 'Tableta', factor: 1, price: 2.00 }
+      ], 'Tableta');
+      updateStockCalculationBadge();
+    }, 40);
+
+  } else {
+    // Otros catálogos: diseño estándar
+    if (configStandardTopRow) configStandardTopRow.style.display = 'flex';
+    if (configNameInput) configNameInput.setAttribute('required', 'required');
+    if (configPriceInput) configPriceInput.setAttribute('required', 'required');
+
+    if (type === 'laboratoryTests') {
+      configTitle.textContent = "🔬 Catálogo de Laboratorio y Precios";
+      if (thExtraCol) thExtraCol.textContent = "Categoría del Examen";
+      configSpecificFields.innerHTML = `
+        <div class="form-group" style="flex: 1; min-width: 160px; margin-bottom:0;">
+          <label for="c-spec-category">Categoría del Examen</label>
+          <input type="text" id="c-spec-category" required placeholder="Ej. Perfil Lipídico, Hematología...">
+        </div>
+        <div class="form-group" style="flex: 1; min-width: 140px; margin-bottom:0;">
+          <label for="c-spec-unit">Unidades</label>
+          <input type="text" id="c-spec-unit" placeholder="Ej. mg/dL, UI/mL, %, g/dL...">
+        </div>
+        <div class="form-group" style="flex: 1.5; min-width: 200px; margin-bottom:0;">
+          <label for="c-spec-reference">Intervalo de Referencia</label>
+          <input type="text" id="c-spec-reference" placeholder="Ej. 70 - 100 mg/dL, < 150, Negativo...">
+        </div>
+      `;
+    } else if (type === 'imagingStudies') {
+      configTitle.textContent = "🖼️ Catálogo de Imagenología y Precios";
+      if (thExtraCol) thExtraCol.textContent = "Categoría del Estudio";
+      configSpecificFields.innerHTML = `
+        <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom:0;">
+          <label for="c-spec-category">Categoría (Rayos X, USG, TC, RMN...)</label>
+          <input type="text" id="c-spec-category" required placeholder="Ej. Ultrasonografía, Radiología...">
+        </div>
+      `;
+    } else if (type === 'consultationTypes') {
+      configTitle.textContent = "🩺 Tarifario de Consultas Médicas";
+      if (thExtraCol) thExtraCol.textContent = "Especialidad / Detalle";
+      configSpecificFields.innerHTML = `
+        <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom:0;">
+          <label for="c-spec-specialty">Especialidad</label>
+          <input type="text" id="c-spec-specialty" required placeholder="Ej. Medicina General, Pediatría, Cardiología...">
+        </div>
+      `;
+    } else if (type === 'roomRates') {
+      configTitle.textContent = "🛌 Catálogo de Habitaciones y Tarifas";
+      if (thExtraCol) thExtraCol.textContent = "Descripción / Tipo";
+      configSpecificFields.innerHTML = `
+        <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom:0;">
+          <label for="c-spec-description">Descripción de Habitación</label>
+          <input type="text" id="c-spec-description" required placeholder="Ej. Habitación Privada, Cama 1, Intensivo...">
+        </div>
+      `;
+    }
   }
 
   renderCatalogTable();
@@ -1486,21 +1965,37 @@ function renderCatalogTable() {
 
       if (activeCatalogType === 'medications') {
         const expirationDateStr = item.vencimiento ? new Date(item.vencimiento).toLocaleDateString('es-GT') : 'N/D';
-        const stockFriendly = formatStockFriendly(
-          item.stock,
-          item.unidades_por_presentacion,
-          item.presentation,
-          item.unidad_dispensable
-        );
-        const factor = item.unidades_por_presentacion || 30;
-        const unitPrice = parseFloat(item.precio_unitario || (item.price / factor)).toFixed(2);
+        const stockHierarchical = formatHierarchicalStock(item.stock, item);
+        const salesPres = getMedicationSalesPresentations(item);
 
-        nameCellHtml = `<strong>${item.name}</strong><br><span style="font-size: 0.8rem; color: var(--text-muted); font-style: italic;">Genérico: ${item.generic || 'N/D'}</span>`;
+        const presPillsHtml = salesPres.map(p => `
+          <span style="display: inline-flex; align-items: center; gap: 4px; background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.25); border-radius: 4px; padding: 2px 7px; margin: 2px; font-size: 0.76rem; color: #00f2fe;">
+            <strong>${p.presentation}</strong> (${p.factor} ${item.unidad_dispensable || 'und'}s) = <strong style="color: var(--accent-success);">Q${parseFloat(p.price).toFixed(2)}</strong>
+          </span>
+        `).join('');
+
+        nameCellHtml = `
+          <strong style="color: #00f2fe; font-size: 0.95rem;">${item.name}</strong><br>
+          <span style="font-size: 0.8rem; color: var(--text-muted); font-style: italic;">Genérico: ${item.generic || 'N/D'}</span><br>
+          <span style="font-size: 0.75rem; color: var(--accent-primary); text-transform: uppercase; font-weight: 600;">${item.category || 'Farmacia'}</span> | 
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Lote: <strong>${item.lote || 'N/D'}</strong> | Vence: ${expirationDateStr}</span>
+        `;
+
         extraCellHtml = `
-          ${item.presentation || 'Caja'} (de ${factor} ${item.unidad_dispensable || 'Tableta'}(s)) | <span style="font-size: 0.75rem; color: var(--accent-primary); text-transform: uppercase;">${item.category || ''}</span><br>
-          <span style="font-size: 0.75rem; color: var(--text-muted);">Lote: ${item.lote || 'N/D'} | Vence: ${expirationDateStr}</span><br>
-          <span style="font-size: 0.8rem; font-weight: bold; color: ${item.stock <= 0 ? 'var(--accent-danger)' : 'var(--accent-success)'};">Stock: ${stockFriendly}</span><br>
-          <span style="font-size: 0.75rem; color: var(--accent-success); font-weight: bold;">Precio Unitario: Q${unitPrice} c/u</span>
+          <div style="margin-bottom: 4px; font-size: 0.82rem;">
+            <span style="color: var(--text-muted); text-transform: uppercase; font-size: 0.72rem;">Compra:</span> 
+            <strong>${item.presentation || 'Caja'}</strong> (${item.unidades_por_presentacion || 30} ${item.unidad_dispensable || 'Tableta'}s)
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 2px; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 0.72rem; color: #f59e0b; font-weight: 600; margin-right: 4px;">Venta:</span>
+            ${presPillsHtml}
+          </div>
+          <div>
+            <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Stock Desglosado:</span><br>
+            <strong style="font-size: 0.88rem; color: ${(item.stock || 0) <= 0 ? 'var(--accent-danger)' : 'var(--accent-success)'};">
+              ${stockHierarchical}
+            </strong>
+          </div>
         `;
       } else if (activeCatalogType === 'imagingStudies') {
         nameCellHtml = `<strong>${item.name}</strong>`;
@@ -1696,11 +2191,20 @@ function processImportedRows(rows) {
 
     if (activeCatalogType === 'medications') {
       newItem.generic = genericIdx !== -1 && row[genericIdx] ? String(row[genericIdx]).trim() : String(nameVal).trim();
-      newItem.presentation = presentationIdx !== -1 && row[presentationIdx] ? String(row[presentationIdx]).trim() : "Tabletas";
+      newItem.presentation = presentationIdx !== -1 && row[presentationIdx] ? String(row[presentationIdx]).trim() : "Caja";
       newItem.category = categoryIdx !== -1 && row[categoryIdx] ? String(row[categoryIdx]).trim() : "Farmacia";
       newItem.stock = 120;
       newItem.lote = 'L-IMP-' + Math.floor(1000 + Math.random() * 9000);
       newItem.vencimiento = '2027-06-30';
+      newItem.unidad_dispensable = 'Tableta';
+      newItem.unidades_por_presentacion = 30;
+      newItem.cantidad_comprada = 4;
+      newItem.precio_compra = priceVal;
+      newItem.salesPresentations = [
+        { presentation: newItem.presentation, factor: 30, price: priceVal },
+        { presentation: 'Tableta', factor: 1, price: parseFloat((priceVal / 30).toFixed(2)) }
+      ];
+      newItem.precio_unitario = parseFloat((priceVal / 30).toFixed(2));
     } else if (activeCatalogType === 'laboratoryTests') {
       newItem.category = categoryIdx !== -1 && row[categoryIdx] ? String(row[categoryIdx]).trim() : "General";
       newItem.unit = unitIdx !== -1 && row[unitIdx] ? String(row[unitIdx]).trim() : "N/A";
@@ -2248,15 +2752,7 @@ function handleCatalogNameInput(inputEl) {
         document.getElementById('config-form-title').textContent = "Modificar Item";
 
         if (activeCatalogType === 'medications') {
-          document.getElementById('c-spec-generic').value = selectedItem.generic || '';
-          document.getElementById('c-spec-presentation').value = selectedItem.presentation || '';
-          document.getElementById('c-spec-unidad-dispensable').value = selectedItem.unidad_dispensable || 'Tableta';
-          document.getElementById('c-spec-unidades-por-presentacion').value = selectedItem.unidades_por_presentacion || 30;
-          document.getElementById('c-spec-category').value = selectedItem.category || '';
-          document.getElementById('c-spec-stock').value = selectedItem.stock !== undefined ? selectedItem.stock : 100;
-          document.getElementById('c-spec-lote').value = selectedItem.lote || '';
-          document.getElementById('c-spec-vencimiento').value = selectedItem.vencimiento || '';
-          setTimeout(updateConfigStockHelperText, 20);
+          loadMedicationIntoForm(selectedItem);
         } else if (activeCatalogType === 'laboratoryTests') {
           document.getElementById('c-spec-category').value = selectedItem.category || '';
           const unitEl = document.getElementById('c-spec-unit');
