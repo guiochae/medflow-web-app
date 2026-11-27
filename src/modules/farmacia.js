@@ -3,8 +3,8 @@
 // Norma y Procedimientos de Almacén y Farmacia: HMM-MAN-ALM-05 (Versión 5.0)
 
 import { getAppState, saveAppState, saveCatalogDirectly, hashPassword, isAdminUser } from '../main.js';
-import { getMedicationSalesPresentations, formatHierarchicalStock } from './configuracion.js';
-export { getMedicationSalesPresentations, formatHierarchicalStock };
+import { getMedicationSalesPresentations, formatHierarchicalStock, getMedicationBaseUnit, normalizeUnitName } from './configuracion.js';
+export { getMedicationSalesPresentations, formatHierarchicalStock, getMedicationBaseUnit, normalizeUnitName };
 import logoUrl from '../assets/logo.jpg';
 
 // ==========================================
@@ -16,17 +16,22 @@ export function enrichMedication(m) {
   const precio = parseFloat(m.price || m.precio_presentacion || 50.0);
   const presNorm = String(m.presentation || '').toLowerCase();
   const nameNorm = String(m.name || '').toLowerCase();
+  const baseUnit = getMedicationBaseUnit(m);
   
-  const unidades = m.unidades_por_presentacion !== undefined 
+  let unidades = m.unidades_por_presentacion !== undefined 
     ? parseInt(m.unidades_por_presentacion) 
-    : (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') || nameNorm.includes('jarabe')
-        ? 100 
-        : (presNorm.includes('ampolla') || presNorm.includes('inyeccion') || nameNorm.includes('ampolla') ? 1 : 30));
+    : 0;
+
+  if (!unidades || unidades <= 0) {
+    if (presNorm.includes('caja') || presNorm.includes('paquete')) {
+      const matchNum = `${nameNorm} ${presNorm}`.match(/(\d+)\s*(tab|comp|caps|blist|sobre)/);
+      unidades = matchNum && matchNum[1] ? parseInt(matchNum[1]) : 1;
+    } else {
+      unidades = 1;
+    }
+  }
         
-  const unidadDispensable = m.unidad_dispensable || 
-    (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') || nameNorm.includes('jarabe')
-      ? 'ml' 
-      : (presNorm.includes('ampolla') || presNorm.includes('inyeccion') || nameNorm.includes('ampolla') ? 'Ampolla' : 'Tableta'));
+  const unidadDispensable = m.unidad_dispensable || baseUnit;
 
   const esFrac = m.es_fraccionable !== undefined 
     ? !!m.es_fraccionable 
@@ -35,8 +40,8 @@ export function enrichMedication(m) {
         : (presNorm.includes('jarabe') || presNorm.includes('gotas') || presNorm.includes('ampolla') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('crema') || presNorm.includes('frasco') || presNorm.includes('gotero') ||
            nameNorm.includes('jarabe') || nameNorm.includes('gotas') || nameNorm.includes('ampolla') || nameNorm.includes('solucion') || nameNorm.includes('suspension') || nameNorm.includes('crema')));
            
-  const unidadMedida = m.unidad_medida_dosis || (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') ? 'ml' : 'mg');
-  const dosisTotal = parseFloat(m.dosis_total_presentacion || (unidadMedida === 'ml' ? 100 : 500));
+  const unidadMedida = m.unidad_medida_dosis || (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') ? 'ml' : (baseUnit === 'Sobre' ? 'Sobre' : 'mg'));
+  const dosisTotal = parseFloat(m.dosis_total_presentacion || (unidadMedida === 'ml' ? 100 : (baseUnit === 'Sobre' ? 1 : 500)));
 
   const authLevel = getMedicationAuthorizationLevel(m);
   const esTermo = isThermosensitive(m);
@@ -1193,7 +1198,7 @@ function setupPharmacyAutocomplete(container) {
         if (saleTypeSelect) {
           saleTypeSelect.innerHTML = salesPres.map(p => `
             <option value="${p.presentation}" data-factor="${p.factor}" data-price="${p.price}">
-              ${p.presentation} (${p.factor} ${match.unidad_dispensable || 'uds'}) - Q${parseFloat(p.price).toFixed(2)}
+              ${p.presentation} (${p.factor} ${getMedicationBaseUnit(match)}) - Q${parseFloat(p.price).toFixed(2)}
             </option>
           `).join('');
         }

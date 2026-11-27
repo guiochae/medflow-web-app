@@ -4,7 +4,7 @@ import { savePatientToFirestore, sortPatientsByNewestFirst } from '../firebase.j
 import { medicationsDatabase } from '../data/medicamentos.js';
 import { showPastConsultationDetail } from './consulta.js';
 import { syncPatientBilling } from './preconsulta.js';
-import { getMedicationSalesPresentations, formatHierarchicalStock } from './configuracion.js';
+import { getMedicationSalesPresentations, formatHierarchicalStock, getMedicationBaseUnit, normalizeUnitName } from './configuracion.js';
 import logoUrl from '../assets/logo.jpg';
 
 function searchMedications(query) {
@@ -142,17 +142,22 @@ function enrichMedication(m) {
   const precio = parseFloat(m.price || m.precio_presentacion || 50.0);
   const presNorm = String(m.presentation || '').toLowerCase();
   const nameNorm = String(m.name || '').toLowerCase();
+  const baseUnit = getMedicationBaseUnit(m);
   
-  const unidades = m.unidades_por_presentacion !== undefined 
+  let unidades = m.unidades_por_presentacion !== undefined 
     ? parseInt(m.unidades_por_presentacion) 
-    : (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') || nameNorm.includes('jarabe')
-        ? 100 
-        : (presNorm.includes('ampolla') || presNorm.includes('inyeccion') || nameNorm.includes('ampolla') ? 1 : 30));
+    : 0;
+
+  if (!unidades || unidades <= 0) {
+    if (presNorm.includes('caja') || presNorm.includes('paquete')) {
+      const matchNum = `${nameNorm} ${presNorm}`.match(/(\d+)\s*(tab|comp|caps|blist|sobre)/);
+      unidades = matchNum && matchNum[1] ? parseInt(matchNum[1]) : 1;
+    } else {
+      unidades = 1;
+    }
+  }
         
-  const unidadDispensable = m.unidad_dispensable || 
-    (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') || nameNorm.includes('jarabe')
-      ? 'ml' 
-      : (presNorm.includes('ampolla') || presNorm.includes('inyeccion') || nameNorm.includes('ampolla') ? 'Ampolla' : 'Tableta'));
+  const unidadDispensable = m.unidad_dispensable || baseUnit;
 
   const esFrac = m.es_fraccionable !== undefined 
     ? !!m.es_fraccionable 
@@ -161,8 +166,8 @@ function enrichMedication(m) {
         : (presNorm.includes('jarabe') || presNorm.includes('gotas') || presNorm.includes('ampolla') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('crema') || presNorm.includes('frasco') || presNorm.includes('gotero') ||
            nameNorm.includes('jarabe') || nameNorm.includes('gotas') || nameNorm.includes('ampolla') || nameNorm.includes('solucion') || nameNorm.includes('suspension') || nameNorm.includes('crema')));
            
-  const unidadMedida = m.unidad_medida_dosis || (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') ? 'ml' : 'mg');
-  const dosisTotal = parseFloat(m.dosis_total_presentacion || (unidadMedida === 'ml' ? 100 : 500));
+  const unidadMedida = m.unidad_medida_dosis || (presNorm.includes('jarabe') || presNorm.includes('solucion') || presNorm.includes('suspension') || presNorm.includes('frasco') || presNorm.includes('gotero') ? 'ml' : (baseUnit === 'Sobre' ? 'Sobre' : 'mg'));
+  const dosisTotal = parseFloat(m.dosis_total_presentacion || (unidadMedida === 'ml' ? 100 : (baseUnit === 'Sobre' ? 1 : 500)));
 
   return {
     ...m,
@@ -1076,8 +1081,9 @@ function renderRecipeBuilder(patient, doctors) {
       const stockHier = isCatalog ? formatHierarchicalStock(currentStock, match) : 'No disponible en bodega';
       
       let stockBadgeHtml = '';
+      const medBaseUnit = getMedicationBaseUnit(match);
       if (isCatalog && currentStock > 0) {
-        stockBadgeHtml = `<span style="font-size: 0.72rem; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.4); padding: 2px 6px; border-radius: 4px; font-weight: 700;">🟢 En Bodega (${currentStock} uds)</span>`;
+        stockBadgeHtml = `<span style="font-size: 0.72rem; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.4); padding: 2px 6px; border-radius: 4px; font-weight: 700;">🟢 En Bodega (${currentStock} ${medBaseUnit}(s))</span>`;
       } else if (isCatalog && currentStock <= 0) {
         stockBadgeHtml = `<span style="font-size: 0.72rem; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.4); padding: 2px 6px; border-radius: 4px; font-weight: 700;">🔴 Agotado en Bodega (Comprar Fuera)</span>`;
       } else {
@@ -1155,6 +1161,7 @@ function renderRecipeBuilder(patient, doctors) {
     const currentStock = isCatalog && activeSelectedRecipeMed.stock !== undefined ? parseInt(activeSelectedRecipeMed.stock) : 0;
     const stockHierarchical = isCatalog ? formatHierarchicalStock(currentStock, activeSelectedRecipeMed) : 'No disponible en bodega';
     const isAvailableInBodega = isCatalog && currentStock > 0;
+    const baseUnitLabel = getMedicationBaseUnit(activeSelectedRecipeMed);
 
     packInfoEl.style.display = 'grid';
     packInfoEl.innerHTML = `
@@ -1172,8 +1179,8 @@ function renderRecipeBuilder(patient, doctors) {
         </span>
       </div>
       <div>📦 Lote: <strong>${activeSelectedRecipeMed.lote || 'N/A'}</strong> | Vence: <strong>${activeSelectedRecipeMed.vencimiento ? new Date(activeSelectedRecipeMed.vencimiento).toLocaleDateString('es-GT') : 'N/D'}</strong></div>
-      <div>🩺 Stock Numérico: <strong style="color: ${currentStock > 0 ? '#10b981' : '#ef4444'};">${currentStock} ${activeSelectedRecipeMed.unidad_dispensable || 'uds'}</strong></div>
-      <div>📑 Unidad Base: <strong>${activeSelectedRecipeMed.unidad_dispensable || 'Tableta'}</strong></div>
+      <div>🩺 Stock Numérico: <strong style="color: ${currentStock > 0 ? '#10b981' : '#ef4444'};">${currentStock} ${baseUnitLabel}(s)</strong></div>
+      <div>📑 Unidad Base: <strong>${baseUnitLabel}</strong></div>
       <div style="grid-column: 1 / -1;">🏷️ Categoría: <strong>${activeSelectedRecipeMed.category || 'General'}</strong></div>
     `;
 
@@ -1181,7 +1188,7 @@ function renderRecipeBuilder(patient, doctors) {
     const salesPres = getMedicationSalesPresentations(activeSelectedRecipeMed);
     presentationSelect.innerHTML = salesPres.map(p => `
       <option value="${p.presentation}" data-factor="${p.factor}" data-price="${p.price}">
-        ${p.presentation} (${p.factor} ${activeSelectedRecipeMed.unidad_dispensable || 'uds'}) - Q${parseFloat(p.price).toFixed(2)}
+        ${p.presentation} (${p.factor} ${baseUnitLabel}) - Q${parseFloat(p.price).toFixed(2)}
       </option>
     `).join('');
 
@@ -1221,7 +1228,7 @@ function renderRecipeBuilder(patient, doctors) {
     if (activeSelectedRecipeMed) {
       const isCatalog = !!activeSelectedRecipeMed.inCatalog;
       const currentStock = isCatalog && activeSelectedRecipeMed.stock !== undefined ? parseInt(activeSelectedRecipeMed.stock) : 0;
-      const baseUnit = activeSelectedRecipeMed.unidad_dispensable || 'uds';
+      const baseUnit = getMedicationBaseUnit(activeSelectedRecipeMed);
       const unitsRequired = qty * factor;
 
       if (isExternal) {
@@ -1384,7 +1391,8 @@ function renderRecipeBuilder(patient, doctors) {
       const isCatalog = !!activeSelectedRecipeMed.inCatalog;
       const currentStock = isCatalog && activeSelectedRecipeMed.stock !== undefined ? parseInt(activeSelectedRecipeMed.stock) : 0;
       if (!isCatalog || unitsRequired > currentStock) {
-        const proceed = confirm(`⚠️ Atención: La cantidad recetada (${unitsRequired} ${activeSelectedRecipeMed.unidad_dispensable || 'uds'}) supera la existencia actual en bodega (${currentStock} uds).\n\n¿Desea cambiar la dispensación a "Farmacia Externa" para que el paciente lo adquiera fuera y quede registrado en Demanda Real como NO ENTREGADO A USUARIO?`);
+        const medBaseUnit = getMedicationBaseUnit(activeSelectedRecipeMed);
+        const proceed = confirm(`⚠️ Atención: La cantidad recetada (${unitsRequired} ${medBaseUnit}(s)) supera la existencia actual en bodega (${currentStock} ${medBaseUnit}(s)).\n\n¿Desea cambiar la dispensación a "Farmacia Externa" para que el paciente lo adquiera fuera y quede registrado en Demanda Real como NO ENTREGADO A USUARIO?`);
         if (proceed) {
           dispenseSource = 'external';
           if (dispenseSourceSelect) dispenseSourceSelect.value = 'external';

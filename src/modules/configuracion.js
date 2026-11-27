@@ -1286,6 +1286,85 @@ function renderUsersList() {
   });
 }
 
+export function normalizeUnitName(str) {
+  if (!str) return 'Unidad';
+  const clean = String(str).trim();
+  const upper = clean.toUpperCase();
+
+  if (upper.includes('SOBRE')) return 'Sobre';
+  if (upper.includes('TABLET') || upper.includes('COMPRIM')) return 'Tableta';
+  if (upper.includes('CAPSUL')) return 'Cápsula';
+  if (upper.includes('AMPOLL') || upper.includes('VIAL') || upper.includes('INYECT')) return 'Ampolla';
+  if (upper.includes('FRASC') || upper.includes('JARAB') || upper.includes('SUSP') || upper.includes('GOTA')) return 'Frasco';
+  if (upper.includes('CREMA') || upper.includes('POMAD') || upper.includes('GEL') || upper.includes('UNGUENT') || upper.includes('TUBO')) return 'Tubo';
+  if (upper.includes('OVULO') || upper.includes('ÓVULO')) return 'Óvulo';
+  if (upper.includes('SUPOSITORI')) return 'Supositorio';
+  if (upper.includes('INHALAD') || upper.includes('SPRAY')) return 'Inhalador';
+  if (upper.includes('PARCHE')) return 'Parche';
+  if (upper.includes('BOLSA')) return 'Bolsa';
+  if (upper === 'ML' || upper === 'CC') return 'ml';
+  if (upper === 'MG' || upper === 'G' || upper === 'GRAMOS' || upper === 'GR') return 'g';
+
+  if (clean.endsWith('es') && clean.length > 3) {
+    return clean.slice(0, -2);
+  } else if (clean.endsWith('s') && clean.length > 3) {
+    return clean.slice(0, -1);
+  }
+  return clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
+}
+
+export function getMedicationBaseUnit(med) {
+  if (!med) return 'Unidad';
+
+  // 1. Si tiene salesPresentations explícitas con factor === 1
+  if (Array.isArray(med.salesPresentations) && med.salesPresentations.length > 0) {
+    const basePres = med.salesPresentations.find(p => p.factor === 1);
+    if (basePres && basePres.presentation) {
+      return normalizeUnitName(basePres.presentation);
+    }
+  }
+
+  const rawUnit = (med.unidad_dispensable || '').trim();
+  const pres = (med.presentation || '').trim();
+  const name = (med.name || '').trim();
+  const combined = `${pres} ${name}`.toUpperCase();
+
+  // Si tiene unidad especificada distinta a Tableta, respetarla
+  if (rawUnit && !rawUnit.toUpperCase().includes('TABLET')) {
+    return normalizeUnitName(rawUnit);
+  }
+
+  // Si la unidad es Tableta o está vacía, validar si realmente es una tableta/comprimido
+  const isActuallyTablet = combined.includes('TAB') || combined.includes('COMP') || combined.includes('CAPS') || combined.includes('PASTILL');
+  if (isActuallyTablet) {
+    return 'Tableta';
+  }
+
+  // Deducir de la presentación y nombre del medicamento
+  if (combined.includes('SOBRE')) return 'Sobre';
+  if (combined.includes('FRASCO') || combined.includes('JARABE') || combined.includes('SUSP') || combined.includes('GOTA') || combined.includes('SOLUCION')) {
+    if (combined.includes('ML')) return 'ml';
+    return 'Frasco';
+  }
+  if (combined.includes('AMPOLLA') || combined.includes('VIAL') || combined.includes('INYECT')) return 'Ampolla';
+  if (combined.includes('CREMA') || combined.includes('POMADA') || combined.includes('GEL') || combined.includes('UNGUENTO') || combined.includes('TUBO')) return 'Tubo';
+  if (combined.includes('CAPSULA')) return 'Cápsula';
+  if (combined.includes('OVULO') || combined.includes('ÓVULO')) return 'Óvulo';
+  if (combined.includes('SUPOSITORIO')) return 'Supositorio';
+  if (combined.includes('SPRAY') || combined.includes('INHALAD')) return 'Inhalador';
+  if (combined.includes('PARCHE')) return 'Parche';
+  if (combined.includes('BOLSA')) return 'Bolsa';
+
+  if (pres) {
+    const normPres = normalizeUnitName(pres);
+    if (normPres && normPres.toUpperCase() !== 'CAJA' && normPres.toUpperCase() !== 'PAQUETE') {
+      return normPres;
+    }
+  }
+
+  return rawUnit ? normalizeUnitName(rawUnit) : 'Unidad';
+}
+
 export function getMedicationSalesPresentations(med) {
   if (!med) return [];
   if (Array.isArray(med.salesPresentations) && med.salesPresentations.length > 0) {
@@ -1296,24 +1375,53 @@ export function getMedicationSalesPresentations(med) {
     }));
   }
   // Retrocompatibilidad con esquemas anteriores
-  const factor = Math.max(1, parseInt(med.unidades_por_presentacion) || 30);
-  const pres = med.presentation || 'Caja';
-  const unit = med.unidad_dispensable || 'Tableta';
-  const fullPrice = parseFloat(med.price) || 50.00;
-  const unitPrice = parseFloat(med.precio_unitario) || (fullPrice / factor);
+  const baseUnit = getMedicationBaseUnit(med);
+  const pres = (med.presentation || '').trim() || 'Caja';
+  const presUpper = pres.toUpperCase();
+  const nameUpper = (med.name || '').toUpperCase();
+  const fullPrice = parseFloat(med.price) || 0;
+
+  let factor = parseInt(med.unidades_por_presentacion) || 0;
+
+  if (!factor || factor <= 0) {
+    if (
+      presUpper.includes('SOBRE') ||
+      presUpper.includes('FRASCO') ||
+      presUpper.includes('CREMA') ||
+      presUpper.includes('TUBO') ||
+      presUpper.includes('AMPOLLA') ||
+      presUpper.includes('SPRAY') ||
+      presUpper.includes('GOTA') ||
+      presUpper.includes('JARABE') ||
+      presUpper.includes('SUSP') ||
+      presUpper.includes('GEL')
+    ) {
+      factor = 1;
+    } else if (presUpper.includes('CAJA') || presUpper.includes('PAQUETE')) {
+      const matchNum = `${nameUpper} ${presUpper}`.match(/(\d+)\s*(TAB|COMP|CAPS|BLIST|SOBRE)/);
+      if (matchNum && matchNum[1]) {
+        factor = parseInt(matchNum[1]);
+      } else {
+        factor = 1;
+      }
+    } else {
+      factor = 1;
+    }
+  }
 
   const list = [
     { presentation: pres, factor: factor, price: fullPrice }
   ];
-  if (factor > 1 && pres.toLowerCase() !== unit.toLowerCase()) {
-    list.push({ presentation: unit, factor: 1, price: parseFloat(unitPrice.toFixed(2)) });
+  if (factor > 1 && pres.toLowerCase() !== baseUnit.toLowerCase()) {
+    const unitPrice = parseFloat(med.precio_unitario) || parseFloat((fullPrice / factor).toFixed(2));
+    list.push({ presentation: baseUnit, factor: 1, price: unitPrice });
   }
   return list;
 }
 
 export function formatHierarchicalStock(stock, med) {
   const stockVal = Math.max(0, parseInt(stock) || 0);
-  const unit = (med && med.unidad_dispensable) ? med.unidad_dispensable : 'Tableta';
+  const unit = getMedicationBaseUnit(med);
   if (!med) return `${stockVal} ${unit}(s)`;
 
   const salesPres = getMedicationSalesPresentations(med)
@@ -1486,18 +1594,20 @@ function loadMedicationIntoForm(itemObj) {
   const factorEl = document.getElementById('c-factor-compra');
   const stockEl = document.getElementById('c-spec-stock');
 
+  const baseUnit = getMedicationBaseUnit(itemObj);
+  const salesPres = getMedicationSalesPresentations(itemObj);
+
   if (presEl) presEl.value = itemObj.presentation || 'Caja';
   if (qtyEl) qtyEl.value = itemObj.cantidad_comprada || 1;
   if (priceEl) priceEl.value = itemObj.precio_compra || (itemObj.price || 0);
-  if (unitEl) unitEl.value = itemObj.unidad_dispensable || 'Tableta';
-  if (factorEl) factorEl.value = itemObj.unidades_por_presentacion || 30;
+  if (unitEl) unitEl.value = baseUnit;
+  if (factorEl) factorEl.value = itemObj.unidades_por_presentacion || (salesPres.length > 0 ? Math.max(...salesPres.map(p => p.factor)) : 1);
   if (stockEl) stockEl.value = itemObj.stock !== undefined ? itemObj.stock : 0;
 
   updateStockCalculationBadge();
 
   // Grupo 3: Presentaciones de Venta
-  const salesPres = getMedicationSalesPresentations(itemObj);
-  renderSalesPresentationsRows(salesPres, itemObj.unidad_dispensable || 'Tableta');
+  renderSalesPresentationsRows(salesPres, baseUnit);
 
   const searchSelect = document.getElementById('med-search-select');
   if (searchSelect && itemObj.id) {
@@ -1562,10 +1672,10 @@ function populateMedicationSearchDropdown(selectedId = '') {
     const isSelected = (med.id && med.id === selectedId) ? 'selected' : '';
     const genericPart = med.generic ? ` (${med.generic})` : '';
     const stockNum = Number(med.stock || 0);
-    const unitPart = med.unidad_dispensable || 'Uds';
+    const unitPart = getMedicationBaseUnit(med);
     optionsHtml += `
       <option value="${med.id}" ${isSelected}>
-        ${med.name}${genericPart} — Stock: ${stockNum} ${unitPart} (Lote: ${med.lote || 'S/L'})
+        ${med.name}${genericPart} — Stock: ${stockNum} ${unitPart}(s) (Lote: ${med.lote || 'S/L'})
       </option>
     `;
   });
@@ -1814,7 +1924,19 @@ function openCatalogConfig(type) {
 
       if (qtyEl) qtyEl.addEventListener('input', updateStockCalculationBadge);
       if (factorEl) factorEl.addEventListener('input', updateStockCalculationBadge);
-      if (presEl) presEl.addEventListener('input', updateStockCalculationBadge);
+      if (presEl) {
+        presEl.addEventListener('input', () => {
+          const pPres = presEl.value.trim();
+          if (pPres && unitEl) {
+            const currentUnit = unitEl.value.trim().toLowerCase();
+            const norm = normalizeUnitName(pPres);
+            if (currentUnit === 'tableta' && !pPres.toUpperCase().includes('CAJA') && !pPres.toUpperCase().includes('TAB')) {
+              unitEl.value = norm;
+            }
+          }
+          updateStockCalculationBadge();
+        });
+      }
       if (unitEl) unitEl.addEventListener('input', updateStockCalculationBadge);
 
       // Wire button "+ Agregar Presentación de Venta"
@@ -2002,9 +2124,10 @@ function renderCatalogTable() {
         const stockHierarchical = formatHierarchicalStock(item.stock, item);
         const salesPres = getMedicationSalesPresentations(item);
 
+        const baseUnit = getMedicationBaseUnit(item);
         const presPillsHtml = salesPres.map(p => `
           <span style="display: inline-flex; align-items: center; gap: 4px; background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.25); border-radius: 4px; padding: 2px 7px; margin: 2px; font-size: 0.76rem; color: #00f2fe;">
-            <strong>${p.presentation}</strong> (${p.factor} ${item.unidad_dispensable || 'und'}s) = <strong style="color: var(--accent-success);">Q${parseFloat(p.price).toFixed(2)}</strong>
+            <strong>${p.presentation}</strong> (${p.factor} ${baseUnit}) = <strong style="color: var(--accent-success);">Q${parseFloat(p.price).toFixed(2)}</strong>
           </span>
         `).join('');
 
@@ -2018,7 +2141,7 @@ function renderCatalogTable() {
         extraCellHtml = `
           <div style="margin-bottom: 4px; font-size: 0.82rem;">
             <span style="color: var(--text-muted); text-transform: uppercase; font-size: 0.72rem;">Compra:</span> 
-            <strong>${item.presentation || 'Caja'}</strong> (${item.unidades_por_presentacion || 30} ${item.unidad_dispensable || 'Tableta'}s)
+            <strong>${item.presentation || 'Caja'}</strong> (${item.unidades_por_presentacion || (salesPres[0] ? salesPres[0].factor : 1)} ${baseUnit}(s))
           </div>
           <div style="display: flex; flex-wrap: wrap; gap: 2px; align-items: center; margin-bottom: 6px;">
             <span style="font-size: 0.72rem; color: #f59e0b; font-weight: 600; margin-right: 4px;">Venta:</span>
