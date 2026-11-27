@@ -3367,6 +3367,7 @@ export function syncPatientBilling(patientObj, stateObj) {
     recipe.billId = pendingBill.id;
     (recipe.medicines || []).forEach(m => {
       if (!m || !m.name) return;
+      if (m.isExternal || m.dispenseSource === 'external') return; // Medicamento para comprar en farmacia externa, no se cobra en caja
       const medName = m.name.trim();
       if (!isItemAlreadyRecorded(medName)) {
         const factor = m.presentationFactor || 1;

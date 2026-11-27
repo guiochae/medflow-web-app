@@ -19,13 +19,13 @@ function searchMedications(query) {
 
   medicationsDatabase.forEach(m => {
     if (m && m.name) {
-      allMedsMap.set(m.name.toLowerCase(), m);
+      allMedsMap.set(m.name.toLowerCase(), { ...m, inCatalog: false, stock: 0 });
     }
   });
 
   dbMeds.forEach(m => {
     if (m && m.name) {
-      allMedsMap.set(m.name.toLowerCase(), m);
+      allMedsMap.set(m.name.toLowerCase(), { ...m, inCatalog: true });
     }
   });
 
@@ -885,7 +885,7 @@ function renderRecipeBuilder(patient, doctors) {
               </div>
 
               <div class="form-row">
-                <div class="form-group" style="flex: 1.5;">
+                <div class="form-group" style="flex: 1.4;">
                   <label for="m-presentation" id="lbl-m-presentation">Presentación de Venta</label>
                   <select id="m-presentation" required style="width: 100%;">
                     <option value="Tabletas" data-factor="1" data-price="2.00">Tabletas</option>
@@ -900,11 +900,18 @@ function renderRecipeBuilder(patient, doctors) {
                     <option value="Frasco" data-factor="1" data-price="45.00">Frasco</option>
                   </select>
                 </div>
-                <div class="form-group" style="flex: 1;">
+                <div class="form-group" style="flex: 0.9;">
                   <label for="m-quantity" id="lbl-m-quantity">Cantidad a Recetar</label>
                   <input type="number" id="m-quantity" required placeholder="Ej. 5" min="1" step="1">
                 </div>
-                <div class="form-group" style="display: flex; flex-direction: column; justify-content: flex-end; min-width: 120px;">
+                <div class="form-group" style="flex: 1.5;">
+                  <label for="m-dispense-source" id="lbl-m-dispense-source" style="font-weight: 600;">Dispensación / Origen</label>
+                  <select id="m-dispense-source" style="width: 100%; font-weight: 600;">
+                    <option value="bodega" style="color: #10b981;">🏥 Bodega Interna (En Bodega)</option>
+                    <option value="external" style="color: #f59e0b;">🏪 Farmacia Externa (Comprar Fuera)</option>
+                  </select>
+                </div>
+                <div class="form-group" style="display: flex; flex-direction: column; justify-content: flex-end; min-width: 110px;">
                   <div style="font-size: 0.75rem; color: var(--accent-primary); margin-bottom: 4px;">Costo Estimado:</div>
                   <strong id="lbl-m-cost-preview" style="font-size: 1.15rem; color: var(--accent-success); padding-bottom: 8px;">Q0.00</strong>
                 </div>
@@ -1064,14 +1071,27 @@ function renderRecipeBuilder(patient, doctors) {
       const genericLabel = match.generic ? match.generic : (match.name || 'Genérico');
       const catLabel = match.category ? `<span style="font-size: 0.75rem; color: var(--text-muted); font-style: italic;"> • ${match.category}</span>` : '';
 
+      const isCatalog = !!match.inCatalog;
+      const currentStock = isCatalog && match.stock !== undefined ? parseInt(match.stock) : 0;
+      const stockHier = isCatalog ? formatHierarchicalStock(currentStock, match) : 'No disponible en bodega';
+      
+      let stockBadgeHtml = '';
+      if (isCatalog && currentStock > 0) {
+        stockBadgeHtml = `<span style="font-size: 0.72rem; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.4); padding: 2px 6px; border-radius: 4px; font-weight: 700;">🟢 En Bodega (${currentStock} uds)</span>`;
+      } else if (isCatalog && currentStock <= 0) {
+        stockBadgeHtml = `<span style="font-size: 0.72rem; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.4); padding: 2px 6px; border-radius: 4px; font-weight: 700;">🔴 Agotado en Bodega (Comprar Fuera)</span>`;
+      } else {
+        stockBadgeHtml = `<span style="font-size: 0.72rem; background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245,158,11,0.4); padding: 2px 6px; border-radius: 4px; font-weight: 700;">🏪 Farmacia Externa (No disponible)</span>`;
+      }
+
       item.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; flex-wrap: wrap; gap: 4px;">
           <strong style="color: var(--accent-primary); font-size: 0.92rem;">${match.name}</strong>
-          <span style="font-size: 0.72rem; background: rgba(0, 242, 254, 0.12); color: var(--accent-primary); padding: 2px 6px; border-radius: 4px; font-weight: 600;">${match.presentation || 'Tabletas'}</span>
+          ${stockBadgeHtml}
         </div>
-        <div style="font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 4px;">
-          <span>💊 <strong>Genérico:</strong> ${genericLabel}</span>
-          ${catLabel}
+        <div style="font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+          <span>💊 <strong>Genérico:</strong> ${genericLabel} ${catLabel}</span>
+          <span style="font-size: 0.75rem; color: #38bdf8;">${match.presentation || 'Tabletas'}</span>
         </div>
       `;
 
@@ -1084,12 +1104,21 @@ function renderRecipeBuilder(patient, doctors) {
 
       item.addEventListener('click', () => {
         medNameInput.value = match.name;
-        if (presentationSelect && match.presentation) {
-          presentationSelect.value = match.presentation;
-        }
         autocompleteList.style.display = 'none';
         
         activeSelectedRecipeMed = match;
+
+        const isCat = !!match.inCatalog;
+        const curStock = isCat && match.stock !== undefined ? parseInt(match.stock) : 0;
+        const dispenseSourceSelect = document.getElementById('m-dispense-source');
+        if (dispenseSourceSelect) {
+          if (isCat && curStock > 0) {
+            dispenseSourceSelect.value = 'bodega';
+          } else {
+            dispenseSourceSelect.value = 'external';
+          }
+        }
+
         updateRecipePackagingInfo();
       });
 
@@ -1111,6 +1140,7 @@ function renderRecipeBuilder(patient, doctors) {
     const warningEl = document.getElementById('recipe-stock-warning');
     const lblQty = document.getElementById('lbl-m-quantity');
     const costPreview = document.getElementById('lbl-m-cost-preview');
+    const dispenseSourceSelect = document.getElementById('m-dispense-source');
     if (!packInfoEl || !presentationSelect) return;
 
     if (!activeSelectedRecipeMed) {
@@ -1121,19 +1151,34 @@ function renderRecipeBuilder(patient, doctors) {
       return;
     }
 
-    const salesPres = getMedicationSalesPresentations(activeSelectedRecipeMed);
-    const stockHierarchical = formatHierarchicalStock(activeSelectedRecipeMed.stock, activeSelectedRecipeMed);
-    const currentStock = activeSelectedRecipeMed.stock !== undefined ? parseInt(activeSelectedRecipeMed.stock) : 0;
+    const isCatalog = !!activeSelectedRecipeMed.inCatalog;
+    const currentStock = isCatalog && activeSelectedRecipeMed.stock !== undefined ? parseInt(activeSelectedRecipeMed.stock) : 0;
+    const stockHierarchical = isCatalog ? formatHierarchicalStock(currentStock, activeSelectedRecipeMed) : 'No disponible en bodega';
+    const isAvailableInBodega = isCatalog && currentStock > 0;
 
     packInfoEl.style.display = 'grid';
     packInfoEl.innerHTML = `
+      <div style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 4px; background: ${isAvailableInBodega ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)'}; border-left: 4px solid ${isAvailableInBodega ? '#10b981' : '#f59e0b'}; margin-bottom: 2px;">
+        <div>
+          <strong style="color: ${isAvailableInBodega ? '#10b981' : '#f59e0b'}; font-size: 0.9rem;">
+            ${isAvailableInBodega ? '✅ EXISTENCIA EN BODEGA DISPONIBLE' : (isCatalog ? '🔴 AGOTADO EN BODEGA (0 existencias)' : '🏪 MEDICAMENTO FUERA DE CATÁLOGO')}
+          </strong>
+          <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 6px;">
+            ${isAvailableInBodega ? `(${stockHierarchical})` : 'El paciente debe comprar en farmacias externas'}
+          </span>
+        </div>
+        <span style="font-size: 0.75rem; font-weight: bold; color: ${isAvailableInBodega ? '#10b981' : '#f59e0b'};">
+          ${isAvailableInBodega ? '🏥 Farmacia Interna' : '⚠️ Demanda Real: NO ENTREGADO'}
+        </span>
+      </div>
       <div>📦 Lote: <strong>${activeSelectedRecipeMed.lote || 'N/A'}</strong> | Vence: <strong>${activeSelectedRecipeMed.vencimiento ? new Date(activeSelectedRecipeMed.vencimiento).toLocaleDateString('es-GT') : 'N/D'}</strong></div>
-      <div>🩺 Disponibilidad Actual: <strong style="color: ${currentStock > 0 ? '#10b981' : '#ef4444'};">${stockHierarchical}</strong></div>
+      <div>🩺 Stock Numérico: <strong style="color: ${currentStock > 0 ? '#10b981' : '#ef4444'};">${currentStock} ${activeSelectedRecipeMed.unidad_dispensable || 'uds'}</strong></div>
       <div>📑 Unidad Base: <strong>${activeSelectedRecipeMed.unidad_dispensable || 'Tableta'}</strong></div>
-      <div>🏷️ Presentaciones: <strong>${salesPres.map(p => `${p.presentation} (Q${parseFloat(p.price).toFixed(2)})`).join(' | ')}</strong></div>
+      <div style="grid-column: 1 / -1;">🏷️ Categoría: <strong>${activeSelectedRecipeMed.category || 'General'}</strong></div>
     `;
 
     // Cargar únicamente las presentaciones de venta configuradas
+    const salesPres = getMedicationSalesPresentations(activeSelectedRecipeMed);
     presentationSelect.innerHTML = salesPres.map(p => `
       <option value="${p.presentation}" data-factor="${p.factor}" data-price="${p.price}">
         ${p.presentation} (${p.factor} ${activeSelectedRecipeMed.unidad_dispensable || 'uds'}) - Q${parseFloat(p.price).toFixed(2)}
@@ -1149,6 +1194,7 @@ function renderRecipeBuilder(patient, doctors) {
     const lblQty = document.getElementById('lbl-m-quantity');
     const costPreview = document.getElementById('lbl-m-cost-preview');
     const warningEl = document.getElementById('recipe-stock-warning');
+    const dispenseSourceSelect = document.getElementById('m-dispense-source');
     if (!presentationSelect || !qtyInput || !lblQty || !costPreview) return;
 
     const selectedOption = presentationSelect.options[presentationSelect.selectedIndex];
@@ -1157,22 +1203,52 @@ function renderRecipeBuilder(patient, doctors) {
     const price = selectedOption ? (parseFloat(selectedOption.getAttribute('data-price')) || 0) : 0;
     const qty = parseFloat(qtyInput.value) || 0;
 
+    const dispenseSource = dispenseSourceSelect ? dispenseSourceSelect.value : 'bodega';
+    const isExternal = (dispenseSource === 'external');
+
     lblQty.textContent = `Cantidad (${presName}(s))`;
-    const totalCost = qty * price;
-    costPreview.textContent = `Q${totalCost.toFixed(2)}`;
+
+    if (isExternal) {
+      costPreview.textContent = `Q0.00 (Externa)`;
+      costPreview.style.color = '#f59e0b';
+    } else {
+      const totalCost = qty * price;
+      costPreview.textContent = `Q${totalCost.toFixed(2)}`;
+      costPreview.style.color = 'var(--accent-success)';
+    }
 
     // Validación de existencia en tiempo real
     if (activeSelectedRecipeMed) {
-      const unitsRequired = qty * factor;
-      const currentStock = activeSelectedRecipeMed.stock !== undefined ? parseInt(activeSelectedRecipeMed.stock) : 0;
+      const isCatalog = !!activeSelectedRecipeMed.inCatalog;
+      const currentStock = isCatalog && activeSelectedRecipeMed.stock !== undefined ? parseInt(activeSelectedRecipeMed.stock) : 0;
       const baseUnit = activeSelectedRecipeMed.unidad_dispensable || 'uds';
+      const unitsRequired = qty * factor;
 
-      if (unitsRequired > currentStock && warningEl) {
-        warningEl.style.display = 'block';
-        warningEl.innerHTML = `⚠️ Existencias insuficientes en farmacia: Requiere <strong>${unitsRequired} ${baseUnit}</strong>, pero solo hay <strong>${currentStock} ${baseUnit}</strong> disponibles en inventario.`;
+      if (isExternal) {
+        if (warningEl) {
+          warningEl.style.display = 'block';
+          warningEl.style.background = 'rgba(245, 158, 11, 0.12)';
+          warningEl.style.borderColor = 'rgba(245, 158, 11, 0.35)';
+          warningEl.style.color = '#f59e0b';
+          warningEl.innerHTML = `🏪 <strong>COMPRA EN FARMACIA EXTERNA:</strong> El paciente debe adquirir este medicamento fuera de la clínica. Quedará registrado en la receta médica y se asentará en Demanda Real como <strong>"NO ENTREGADO A USUARIO"</strong>.`;
+        }
+      } else if (unitsRequired > currentStock) {
+        if (warningEl) {
+          warningEl.style.display = 'block';
+          warningEl.style.background = 'rgba(239, 68, 68, 0.12)';
+          warningEl.style.borderColor = 'rgba(239, 68, 68, 0.35)';
+          warningEl.style.color = '#f87171';
+          warningEl.innerHTML = `⚠️ <strong>EXISTENCIA INSUFICIENTE EN BODEGA:</strong> Requiere <strong>${unitsRequired} ${baseUnit}</strong>, pero solo hay <strong>${currentStock} ${baseUnit}</strong> disponibles en inventario. Cambie la dispensación a <em>"Farmacia Externa"</em> si el paciente debe comprarlo fuera.`;
+        }
       } else if (warningEl) {
         warningEl.style.display = 'none';
       }
+    } else if (isExternal && warningEl) {
+      warningEl.style.display = 'block';
+      warningEl.style.background = 'rgba(245, 158, 11, 0.12)';
+      warningEl.style.borderColor = 'rgba(245, 158, 11, 0.35)';
+      warningEl.style.color = '#f59e0b';
+      warningEl.innerHTML = `🏪 <strong>COMPRA EN FARMACIA EXTERNA:</strong> El paciente debe adquirir este medicamento fuera de la clínica. Se registrará en Demanda Real como <strong>"NO ENTREGADO A USUARIO"</strong>.`;
     } else if (warningEl) {
       warningEl.style.display = 'none';
     }
@@ -1180,8 +1256,10 @@ function renderRecipeBuilder(patient, doctors) {
 
   const presSelectEl = document.getElementById('m-presentation');
   const qtyInputEl = document.getElementById('m-quantity');
+  const dispenseSourceEl = document.getElementById('m-dispense-source');
   if (presSelectEl) presSelectEl.addEventListener('change', updateRecipeQuantityLabelAndPrice);
   if (qtyInputEl) qtyInputEl.addEventListener('input', updateRecipeQuantityLabelAndPrice);
+  if (dispenseSourceEl) dispenseSourceEl.addEventListener('change', updateRecipeQuantityLabelAndPrice);
 
   medNameInput.addEventListener('input', (e) => {
     if (e.target.value.trim() === '') {
@@ -1246,6 +1324,9 @@ function renderRecipeBuilder(patient, doctors) {
     const warningEl = document.getElementById('recipe-stock-warning');
     if (warningEl) warningEl.style.display = 'none';
 
+    const dispenseSourceSelect = document.getElementById('m-dispense-source');
+    if (dispenseSourceSelect) dispenseSourceSelect.value = 'bodega';
+
     activeSelectedRecipeMed = null;
     activeEditingMedIndex = null;
     updateRecipePackagingInfo();
@@ -1293,23 +1374,37 @@ function renderRecipeBuilder(patient, doctors) {
     const dosage = formatDosageSchedule(rawDosage, shouldBreakdown);
 
     const unitsRequired = quantity * factor;
-    const finalCost = quantity * itemPrice;
+    
+    const dispenseSourceSelect = document.getElementById('m-dispense-source');
+    let dispenseSource = dispenseSourceSelect ? dispenseSourceSelect.value : 'bodega';
+    let isExternal = (dispenseSource === 'external');
 
-    // Validación no bloqueante si no hay stock suficiente
-    if (activeSelectedRecipeMed) {
-      const currentStock = activeSelectedRecipeMed.stock !== undefined ? parseInt(activeSelectedRecipeMed.stock) : 0;
-      if (unitsRequired > currentStock) {
-        const proceed = confirm(`⚠️ Atención: La cantidad recetada (${unitsRequired} ${activeSelectedRecipeMed.unidad_dispensable || 'uds'}) supera el stock actual disponible (${currentStock} uds).\n\n¿Desea agregar este medicamento a la orden de todos modos?`);
-        if (!proceed) return;
+    // Validación y sugerencia si no hay existencia en bodega
+    if (!isExternal && activeSelectedRecipeMed) {
+      const isCatalog = !!activeSelectedRecipeMed.inCatalog;
+      const currentStock = isCatalog && activeSelectedRecipeMed.stock !== undefined ? parseInt(activeSelectedRecipeMed.stock) : 0;
+      if (!isCatalog || unitsRequired > currentStock) {
+        const proceed = confirm(`⚠️ Atención: La cantidad recetada (${unitsRequired} ${activeSelectedRecipeMed.unidad_dispensable || 'uds'}) supera la existencia actual en bodega (${currentStock} uds).\n\n¿Desea cambiar la dispensación a "Farmacia Externa" para que el paciente lo adquiera fuera y quede registrado en Demanda Real como NO ENTREGADO A USUARIO?`);
+        if (proceed) {
+          dispenseSource = 'external';
+          if (dispenseSourceSelect) dispenseSourceSelect.value = 'external';
+          isExternal = true;
+        }
       }
     }
 
+    const finalCost = isExternal ? 0 : (quantity * itemPrice);
+
     const newMed = {
-      medicationId: activeSelectedRecipeMed?.id || null,
+      medicationId: isExternal ? null : (activeSelectedRecipeMed?.id || null),
+      inCatalog: !!activeSelectedRecipeMed?.inCatalog,
+      stockInWarehouse: activeSelectedRecipeMed ? (parseInt(activeSelectedRecipeMed.stock) || 0) : 0,
+      dispenseSource: dispenseSource,
+      isExternal: isExternal,
       name,
       presentation,
       presentationFactor: factor,
-      price: itemPrice,
+      price: isExternal ? 0 : itemPrice,
       quantity: `${quantity} ${presentation}(s)`,
       rawQuantity: quantity,
       unitsRequired: unitsRequired,
@@ -1422,18 +1517,26 @@ function renderRecipeBuilder(patient, doctors) {
               const newDetails = [];
               let newTotal = 0;
               currentPrescriptionMedicines.forEach(m => {
+                if (m.isExternal || m.dispenseSource === 'external') {
+                  // Medicamento para comprar en farmacia externa: no cobrar en caja de clínica
+                  return;
+                }
                 const catalogItem = stateObj.medications && stateObj.medications.find(med => med.name === m.name);
                 const price = m.costo_calculado !== undefined 
                   ? parseFloat(m.costo_calculado)
                   : (catalogItem ? parseFloat(catalogItem.price) : 50.00);
                 
-                const descSuffix = m.tipoPrescripcion === 'unidad' 
-                  ? `(${m.cantidad_o_dosis} uds)`
-                  : (m.tipoPrescripcion === 'dosis' ? `(${m.cantidad_o_dosis} dosis)` : `(${m.qty || 1} cajas)`);
+                const descSuffix = m.presentation ? `(${m.presentation})` : '';
                 
                 newDetails.push({
                   description: `Medicamento Recetado: ${m.name} ${descSuffix}`,
-                  amount: price
+                  amount: price,
+                  medicationId: m.medicationId || null,
+                  presentation: m.presentation || 'Tableta',
+                  presentationFactor: m.presentationFactor || 1,
+                  quantity: m.rawQuantity || 1,
+                  unitsToDeduct: m.unitsRequired || (m.rawQuantity || 1),
+                  serviceType: 'farmacia'
                 });
                 newTotal += price;
               });
@@ -1445,19 +1548,35 @@ function renderRecipeBuilder(patient, doctors) {
             }
           }
 
-          // Registrar en Demanda Real medicamentos no catalogados
+          // Registrar en Demanda Real medicamentos no entregados a usuario (externos o sin existencias)
           stateObj.demandaReal = stateObj.demandaReal || [];
+          const recipeIdForDR = activeEditingRecipeId || recipeToUpdate.id;
+          stateObj.demandaReal = stateObj.demandaReal.filter(dr => dr.recipeId !== recipeIdForDR);
+
           currentPrescriptionMedicines.forEach(m => {
-            const inCatalog = stateObj.medications && stateObj.medications.some(med => med.name && med.name.toLowerCase().trim() === String(m.name || '').toLowerCase().trim());
-            if (!inCatalog) {
-              stateObj.demandaReal.push({
+            const isExternal = m.isExternal || m.dispenseSource === 'external';
+            const inWarehouse = m.inCatalog && (m.stockInWarehouse > 0);
+            
+            if (isExternal || !inWarehouse) {
+              const motivo = (!m.inCatalog)
+                ? 'Medicamento fuera de catálogo de bodega (Comprar en Farmacia Externa)'
+                : ((m.stockInWarehouse || 0) <= 0 
+                    ? 'Sin existencias en bodega / Agotado (Comprar en Farmacia Externa)' 
+                    : 'Indicado por médico para compra en Farmacia Externa');
+
+              stateObj.demandaReal.unshift({
                 id: 'dr-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+                recipeId: recipeIdForDR,
                 date: new Date().toISOString(),
                 patientName: patientObj.name,
                 patientId: patientObj.id,
                 doctorName: doctorName,
                 medicineName: m.name,
-                quantity: parseInt(m.quantity) || 1
+                presentation: m.presentation || '',
+                quantity: parseFloat(m.rawQuantity || m.quantity) || 1,
+                status: 'NO ENTREGADO A USUARIO',
+                motivo: motivo,
+                stockBodega: m.stockInWarehouse || 0
               });
             }
           });
@@ -1495,6 +1614,11 @@ function renderRecipeBuilder(patient, doctors) {
       let total = 0;
       
       currentPrescriptionMedicines.forEach(m => {
+        if (m.isExternal || m.dispenseSource === 'external') {
+          // Medicamento para comprar en farmacia externa: no cobrar en caja de clínica
+          return;
+        }
+
         const catalogItem = stateObj.medications && stateObj.medications.find(med => med.name === m.name);
         
         const price = m.costo_calculado !== undefined 
@@ -1504,13 +1628,17 @@ function renderRecipeBuilder(patient, doctors) {
         const alreadyBilled = bill && Array.isArray(bill.details) && bill.details.some(d => d && d.description && String(d.description).includes(m.name));
         
         if (!alreadyBilled) {
-          const descSuffix = m.tipoPrescripcion === 'unidad' 
-            ? `(${m.cantidad_o_dosis} uds)`
-            : (m.tipoPrescripcion === 'dosis' ? `(${m.cantidad_o_dosis} dosis)` : `(${m.qty || 1} cajas)`);
+          const descSuffix = m.presentation ? `(${m.presentation})` : '';
           
           details.push({
             description: `Medicamento Recetado: ${m.name} ${descSuffix}`,
-            amount: price
+            amount: price,
+            medicationId: m.medicationId || null,
+            presentation: m.presentation || 'Tableta',
+            presentationFactor: m.presentationFactor || 1,
+            quantity: m.rawQuantity || 1,
+            unitsToDeduct: m.unitsRequired || (m.rawQuantity || 1),
+            serviceType: 'farmacia'
           });
           total += price;
         }
@@ -1551,18 +1679,34 @@ function renderRecipeBuilder(patient, doctors) {
       patientObj.prescriptions.unshift(newRecipe);
       try { syncPatientBilling(patientObj, stateObj); } catch(e){}
 
+      // Registrar en Demanda Real medicamentos no entregados a usuario (externos o sin existencias)
       stateObj.demandaReal = stateObj.demandaReal || [];
+      const recipeIdForDR = newRecipe.id;
+
       currentPrescriptionMedicines.forEach(m => {
-        const inCatalog = stateObj.medications && stateObj.medications.some(med => med.name && med.name.toLowerCase().trim() === String(m.name || '').toLowerCase().trim());
-        if (!inCatalog) {
-          stateObj.demandaReal.push({
+        const isExternal = m.isExternal || m.dispenseSource === 'external';
+        const inWarehouse = m.inCatalog && (m.stockInWarehouse > 0);
+        
+        if (isExternal || !inWarehouse) {
+          const motivo = (!m.inCatalog)
+            ? 'Medicamento fuera de catálogo de bodega (Comprar en Farmacia Externa)'
+            : ((m.stockInWarehouse || 0) <= 0 
+                ? 'Sin existencias en bodega / Agotado (Comprar en Farmacia Externa)' 
+                : 'Indicado por médico para compra en Farmacia Externa');
+
+          stateObj.demandaReal.unshift({
             id: 'dr-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+            recipeId: recipeIdForDR,
             date: new Date().toISOString(),
             patientName: patientObj.name,
             patientId: patientObj.id,
             doctorName: doctorName,
             medicineName: m.name,
-            quantity: parseInt(m.quantity) || 1
+            presentation: m.presentation || '',
+            quantity: parseFloat(m.rawQuantity || m.quantity) || 1,
+            status: 'NO ENTREGADO A USUARIO',
+            motivo: motivo,
+            stockBodega: m.stockInWarehouse || 0
           });
         }
       });
@@ -1630,17 +1774,30 @@ function renderCurrentMedicinesTable() {
       row.style.borderLeft = '3px solid #f59e0b';
     }
 
+    const isExt = med.isExternal || med.dispenseSource === 'external';
+
     row.innerHTML = `
       <td style="padding: 10px 12px;">
-        <strong style="color: var(--text-primary); font-size: 0.95rem;">${med.name}</strong> 
-        <span style="font-size: 0.8rem; color: var(--text-muted);">(${med.presentation})</span>
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          <strong style="color: var(--text-primary); font-size: 0.95rem;">${med.name}</strong> 
+          <span style="font-size: 0.8rem; color: var(--text-muted);">(${med.presentation})</span>
+          ${isExt ? `
+            <span style="display: inline-block; padding: 2px 7px; font-size: 0.72rem; font-weight: 700; border-radius: 4px; background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.4);">
+              🏪 Farmacia Externa (No Entregado)
+            </span>
+          ` : `
+            <span style="display: inline-block; padding: 2px 7px; font-size: 0.72rem; font-weight: 700; border-radius: 4px; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4);">
+              🏥 En Bodega (Existencia: ${med.stockInWarehouse !== undefined ? med.stockInWarehouse : 'Disp.'})
+            </span>
+          `}
+        </div>
         ${med.schedule ? `
           <div style="font-size: 0.8rem; font-weight: 700; color: var(--accent-primary); margin-top: 3px; display: flex; align-items: center; gap: 4px;">
             <span>⏰ Horario:</span> <strong>${med.schedule}</strong>
           </div>
         ` : ''}
       </td>
-      <td style="padding: 10px 12px; font-weight: 600; color: #38bdf8;">${med.quantity}</td>
+      <td style="padding: 10px 12px; font-weight: 600; color: ${isExt ? '#f59e0b' : '#38bdf8'};">${med.quantity}</td>
       <td style="padding: 10px 12px;">${med.dosage}</td>
       <td style="padding: 10px 12px; font-size: 0.85rem; color: var(--text-muted);">${med.duration}</td>
       <td style="padding: 10px 12px; text-align: center; white-space: nowrap;">
@@ -1666,6 +1823,7 @@ function renderCurrentMedicinesTable() {
       const scheduleInput = document.getElementById('m-schedule');
       const breakdownCheck = document.getElementById('m-breakdown-schedule');
       const prescTypeSelect = document.getElementById('m-presc-type');
+      const dispenseSourceSelect = document.getElementById('m-dispense-source');
 
       if (medNameInput) medNameInput.value = mToEdit.name;
       if (presentationSelect) {
@@ -1674,6 +1832,7 @@ function renderCurrentMedicinesTable() {
       }
       if (prescTypeSelect) prescTypeSelect.value = mToEdit.tipoPrescripcion || 'presentacion';
       if (qtyInput) qtyInput.value = mToEdit.cantidad_o_dosis !== undefined ? mToEdit.cantidad_o_dosis : (parseFloat(mToEdit.quantity) || 1);
+      if (dispenseSourceSelect) dispenseSourceSelect.value = mToEdit.dispenseSource || (mToEdit.isExternal ? 'external' : 'bodega');
       if (dosageInput) dosageInput.value = mToEdit.dosage || '';
       if (durationInput) durationInput.value = mToEdit.duration || '';
       if (scheduleInput) scheduleInput.value = mToEdit.schedule || '';
@@ -1837,11 +1996,19 @@ function showPrescriptionPreviewModal(patient, recipe) {
                       const medDosage = (typeof m === 'object' && m.dosage) ? m.dosage : '';
                       const medDur = (typeof m === 'object' && m.duration) ? m.duration : '';
                       const medQty = (typeof m === 'object' && m.quantity) ? m.quantity : '1';
+                      const isExt = typeof m === 'object' && (m.isExternal || m.dispenseSource === 'external');
                       return `
                         <tr>
                           <td style="text-align: left; padding: 12px 8px; vertical-align: top;">
                             <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 3px; flex-wrap: wrap;">
-                              <strong style="color: #000; font-size: 1.15rem; text-transform: uppercase;">${medName}${medPres}</strong>
+                              <div>
+                                <strong style="color: #000; font-size: 1.15rem; text-transform: uppercase;">${medName}${medPres}</strong>
+                                ${isExt ? `
+                                  <span style="display: inline-block; font-size: 0.72rem; font-weight: 800; color: #b45309; border: 1px solid #d97706; padding: 1px 6px; border-radius: 3px; margin-left: 6px; text-transform: uppercase;">
+                                    [Comprar en Farmacia Externa]
+                                  </span>
+                                ` : ''}
+                              </div>
                               ${medSched ? `
                                 <span class="prescription-med-schedule" style="font-size: 1.05rem; font-weight: 700; color: #0284c7; white-space: nowrap; font-family: system-ui, -apple-system, sans-serif;">
                                   ${medSched}
@@ -2169,11 +2336,19 @@ export function printPrescriptionDocument(patient, recipe) {
               const medDosage = (typeof m === 'object' && m.dosage) ? m.dosage : '';
               const medDur = (typeof m === 'object' && m.duration) ? m.duration : '';
               const medQty = (typeof m === 'object' && m.quantity) ? m.quantity : '1';
+              const isExt = typeof m === 'object' && (m.isExternal || m.dispenseSource === 'external');
               return `
                 <tr>
                   <td>
                     <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 10px;">
-                      <span class="med-name">${medName}${medPres}</span>
+                      <div>
+                        <span class="med-name">${medName}${medPres}</span>
+                        ${isExt ? `
+                          <span style="font-size: 0.72rem; font-weight: 800; color: #b45309; border: 1px solid #d97706; padding: 1px 6px; border-radius: 3px; margin-left: 6px; text-transform: uppercase;">
+                            [Comprar en Farmacia Externa]
+                          </span>
+                        ` : ''}
+                      </div>
                       ${medSched ? `<span class="med-sched">${medSched}</span>` : ''}
                     </div>
                     <div class="med-dosage">

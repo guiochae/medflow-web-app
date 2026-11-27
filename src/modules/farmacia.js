@@ -790,6 +790,7 @@ export function renderFarmacia(container) {
                 <th style="padding: 10px; text-align: center;">Cantidad</th>
                 <th style="padding: 10px;">Paciente</th>
                 <th style="padding: 10px;">Médico Tratante</th>
+                <th style="padding: 10px; text-align: center;">Condición / Estado</th>
               </tr>
             </thead>
             <tbody id="dr-table-body"></tbody>
@@ -3197,15 +3198,25 @@ function renderDemandaReal() {
   document.getElementById('dr-stat-top-med-qty').textContent = `${topQty} unidades acumuladas`;
 
   if (rawList.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" style="padding: 20px; text-align: center; color: var(--text-muted);">No hay registros de demanda real.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="padding: 20px; text-align: center; color: var(--text-muted);">No hay registros de demanda real.</td></tr>`;
   } else {
     tbody.innerHTML = rawList.map(r => `
       <tr style="border-bottom: 1px solid var(--border-color);">
         <td style="padding: 8px; color: var(--text-muted);">${new Date(r.date).toLocaleString('es-GT')}</td>
-        <td style="padding: 8px; font-weight: bold; color: var(--accent-primary);">${r.medicineName}</td>
+        <td style="padding: 8px; font-weight: bold; color: var(--accent-primary);">
+          ${r.medicineName} ${r.presentation ? `<span style="font-size: 0.75rem; color: var(--text-muted);">(${r.presentation})</span>` : ''}
+        </td>
         <td style="padding: 8px; text-align: center; font-weight: bold;">${r.quantity}</td>
         <td style="padding: 8px;">${r.patientName}</td>
         <td style="padding: 8px; font-style: italic;">Dr/a. ${r.doctorName}</td>
+        <td style="padding: 8px; text-align: center;">
+          <span style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.4); padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 0.72rem; display: inline-block;">
+            ${r.status || 'NO ENTREGADO A USUARIO'}
+          </span>
+          <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">
+            ${r.motivo || 'Compra en farmacia externa'}
+          </div>
+        </td>
       </tr>
     `).join('');
   }
@@ -3757,16 +3768,21 @@ export function printDemandaRealReport() {
             <th style="text-align: center;">Cantidad</th>
             <th>Paciente</th>
             <th>Médico Tratante</th>
+            <th style="text-align: center;">Condición / Estado</th>
           </tr>
         </thead>
         <tbody>
           ${rawList.map(r => `
             <tr>
               <td>${new Date(r.date).toLocaleString('es-GT')}</td>
-              <td><strong>${r.medicineName}</strong></td>
+              <td><strong>${r.medicineName}</strong> ${r.presentation ? `(${r.presentation})` : ''}</td>
               <td style="text-align: center; font-weight: bold;">${r.quantity}</td>
               <td>${r.patientName}</td>
               <td>Dr/a. ${r.doctorName}</td>
+              <td style="text-align: center;">
+                <strong style="color: #b91c1c;">${r.status || 'NO ENTREGADO A USUARIO'}</strong><br>
+                <small style="color: #555;">${r.motivo || 'Compra en farmacia externa'}</small>
+              </td>
             </tr>
           `).join('')}
         </tbody>
