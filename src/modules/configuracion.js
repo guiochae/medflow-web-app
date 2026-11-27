@@ -1498,6 +1498,11 @@ function loadMedicationIntoForm(itemObj) {
   // Grupo 3: Presentaciones de Venta
   const salesPres = getMedicationSalesPresentations(itemObj);
   renderSalesPresentationsRows(salesPres, itemObj.unidad_dispensable || 'Tableta');
+
+  const searchSelect = document.getElementById('med-search-select');
+  if (searchSelect && itemObj.id) {
+    searchSelect.value = itemObj.id;
+  }
 }
 
 function resetPharmacyForm() {
@@ -1529,61 +1534,46 @@ function resetPharmacyForm() {
     { presentation: 'Tableta', factor: 1, price: 2.00 }
   ], 'Tableta');
 
-  const autoList = document.getElementById('med-catalog-autocomplete-list');
-  if (autoList) autoList.style.display = 'none';
+  const searchSelect = document.getElementById('med-search-select');
+  if (searchSelect) {
+    searchSelect.value = '';
+  }
 }
 
-function handleMedCommercialNameInput(inputEl) {
-  const query = inputEl.value.trim().toLowerCase();
-  const listEl = document.getElementById('med-catalog-autocomplete-list');
-  if (!listEl) return;
-
-  if (!query) {
-    listEl.style.display = 'none';
-    return;
-  }
-
+function populateMedicationSearchDropdown(selectedId = '') {
+  const selectEl = document.getElementById('med-search-select');
+  if (!selectEl) return;
   const stateObj = getAppState();
-  const items = stateObj.medications || [];
+  const meds = [...(stateObj.medications || [])].sort((a, b) =>
+    (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' })
+  );
 
-  const filtered = items.filter(item => {
-    const nameMatch = (item.name || '').toLowerCase().includes(query);
-    const genericMatch = (item.generic || '').toLowerCase().includes(query);
-    return nameMatch || genericMatch;
-  });
-
-  if (filtered.length === 0) {
-    listEl.style.display = 'none';
-    return;
+  const countBadge = document.getElementById('med-search-count-badge');
+  if (countBadge) {
+    countBadge.textContent = `${meds.length} medicamento(s) registrado(s)`;
   }
 
-  listEl.innerHTML = filtered.map(item => {
-    const extraLabel = item.generic ? ` <span style="color: var(--text-muted); font-size: 0.75rem;">(Genérico: ${item.generic})</span>` : '';
-    const stockHier = formatHierarchicalStock(item.stock, item);
-    return `
-      <div class="med-autocomplete-item" data-id="${item.id}" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.06); transition: background 0.2s;">
-        <div style="font-weight: 600; color: #00f2fe; font-size: 0.88rem;">${item.name}${extraLabel}</div>
-        <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between; margin-top: 2px;">
-          <span>Categoría: ${item.category || 'Farmacia'}</span>
-          <span style="color: ${(item.stock || 0) > 0 ? '#10b981' : '#ef4444'}; font-weight: bold;">Stock: ${stockHier}</span>
-        </div>
-      </div>
+  let optionsHtml = `
+    <option value="">-- Despliegue para seleccionar medicamento a editar (${meds.length} disponibles) --</option>
+    <option value="__NEW__" style="color: #10b981; font-weight: bold;">➕ [Registrar Nuevo Medicamento]</option>
+  `;
+
+  meds.forEach(med => {
+    const isSelected = (med.id && med.id === selectedId) ? 'selected' : '';
+    const genericPart = med.generic ? ` (${med.generic})` : '';
+    const stockNum = Number(med.stock || 0);
+    const unitPart = med.unidad_dispensable || 'Uds';
+    optionsHtml += `
+      <option value="${med.id}" ${isSelected}>
+        ${med.name}${genericPart} — Stock: ${stockNum} ${unitPart} (Lote: ${med.lote || 'S/L'})
+      </option>
     `;
-  }).join('');
-
-  listEl.style.display = 'block';
-
-  listEl.querySelectorAll('.med-autocomplete-item').forEach(itemBtn => {
-    itemBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const id = itemBtn.getAttribute('data-id');
-      const selectedItem = items.find(x => x.id === id);
-      if (selectedItem) {
-        loadMedicationIntoForm(selectedItem);
-      }
-      listEl.style.display = 'none';
-    });
   });
+
+  selectEl.innerHTML = optionsHtml;
+  if (selectedId) {
+    selectEl.value = selectedId;
+  }
 }
 
 function openCatalogConfig(type) {
@@ -1638,6 +1628,26 @@ function openCatalogConfig(type) {
     if (configPriceInput) configPriceInput.removeAttribute('required');
 
     configSpecificFields.innerHTML = `
+      <!-- BARRA DESPLEGABLE DE BÚSQUEDA / SELECCIÓN PARA EDICIÓN -->
+      <div class="pharmacy-form-group-card" style="background: linear-gradient(135deg, rgba(0, 242, 254, 0.08) 0%, rgba(15, 23, 42, 0.6) 100%); border: 1.5px solid #00f2fe; border-left: 5px solid #00f2fe; border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; width: 100%; box-shadow: 0 4px 12px rgba(0, 242, 254, 0.08);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+          <label for="med-search-select" style="font-weight: 700; font-size: 0.88rem; color: #00f2fe; display: flex; align-items: center; gap: 6px; margin: 0;">
+            <span>🔍</span> BUSCAR MEDICAMENTO PARA EDITAR (BARRA DESPLEGABLE):
+          </label>
+          <span id="med-search-count-badge" style="font-size: 0.76rem; color: var(--text-muted); font-weight: normal;">
+            Despliegue para seleccionar un medicamento o registrar nuevo
+          </span>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <select id="med-search-select" style="flex: 1; padding: 9px 12px; font-size: 0.95rem; font-weight: 600; border-radius: 4px; border: 1.5px solid rgba(0, 242, 254, 0.6); background: #0f172a; color: #00f2fe; cursor: pointer; outline: none;">
+            <option value="">-- Despliegue para seleccionar un medicamento a editar --</option>
+          </select>
+          <button type="button" class="btn btn-secondary btn-small" id="btn-med-search-new" style="padding: 9px 14px; font-size: 0.82rem; font-weight: 600; white-space: nowrap; border-color: #00f2fe; color: #00f2fe;" title="Limpiar formulario para registrar un medicamento nuevo">
+            <span>➕</span> Nuevo Item
+          </button>
+        </div>
+      </div>
+
       <!-- GRUPO 1: DATOS GENERALES -->
       <div class="pharmacy-form-group-card" style="background: rgba(0, 242, 254, 0.02); border: 1px solid rgba(0, 242, 254, 0.25); border-left: 4px solid #00f2fe; border-radius: 6px; padding: 14px; margin-bottom: 12px; width: 100%;">
         <h5 style="margin: 0 0 12px 0; color: #00f2fe; font-size: 0.92rem; display: flex; align-items: center; gap: 6px;">
@@ -1646,10 +1656,9 @@ function openCatalogConfig(type) {
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
           <div class="form-group" style="position: relative; margin: 0; grid-column: span 2;">
             <label for="med-commercial-name" style="font-weight: 600; font-size: 0.82rem;">
-              Nombre Comercial <small style="color: var(--accent-primary); font-weight: normal;">(Búsqueda en vivo / Autocompletado - seleccione para editar)</small>
+              Nombre Comercial *
             </label>
-            <input type="text" id="med-commercial-name" required placeholder="Escriba el nombre comercial (ej. Amoxicilina 500mg, Panadol Ultra)..." autocomplete="off" style="width: 100%; border: 1px solid rgba(0, 242, 254, 0.4);">
-            <div id="med-catalog-autocomplete-list" style="position: absolute; top: 100%; left: 0; right: 0; z-index: 1200; background: #13151f; border: 1px solid rgba(0,242,254,0.3); border-radius: 4px; max-height: 220px; overflow-y: auto; display: none; box-shadow: var(--shadow-lg); margin-top: 4px;"></div>
+            <input type="text" id="med-commercial-name" required placeholder="Ej. Amoxicilina 500mg, Panadol Ultra..." autocomplete="off" style="width: 100%; border: 1px solid rgba(0, 242, 254, 0.4);">
           </div>
           <div class="form-group" style="margin: 0;">
             <label for="c-spec-generic" style="font-size: 0.82rem;">Nombre Genérico</label>
@@ -1817,11 +1826,36 @@ function openCatalogConfig(type) {
         });
       }
 
-      // Wire live search Grupo 1
-      const commNameInput = document.getElementById('med-commercial-name');
-      if (commNameInput) {
-        commNameInput.addEventListener('input', () => handleMedCommercialNameInput(commNameInput));
+      // Wire dropdown selector para búsqueda y edición
+      const searchSelect = document.getElementById('med-search-select');
+      if (searchSelect) {
+        searchSelect.addEventListener('change', (e) => {
+          const val = e.target.value;
+          if (!val || val === '__NEW__') {
+            resetPharmacyForm();
+            if (val === '__NEW__') searchSelect.value = '__NEW__';
+          } else {
+            const stateObj = getAppState();
+            const found = (stateObj.medications || []).find(m => m.id === val);
+            if (found) {
+              loadMedicationIntoForm(found);
+            }
+          }
+        });
       }
+
+      // Wire botón Nuevo Item junto al desplegable
+      const btnNew = document.getElementById('btn-med-search-new');
+      if (btnNew) {
+        btnNew.addEventListener('click', () => {
+          resetPharmacyForm();
+          const nameInput = document.getElementById('med-commercial-name');
+          if (nameInput) nameInput.focus();
+        });
+      }
+
+      // Popular la barra desplegable con todos los medicamentos
+      populateMedicationSearchDropdown();
 
       // Initial defaults for dynamic sales presentations
       renderSalesPresentationsRows([
@@ -2021,6 +2055,11 @@ function renderCatalogTable() {
 
     configTableBody.appendChild(tr);
   });
+
+  if (activeCatalogType === 'medications') {
+    const currentId = document.getElementById('config-item-id')?.value || '';
+    populateMedicationSearchDropdown(currentId);
+  }
 }
 
 function processFileImport() {
